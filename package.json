@@ -1,16 +1,17 @@
 {
   "name": "police-command",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/decode-sources.mjs && node scripts/gen-icons.mjs && tsc && vite build",
+    "build": "node scripts/gen-icons.mjs && tsc && vite build",
     "preview": "vite preview",
     "gen:icons": "node scripts/gen-icons.mjs",
     "predev": "node scripts/gen-icons.mjs",
     "assemble": "bash scripts/assemble-game.sh",
-    "decode": "node scripts/decode-sources.mjs"
+    "decode": "node scripts/decode-sources.mjs",
+    "encode": "node scripts/encode-sources.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"
