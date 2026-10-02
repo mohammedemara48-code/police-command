@@ -12,10 +12,12 @@
 - بث CCTV حي (كانفاس CRT) للبلاغات الحرجة
 - واجهة مكتب كثيفة + ورقة تنبيهات موبايل بأزرار إرسال كبيرة
 - صوت خفيف (صافرة / نجاح / فشل / همس مدينة) عبر WebAudio
+- مدينة ليلية أوضح وإضاءة أفضل
 
 ## تشغيل محلي
 ```bash
 npm install
+npm run assemble   # يستعيد المصادر من scripts/game-parts
 npm run dev
 ```
 
@@ -27,3 +29,4 @@ npm run dev
 ## النشر
 - Framework: Vite · Build: `npm run build` · Output: `dist`
 - المستودع: https://github.com/mohammedemara48-code/police-command
+- Commit ship: sources tarball في `scripts/game-parts` + assemble في build
