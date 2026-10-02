@@ -1,0 +1,22 @@
+{
+  "name": "police-command",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/gen-icons.mjs && tsc && vite build",
+    "preview": "vite preview",
+    "gen:icons": "node scripts/gen-icons.mjs",
+    "predev": "node scripts/gen-icons.mjs"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}
