@@ -1,6 +1,6 @@
 (async () => {
   const parts = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 11; i++) {
     parts.push(await fetch(new URL('./assets/bundle.b64.' + i + '.txt', import.meta.url)).then(r => r.text()));
   }
   const bin = Uint8Array.from(atob(parts.join('')), c => c.charCodeAt(0));
