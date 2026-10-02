@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/decode-sources.mjs && node scripts/gen-icons.mjs && tsc && vite build",
+    "build": "node scripts/gen-icons.mjs && tsc && vite build",
     "preview": "vite preview",
     "gen:icons": "node scripts/gen-icons.mjs",
     "predev": "node scripts/gen-icons.mjs",
