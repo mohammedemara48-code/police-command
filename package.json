@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/gen-icons.mjs && tsc && vite build",
+    "build": "bash scripts/assemble-game.sh && node scripts/gen-icons.mjs && tsc && vite build",
     "preview": "vite preview",
     "gen:icons": "node scripts/gen-icons.mjs",
-    "predev": "node scripts/gen-icons.mjs"
+    "predev": "node scripts/gen-icons.mjs",
+    "assemble": "bash scripts/assemble-game.sh"
   },
   "dependencies": {
     "three": "^0.170.0"
