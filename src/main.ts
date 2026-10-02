@@ -33,6 +33,7 @@ function frame(now: number) {
     }
   }
 
+  city.setTimeOfDay(game.state.cityHour);
   city.update(dt);
   requestAnimationFrame(frame);
 }

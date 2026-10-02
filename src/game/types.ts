@@ -154,6 +154,31 @@ export interface TechNode {
   requires?: TechId[];
 }
 
+export type DayPhase = 'morning' | 'noon' | 'dusk' | 'night';
+
+export const DAY_PHASE_LABELS: Record<DayPhase, string> = {
+  morning: 'صباح',
+  noon: 'ظهر',
+  dusk: 'غروب',
+  night: 'ليل'
+};
+
+export const DAY_PHASE_ICONS: Record<DayPhase, string> = {
+  morning: '🌅',
+  noon: '☀️',
+  dusk: '🌇',
+  night: '🌙'
+};
+
+/** Map 0–24 hour to Arabic phase label. */
+export function phaseFromHour(hour: number): DayPhase {
+  const h = ((hour % 24) + 24) % 24;
+  if (h >= 5 && h < 10) return 'morning';
+  if (h >= 10 && h < 15) return 'noon';
+  if (h >= 15 && h < 19) return 'dusk';
+  return 'night';
+}
+
 export interface GameState {
   budget: number;
   reputation: number;
@@ -162,6 +187,10 @@ export interface GameState {
   labResources: number;
   timeSec: number;
   day: number;
+  /** In-game city clock hours 0–24 (accelerated day/night cycle). */
+  cityHour: number;
+  /** Real seconds for a full 24h lighting cycle (~10 min default). */
+  dayCycleSec: number;
   score: number;
   incidentsResolved: number;
   incidentsFailed: number;
