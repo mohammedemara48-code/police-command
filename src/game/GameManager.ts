@@ -127,7 +127,7 @@ export class GameManager {
   formatClock() {
     const total = Math.floor(this.state.timeSec);
     const h = String(Math.floor(total / 3600) % 24).padStart(2, '0');
-    const m = String(Math.floor((total % 3600) / 60).padStart(2, '0');
+    const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
     const s = String(total % 60).padStart(2, '0');
     // concept uses 15:32 style — use shifted city clock
     const cityH = String((15 + Math.floor(total / 60)) % 24).padStart(2, '0');
