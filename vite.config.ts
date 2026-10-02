@@ -27,5 +27,13 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: { three: ['three'] }
+      }
+    },
+    chunkSizeWarningLimit: 800
+  },
   server: { port: 5173, host: true }
 });
