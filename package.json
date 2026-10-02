@@ -1,11 +1,11 @@
 {
   "name": "police-command",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "bash scripts/assemble-game.sh && node scripts/gen-icons.mjs && tsc && vite build",
+    "build": "node scripts/gen-icons.mjs && tsc && vite build",
     "preview": "vite preview",
     "gen:icons": "node scripts/gen-icons.mjs",
     "predev": "node scripts/gen-icons.mjs",

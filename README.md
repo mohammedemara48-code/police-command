@@ -2,7 +2,13 @@
 
 لعبة استراتيجية عمليات شرطة **ثلاثية أبعاد** في المتصفح (Three.js + Vite + PWA) — واجهة عربية RTL.
 
-**مباشر:** https://police-command.vercel.app/
+**مباشر (Vercel):** https://police-command.vercel.app/
+
+## v1.2.1 — بناء ثابت لـ Cloudflare Pages
+
+- المصادر في `src/` مباشرة (لم نعد نعتمد على `scripts/game-parts` التالف)
+- دورة نهار/ليل سينمائية من v1.2
+- إعداد Pages: `bun/npm build` → مخرجات `dist` (بدون `npx wrangler deploy`)
 
 ## v1.2 — دورة نهار/ليل سينمائية
 
@@ -15,25 +21,35 @@
 
 - قرارات صريحة قبل الإرسال: **تفاوض / اقتحام / حصار / مطاردة** مع نسبة نجاح وخطر ضباط ومكافأة متوقعة
 - بلاغات أطول ومتعددة المراحل (سطو بنك: محيط → اقتحام → اعتقال)
-- شجرة تقنيات قابلة للفتح (استجابة سريعة، كفاءة وقود، CCTV، تعزيز SWAT، دعم جوي، مختبر)
-- بث CCTV حي (كانفاس CRT) للبلاغات الحرجة
-- واجهة مكتب كثيفة + ورقة تنبيهات موبايل بأزرار إرسال كبيرة
-- صوت خفيف (صافرة / نجاح / فشل / همس مدينة) عبر WebAudio
-- مدينة ليلية أوضح وإضاءة أفضل (حُسّنت في v1.2 بدورة كاملة)
+- شجرة تقنيات قابلة للفتح
+- بث CCTV حي للبلاغات الحرجة
+- واجهة مكتب كثيفة + ورقة تنبيهات موبايل
+- صوت خفيف عبر WebAudio
 
 ## تشغيل محلي
 ```bash
 npm install
-npm run assemble   # يستعيد المصادر من scripts/game-parts
 npm run dev
 ```
 
-### التحكم
-- سحب / لمس: دوران الكاميرا
-- عجلة: زوم
-- اختر قراراً ثم أرسل وحدة من بطاقة البلاغ
-
 ## النشر
+
+### Vercel
 - Framework: Vite · Build: `npm run build` · Output: `dist`
-- المستودع: https://github.com/mohammedemara48-code/police-command
-- Commit ship: sources tarball في `scripts/game-parts` + assemble في build
+
+### Cloudflare Pages (الواجهة)
+في مشروع Pages المرتبط بالمستودع:
+- **Build command:** `bun run build` أو `npm run build`
+- **Build output directory:** `dist`
+- **Deploy command:** فارغ — **لا تستخدم** `npx wrangler deploy`
+
+نشر يدوي بعد `npm run build`:
+```bash
+npx wrangler pages deploy dist --project-name=police-command
+```
+
+### Cloudflare Worker (غرف مالتي بلاير — اختياري)
+انظر `worker/` — يحتاج `CLOUDFLARE_ACCOUNT_ID` + توكن بصلاحيات Workers/Durable Objects.
+
+## المستودع
+https://github.com/mohammedemara48-code/police-command

@@ -1,0 +1,18 @@
+name = "police-command-rooms"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Set CLOUDFLARE_ACCOUNT_ID in env or:
+# account_id = "YOUR_ACCOUNT_ID"
+
+[durable_objects]
+bindings = [
+  { name = "ROOM", class_name = "GameRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["GameRoom"]
+
+[vars]
+ALLOWED_ORIGINS = "https://police-command.vercel.app,http://localhost:4173,http://127.0.0.1:4173"

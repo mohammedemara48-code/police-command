@@ -1,0 +1,14 @@
+# Cloudflare Pages (static Vite/PWA frontend)
+# Git / Dashboard settings:
+#   Build command:  bun run build   OR   npm run build
+#   Output dir:     dist
+#   Deploy command: leave EMPTY (do NOT use `npx wrangler deploy` — that triggers Worker auto-setup and breaks CI)
+#
+# Manual Pages deploy (after local build):
+#   npx wrangler pages deploy dist --project-name=police-command
+#
+# Multiplayer Worker lives in ./worker (separate: police-command-rooms)
+
+name = "police-command"
+compatibility_date = "2026-10-01"
+pages_build_output_dir = "dist"
