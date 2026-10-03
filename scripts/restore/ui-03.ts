@@ -52,10 +52,11 @@
     const box = document.createElement('div');
     box.className = 'decision-modal glass';
     box.innerHTML = `
-      <h3>قرار مطلوب — ${inc.title}</h3>
-      <p class="dec-desc">${inc.description}</p>
+      <div class="dec-head">
+        <h3>${inc.title}</h3>
+        <button class="btn ghost dec-skip" data-skip type="button">لاحقاً</button>
+      </div>
       <div class="dec-grid"></div>
-      <button class="btn ghost" data-skip style="margin-top:8px;width:100%">لاحقاً</button>
     `;
     const grid = box.querySelector('.dec-grid')!;
     for (const d of inc.decisions) {
@@ -71,18 +72,12 @@
   private decisionButton(inc: Incident, d: DecisionChoice) {
     const chance = Math.round(this.incidents.previewChance(inc, d) * 100);
     const risk = Math.round(d.riskToOfficers * 100);
-    const reward = Math.round(inc.reward * d.rewardMul);
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = `dec-card ${d.id}`;
     btn.innerHTML = `
-      <div class="dec-title">${d.label}</div>
-      <div class="dec-blurb">${d.blurb}</div>
-      <div class="dec-stats">
-        <span class="chip ok">نجاح ~${chance}%</span>
-        <span class="chip hot">خطر ضباط ${risk}%</span>
-        <span class="chip warn">مكافأة $${reward}</span>
-        <span class="chip blue">وقت ×${d.timeMul.toFixed(2)}</span>
-      </div>
+      <span class="dec-title">${d.label}</span>
+      <span class="dec-mini">نجاح ${chance}% · خطر ${risk}%</span>
     `;
     btn.addEventListener('click', () => {
       const res = this.incidents.selectDecision(inc.id, d.id);

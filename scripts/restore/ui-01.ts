@@ -11,11 +11,10 @@
 
     this.hud.appendChild(this.buildTopbar(open.length));
 
-    if (this.isMobile()) {
-      this.renderMobile(open, selected);
-    } else {
-      this.renderDesktop(open, selected);
-    }
+    // Phone and desktop share the cinematic shell (alerts | city | ops).
+    // Portrait phones get a rotate prompt instead of a sheet that covers the city.
+    this.renderDesktop(open, selected);
+    if (this.isPortraitPhone()) this.hud.appendChild(this.rotatePrompt());
 
     // Decision modal (both)
     const needDecision =
@@ -32,9 +31,7 @@
 
     const hint = document.createElement('div');
     hint.className = 'hint';
-    hint.textContent = this.isMobile()
-      ? `يوم ${s.day} · إصبع: دوران`
-      : `سحب: دوران · عجلة: زوم · يوم ${s.day}`;
+    hint.textContent = `سحب: دوران · عجلة: زوم · يوم ${s.day}`;
     this.hud.appendChild(hint);
   }
 
@@ -47,16 +44,7 @@
     const phaseLabel = DAY_PHASE_LABELS[phase];
     const phaseIcon = DAY_PHASE_ICONS[phase];
     const clockHtml = `<div class="res clock phase-${phase}" title="توقيت المدينة"><span class="ico">${phaseIcon}</span><span class="clock-text">${clock}<small>${phaseLabel}</small></span></div>`;
-    if (this.isMobile()) {
-      top.innerHTML = `
-        <div class="brand">POLICE COMMAND</div>
-        ${clockHtml}
-        <div class="res money"><span class="ico">💵</span>$${s.budget.toLocaleString()}</div>
-        <div class="res stars"><span class="ico">⭐</span>${s.reputation}</div>
-        <div class="res alerts"><span class="ico">🚨</span>${openCount}</div>
-      `;
-    } else {
-      top.innerHTML = `
+    top.innerHTML = `
         <div class="brand">POLICE COMMAND</div>
         ${clockHtml}
         <div class="res money"><span class="ico">💵</span>$${s.budget.toLocaleString()}</div>
@@ -67,8 +55,20 @@
         <div class="res lab"><span class="ico">🔬</span>${Math.round(s.labResources)}</div>
         <div class="alert-banner ${s.alertLevel}">CITY WIDE ALERT STATUS: ${s.alertLevel}</div>
       `;
-    }
     return top;
+  }
+
+  private rotatePrompt() {
+    const el = document.createElement('div');
+    el.className = 'rotate-lock';
+    el.innerHTML = `
+      <div class="rotate-card glass">
+        <div class="rotate-ico" aria-hidden="true">📱</div>
+        <h2>دوّر الموبايل بالعرض</h2>
+        <p>الشاشة زي غرفة القيادة: تنبيهات يمين، المدينة في النص، العمليات شمال.</p>
+      </div>
+    `;
+    return el;
   }
 
   private buildNav() {
