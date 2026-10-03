@@ -247,29 +247,56 @@ button.btn.dispatch-lg {
 .cctv .dispatch-log { margin-top: 8px; font-size: 10px; color: var(--muted); direction: ltr; text-align: left; }
 .cctv .dispatch-log .ts { color: var(--green); }
 
-/* ===== DECISION MODAL ===== */
+/* ===== DECISION CARD (small, city stays visible) ===== */
 .decision-modal {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: min(520px, calc(100vw - 28px));
-  padding: 16px; pointer-events: auto; z-index: 30;
-  border: 1px solid rgba(255,77,109,.4);
-  box-shadow: 0 0 40px rgba(255,77,109,.15), var(--shadow);
+  position: absolute;
+  bottom: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(220px, 28vw);
+  max-height: min(210px, 38vh);
+  padding: 8px 8px 6px;
+  pointer-events: auto;
+  z-index: 18;
+  overflow: auto;
+  border: 1px solid rgba(255,77,109,.45);
+  box-shadow: 0 10px 28px rgba(0,0,0,.45);
 }
-.decision-modal h3 { font-size: 16px; margin-bottom: 6px; color: #ffd0d8; }
-.decision-modal .dec-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
-.dec-grid { display: flex; flex-direction: column; gap: 8px; }
+.dec-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.decision-modal h3 {
+  flex: 1; font-size: 12px; margin: 0; color: #ffd0d8; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dec-skip { padding: 3px 7px !important; font-size: 10px !important; flex: none; }
+.dec-grid { display: flex; flex-direction: column; gap: 4px; }
 .dec-card {
-  text-align: right; cursor: pointer; border-radius: 12px; padding: 12px;
-  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+  text-align: right; cursor: pointer; border-radius: 8px; padding: 6px 8px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
   color: var(--text); font-family: inherit;
+  display: flex; flex-direction: column; gap: 1px; width: 100%;
 }
-.dec-card:hover { border-color: rgba(58,160,255,.5); background: rgba(58,160,255,.1); }
-.dec-card.breach { border-color: rgba(255,77,109,.35); }
-.dec-card.negotiate { border-color: rgba(46,229,157,.35); }
-.dec-card.siege, .dec-card.chase { border-color: rgba(255,176,32,.35); }
-.dec-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
-.dec-blurb { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
-.dec-stats { display: flex; flex-wrap: wrap; gap: 5px; }
+.dec-card:hover { border-color: rgba(58,160,255,.55); background: rgba(58,160,255,.12); }
+.dec-card.breach { border-color: rgba(255,77,109,.4); }
+.dec-card.negotiate { border-color: rgba(46,229,157,.4); }
+.dec-card.siege, .dec-card.chase { border-color: rgba(255,176,32,.4); }
+.dec-title { font-size: 13px; font-weight: 800; }
+.dec-mini { font-size: 9px; color: var(--muted); font-weight: 700; }
+
+.rotate-lock {
+  position: absolute; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5,11,20,.94);
+  pointer-events: auto;
+  padding: 24px;
+}
+.rotate-card { width: min(360px, calc(100vw - 32px)); padding: 28px 20px; text-align: center; }
+.rotate-ico { font-size: 48px; margin-bottom: 8px; animation: tiltPhone 1.6s ease-in-out infinite; }
+.rotate-card h2 { font-size: 26px; margin-bottom: 8px; }
+.rotate-card p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+@keyframes tiltPhone {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-90deg); }
+}
 
 /* ===== MOBILE ===== */
 .mobile-alerts {
@@ -330,21 +357,53 @@ button.btn.dispatch-lg {
 .progress { height: 5px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 6px; }
 .progress > span { display: block; height: 100%; background: linear-gradient(90deg, #3aa0ff, #2ee59d); transition: width .3s; }
 
-@media (max-width: 900px) {
-  .panel-left, .panel-right, .cctv { display: none !important; }
-  .topbar { gap: 6px; padding: 6px 10px; min-height: 48px; }
-  .brand { font-size: 12px; margin-left: 0; }
-  .res { font-size: 11px; padding: 4px 7px; }
-  .bottom-nav { bottom: 6px; width: calc(100vw - 12px); padding: 6px; gap: 4px; }
-  .nav-item { font-size: 9px; padding: 10px 2px; }
-  .nav-item .ico { font-size: 18px; }
-  .sheet { bottom: 70px; max-height: 50vh; }
-  .decision-modal { top: 42%; max-height: 70vh; overflow: auto; }
+/* Phone landscape: same cinematic shell, tighter so the city stays in the middle. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .topbar {
+    min-height: 34px; padding: 3px 8px; gap: 4px;
+    flex-wrap: nowrap; overflow-x: auto;
+  }
+  .brand { font-size: 11px; margin-left: 4px; }
+  .res { font-size: 10px; padding: 2px 6px; }
+  .res.clock { min-width: 0; gap: 4px; }
+  .res.clock .clock-text small { display: none; }
+  .alert-banner { display: none; }
+  .panel-left, .panel-right {
+    top: 40px;
+    width: min(200px, 26vw);
+    max-height: calc(100vh - 76px);
+    padding: 7px;
+  }
+  .panel-h { font-size: 10px; margin: 6px 0 4px; }
+  .card { padding: 6px; margin-bottom: 5px; }
+  .card h4 { font-size: 11px; }
+  .card p { font-size: 10px; }
+  .bottom-nav {
+    bottom: 4px;
+    width: min(420px, 40vw);
+    padding: 3px;
+    gap: 3px;
+  }
+  .nav-item { font-size: 8px; padding: 4px 2px; }
+  .nav-item .ico { font-size: 13px; margin-bottom: 0; }
+  .cctv { top: 42px; width: min(168px, 20vw); padding: 6px; }
+  .cctv-feed { height: 56px; }
+  .sheet {
+    bottom: 46px;
+    width: min(380px, 44vw);
+    max-height: 34vh;
+  }
   .hint { display: none; }
-  .toast-stack { bottom: auto; top: 100px; }
-  .dispatch-row { gap: 6px; }
+  .toast-stack { bottom: 48px; width: min(240px, 28vw); }
+  .decision-modal {
+    bottom: 48px;
+    top: auto;
+    width: min(176px, 24vw);
+    max-height: 42vh;
+  }
+  .log-feed { max-height: 72px; }
+  .tech { font-size: 12px; }
 }
 
-@media (min-width: 901px) {
-  .mobile-alerts, .mobile-alerts-toggle, .mobile-alert-banner { display: none !important; }
-}
+/* Old portrait sheet is retired — landscape HUD only. */
+.mobile-alerts, .mobile-alerts-toggle, .mobile-alert-banner { display: none !important; }
