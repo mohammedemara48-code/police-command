@@ -93,6 +93,27 @@ export interface PoliceUnit {
   readiness: number;
 }
 
+export interface DistrictDef {
+  id: string;
+  name: string;
+  x: number;
+  z: number;
+  zone: ZoneType;
+}
+
+/** Distinct play locations the camera travels between. */
+export const DISTRICTS: DistrictDef[] = [
+  { id: 'downtown', name: 'وسط البلد', x: -16, z: -16, zone: ZoneType.Downtown },
+  { id: 'port', name: 'الميناء', x: -52, z: 8, zone: ZoneType.Industrial },
+  { id: 'suburb', name: 'الضاحية', x: 42, z: 38, zone: ZoneType.Residential },
+  { id: 'industrial', name: 'المنطقة الصناعية', x: -40, z: -42, zone: ZoneType.Industrial },
+  { id: 'corniche', name: 'الكورنيش', x: 6, z: 48, zone: ZoneType.Street }
+];
+
+export function districtById(id: string | null | undefined): DistrictDef {
+  return DISTRICTS.find((d) => d.id === id) || DISTRICTS[0];
+}
+
 export interface CityPOI {
   id: string;
   name: string;
@@ -100,6 +121,7 @@ export interface CityPOI {
   zone: ZoneType;
   x: number;
   z: number;
+  districtId: string;
 }
 
 export interface Incident {
@@ -113,6 +135,8 @@ export interface Incident {
   preferredUnits: UnitType[];
   zone: ZoneType;
   poiId: string;
+  districtId: string;
+  districtName: string;
   x: number;
   z: number;
   spawnedAt: number;
@@ -372,4 +396,31 @@ export function decisionsForCrime(crime: CrimeType): DecisionChoice[] {
         }
       ];
   }
+}
+
+export type ActionHeat = 'hot' | 'warm' | 'quiet';
+
+export interface MissionReport {
+  success: boolean;
+  timedOut: boolean;
+  title: string;
+  districtName: string;
+  decisionLabel: string;
+  summary: string;
+  money: number;
+  rep: number;
+  officerLine: string;
+}
+
+export interface MissionOutcome {
+  success: boolean;
+  money: number;
+  rep: number;
+  officerLine: string;
+}
+
+export function heatForDecision(id: DecisionId | null): ActionHeat {
+  if (id === 'breach' || id === 'chase') return 'hot';
+  if (id === 'siege') return 'warm';
+  return 'quiet';
 }
