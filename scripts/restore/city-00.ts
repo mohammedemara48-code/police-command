@@ -100,3 +100,4 @@ export class CityScene {
     this.ambient = new THREE.AmbientLight(0xc8d8e8, 0.45);
     this.scene.add(this.ambient);
   }
+
