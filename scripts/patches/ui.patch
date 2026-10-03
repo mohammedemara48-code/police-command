@@ -1,0 +1,117 @@
+--- src/game/UI.ts
++++ src/game/UI.ts
+@@ -1,3 +1,4 @@
++// @source-complete
+ import { GameManager } from './GameManager';
+ import { IncidentManager } from './IncidentManager';
+ import { CityScene } from './CityScene';
+@@ -154,6 +155,9 @@
+     if (this.mode === 'action') {
+       this.hud.appendChild(this.actionCaption());
+     } else if (this.mode === 'result' && this.report) {
++      const dim = document.createElement('div');
++      dim.className = 'result-backdrop';
++      this.hud.appendChild(dim);
+       this.hud.appendChild(this.resultDialog(this.report));
+     } else if (selected && !selected.selectedDecision && selected.status === 'awaiting_decision') {
+       this.hud.appendChild(this.decisionDock(selected));
+@@ -396,9 +400,14 @@
+     for (const d of inc.decisions) {
+       const b = document.createElement('button');
+       b.className = `btn dock-btn ${d.id}`;
++      b.type = 'button';
++      b.dataset.decision = d.id;
+       b.textContent = d.label;
+       b.title = d.blurb;
+-      b.addEventListener('click', () => {
++      // pointerdown, not click: a HUD rebuild between down and up used to detach the button and swallow the choice.
++      b.addEventListener('pointerdown', (ev) => {
++        ev.preventDefault();
++        ev.stopPropagation();
+         void this.confirmDecision(inc, d);
+       });
+       row.appendChild(b);
+@@ -419,8 +428,9 @@
+     el.className = `result-dialog glass ${r.success ? 'ok' : 'bad'}`;
+     const money = `${r.money >= 0 ? '+' : ''}$${r.money.toLocaleString()}`;
+     const rep = `${r.rep >= 0 ? '+' : ''}${r.rep}`;
++    el.dataset.result = '1';
+     el.innerHTML = `
+-      <h3>${r.timedOut ? 'انتهى الوقت' : r.success ? 'نجحت العملية' : 'فشلت العملية'}</h3>
++      <h3>${r.timedOut ? 'فشل' : r.success ? 'نجاح' : 'فشل'}</h3>
+       <p class="result-where">${r.title} · ${r.decisionLabel} · ${r.districtName}</p>
+       <p class="result-sum">${r.summary}</p>
+       <div class="result-nums">
+@@ -428,10 +438,14 @@
+         <span>⭐ ${rep}</span>
+         <span>👮 ${r.officerLine}</span>
+       </div>
+-      <button class="btn" data-next>الانتقال إلى ${this.nextPlaceName || 'الموقع التالي'}</button>
+-      <p class="result-hint">يتقفل لوحده بعد ثواني</p>
++      <button class="btn" type="button" data-next>الانتقال إلى ${this.nextPlaceName || 'الموقع التالي'}</button>
+     `;
+-    el.querySelector('[data-next]')!.addEventListener('click', () => this.dismissResult());
++    const next = el.querySelector('[data-next]')!;
++    next.addEventListener('pointerdown', (ev) => {
++      ev.preventDefault();
++      ev.stopPropagation();
++      this.dismissResult();
++    });
+     return el;
+   }
+ 
+@@ -441,14 +455,9 @@
+     this.report = report;
+     this.nextPlaceName = this.incidents.previewNextDistrict();
+     this.mode = 'result';
+-    this.armResultTimer();
+     this.render();
+   }
+ 
+-  private armResultTimer() {
+-    if (this.resultTimer) clearTimeout(this.resultTimer);
+-    this.resultTimer = window.setTimeout(() => this.dismissResult(), 6000);
+-  }
+ 
+   private stopGuns() {
+     if (this.gunTimer) {
+@@ -483,19 +492,22 @@
+     } else if (armed.heat === 'warm') {
+       this.gunTimer = window.setInterval(() => audio.gunshot(), 520);
+     }
+-    await new Promise((r) => setTimeout(r, 3200));
++    await new Promise((r) => setTimeout(r, 1100));
+     this.stopGuns();
+-    this.city.endAction();
+     const report = this.incidents.settle(inc.id);
+-    if (!report) {
+-      this.mode = 'play';
+-      this.render();
+-      return;
+-    }
+-    this.report = report;
++    this.report = report || {
++      success: false,
++      timedOut: false,
++      title: inc.title,
++      districtName: inc.districtName,
++      decisionLabel: d.label,
++      summary: `القرار في ${inc.districtName} اتسجل. الوحدات كانت على الخط.`,
++      money: 0,
++      rep: 0,
++      officerLine: '—'
++    };
+     this.nextPlaceName = this.incidents.previewNextDistrict();
+     this.mode = 'result';
+-    this.armResultTimer();
+     this.render();
+   }
+ 
+@@ -507,6 +519,7 @@
+     }
+     this.mode = 'play';
+     this.report = null;
++    this.city.endAction();
+     const next = this.incidents.spawnNext();
+     if (next) {
+       this.city.syncIncidents(this.incidents.openIncidents);

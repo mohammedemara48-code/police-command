@@ -1,0 +1,9 @@
+--- src/main.ts
++++ src/main.ts
+@@ -39,6 +39,3 @@
+ }
+ requestAnimationFrame(frame);
+ 
+-setInterval(() => {
+-  if (game.state.running) ui.render();
+-}, 500);
