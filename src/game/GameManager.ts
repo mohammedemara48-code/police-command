@@ -10,6 +10,7 @@ import {
   TechId,
   TechNode,
   DayPhase,
+  MissionOutcome,
   phaseFromHour,
   xpForLevel,
   rankForLevel,
@@ -342,26 +343,35 @@ export class GameManager {
     officerIds: string[];
     severity: number;
     injureChance?: number;
-  }) {
+  }): MissionOutcome {
+    const xp = 25 + opts.severity * 12;
+    const involved = opts.officerIds
+      .map((id) => this.officers.find((o) => o.id === id))
+      .filter((o): o is Officer => !!o);
+    const names = involved.map((o) => o.name);
+    let officerLine = names.length ? names.join('، ') : 'لا ضباط في الميدان';
     if (opts.success) {
       this.AddRewards(opts.reward, opts.reputationDelta);
       this.state.incidentsResolved += 1;
       this.state.equipment = clamp(this.state.equipment + 5, 0, 2000);
       const labGain = this.state.techs.lab ? 8 : 3;
       this.state.labResources = clamp(this.state.labResources + labGain, 0, 2000);
-      for (const id of opts.officerIds) this.AddOfficerXP(id, 25 + opts.severity * 12);
+      for (const id of opts.officerIds) this.AddOfficerXP(id, xp);
+      officerLine = names.length ? `${names.join('، ')} +${xp} خبرة` : 'لا ضباط في الميدان';
       this.pushLog(`نجاح العملية — +$${opts.reward}`);
     } else {
       this.state.reputation = clamp(this.state.reputation - Math.abs(opts.reputationDelta), 0, 100);
       this.state.score = Math.max(0, this.state.score - 30);
       this.state.incidentsFailed += 1;
       this.state.equipment = clamp(this.state.equipment - 10, 0, 2000);
+      officerLine = names.length ? `${names.join('، ')} — بلا ترقية` : 'لا ضباط في الميدان';
       this.pushLog('فشل العملية — السمعة تأثرت');
     }
     if (opts.injureChance && opts.injureChance > 0 && Math.random() < opts.injureChance) {
-      const victim = this.officers.find((o) => opts.officerIds.includes(o.id)) || this.officers[0];
+      const victim = involved[0] || this.officers[0];
       if (victim) {
         victim.status = 'injured';
+        officerLine = `إصابة: ${victim.name} — خارج الخدمة مؤقتاً`;
         this.pushLog(`إصابة: ${victim.name} — خارج الخدمة مؤقتاً`);
         window.setTimeout(() => {
           if (victim.status === 'injured') victim.status = 'idle';
@@ -370,6 +380,12 @@ export class GameManager {
       }
     }
     this.emit();
+    return {
+      success: opts.success,
+      money: opts.success ? opts.reward : 0,
+      rep: opts.success ? opts.reputationDelta : -Math.abs(opts.reputationDelta),
+      officerLine
+    };
   }
 
   AddOfficerXP(officerId: string, amount: number) {
