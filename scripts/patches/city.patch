@@ -1,0 +1,251 @@
+--- src/game/CityScene.ts
++++ src/game/CityScene.ts
+@@ -1,3 +1,4 @@
++// @source-complete
+ import * as THREE from 'three';
+ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+ import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
+@@ -41,8 +42,8 @@
+   private cameraLock = false;
+   private fly = {
+     active: false,
+-    t: 0,
+-    dur: 1.2,
++    t0: 0,
++    dur: 1000,
+     fromPos: new THREE.Vector3(),
+     toPos: new THREE.Vector3(),
+     fromTarget: new THREE.Vector3(),
+@@ -56,7 +57,10 @@
+     next: 0
+   };
+   private fx: Array<{ obj: THREE.Object3D; life: number; max: number; light?: THREE.PointLight }> = [];
+-  private actionCars: Array<{ mesh: CarMesh; tx: number; tz: number }> = [];
++  private actionCars: Array<{ mesh: CarMesh; tx: number; tz: number; sx: number; sz: number }> = [];
++  /** Pedestrians and officers spawned for the current decision. Public for tests. */
++  crowd: Array<{ mesh: THREE.Object3D; from: THREE.Vector3; to: THREE.Vector3; bob: number }> = [];
++  private actionT0 = 0;
+   private muzzleGeo = new THREE.SphereGeometry(0.22, 8, 8);
+   private muzzleMat = new THREE.MeshBasicMaterial({ color: 0xfff1c4 });
+ 
+@@ -86,7 +90,7 @@
+     this.controls.enableDamping = true;
+     this.controls.dampingFactor = 0.08;
+     this.controls.maxPolarAngle = Math.PI * 0.48;
+-    this.controls.minDistance = 18;
++    this.controls.minDistance = 6;
+     this.controls.maxDistance = 110;
+     this.controls.target.set(0, 2, 0);
+ 
+@@ -535,40 +539,99 @@
+     this.flyTo(x, z, close);
+   }
+ 
+-  /** Smooth camera move so the street, not just the map pin, fills the view. */
++  /** Smooth camera move. Wall-clock so a slow frame still arrives in ~1s, and the first paint already jumps. */
+   flyTo(x: number, z: number, close = false) {
+     this.fly.active = true;
+-    this.fly.t = 0;
+-    this.fly.dur = close ? 1.05 : 1.35;
++    this.fly.dur = close ? 1000 : 1300;
+     this.fly.fromPos.copy(this.camera.position);
+     this.fly.fromTarget.copy(this.controls.target);
+-    const dist = close ? 14 : 26;
+-    const height = close ? 9.5 : 20;
+-    this.fly.toTarget.set(x, 1.4, z);
+-    this.fly.toPos.set(x + dist * 0.45, height, z + dist * 0.85);
++    const dist = close ? 18 : 32;
++    const height = close ? 8.5 : 22;
++    this.fly.toTarget.set(x, 1.6, z);
++    this.fly.toPos.set(x + dist * 0.42, height, z + dist * 0.92);
+     this.cameraLock = true;
+     this.controls.enabled = false;
++    const jump = 0.38;
++    this.camera.position.lerpVectors(this.fly.fromPos, this.fly.toPos, jump);
++    this.controls.target.lerpVectors(this.fly.fromTarget, this.fly.toTarget, jump);
++    this.fly.fromPos.copy(this.camera.position);
++    this.fly.fromTarget.copy(this.controls.target);
++    this.fly.t0 = performance.now();
++    this.renderer.render(this.scene, this.camera);
++  }
++
++  private makeWalker(kind: 'ped' | 'cop', shirt: number) {
++    const g = new THREE.Group();
++    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.8, 4, 8), this.mat(shirt));
++    body.position.y = 1.08;
++    body.castShadow = true;
++    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), this.mat(0xffd2b5));
++    head.position.y = 1.78;
++    g.add(body, head);
++    if (kind === 'cop') {
++      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.12, 0.46), this.mat(0x0d2a66));
++      cap.position.y = 2.04;
++      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.55, 0.1), this.mat(0xffd24d));
++      stripe.position.set(0, 1.2, 0.3);
++      g.add(cap, stripe);
++    }
++    return g;
+   }
+ 
+   beginAction(heat: ActionHeat, x: number, z: number) {
+     this.endAction(false);
+     this.action = { active: true, heat, x, z, next: 0 };
++    this.actionT0 = performance.now();
+     this.cameraLock = true;
+     this.controls.enabled = false;
+-    const spots: Array<[number, number]> = [
+-      [x + 14, z + 6],
+-      [x - 12, z + 10]
++
++    const approaches: Array<[number, number, number, number, number]> = [
++      [x + 22, z + 16, x + 2.4, z + 3.2, 0x102040],
++      [x - 20, z + 18, x - 2.2, z + 2.6, 0xf4f7fb]
+     ];
+-    if (heat === 'hot') spots.push([x + 4, z - 16]);
+-    spots.forEach(([sx, sz], i) => {
+-      const car = this.makePoliceCar(i === 0 ? 0x102040 : 0xf4f7fb);
++    for (const [sx, sz, tx, tz, color] of approaches) {
++      const car = this.makePoliceCar(color);
+       car.position.set(sx, 0.05, sz);
+       car.userData.flashing = true;
+-      car.lookAt(x, 0.05, z);
++      car.lookAt(tx, 0.05, tz);
+       this.carRoot.add(car);
+       if (car.userData.lights) this.flashLights.push(...car.userData.lights);
+-      this.actionCars.push({ mesh: car, tx: x + (i - 1) * 2.4, tz: z + 3.2 });
++      this.actionCars.push({ mesh: car, tx, tz, sx, sz });
++    }
++
++    const peds: Array<[number, number, number]> = [
++      [0xc45a3a, x - 9, z - 7],
++      [0x3d4c58, x + 8, z - 9],
++      [0xd8c6a4, x - 6, z + 10],
++      [0x6e3a48, x + 10, z + 1]
++    ];
++    peds.forEach(([color, px, pz], i) => {
++      const mesh = this.makeWalker('ped', color);
++      mesh.position.set(px, 0, pz);
++      this.carRoot.add(mesh);
++      const ang = (i / peds.length) * Math.PI * 2;
++      this.crowd.push({
++        mesh,
++        from: new THREE.Vector3(px, 0, pz),
++        to: new THREE.Vector3(x + Math.cos(ang) * 3.4, 0, z + Math.sin(ang) * 3.4),
++        bob: i
++      });
+     });
++    ([
++      [x + 15, z - 1],
++      [x + 13, z + 7]
++    ] as Array<[number, number]>).forEach(([px, pz], i) => {
++      const mesh = this.makeWalker('cop', 0x1a4e9a);
++      mesh.position.set(px, 0, pz);
++      this.carRoot.add(mesh);
++      this.crowd.push({
++        mesh,
++        from: new THREE.Vector3(px, 0, pz),
++        to: new THREE.Vector3(x + 1.4 + i * 1.3, 0, z + 1.1),
++        bob: 10 + i
++      });
++    });
++    this.renderer.render(this.scene, this.camera);
+   }
+ 
+   endAction(unlock = true) {
+@@ -578,6 +641,8 @@
+       this.carRoot.remove(c.mesh);
+     }
+     this.actionCars = [];
++    for (const p of this.crowd) this.carRoot.remove(p.mesh);
++    this.crowd = [];
+     if (unlock && !this.fly.active) {
+       this.cameraLock = false;
+       this.controls.enabled = true;
+@@ -617,26 +682,28 @@
+     this.fx.push({ obj: light, light, life: 0.35, max: 0.35 });
+   }
+ 
+-  private stepAction(dt: number) {
+-    if (!this.action.active) return;
+-    const t = this.clock.elapsedTime;
+-    for (const c of this.actionCars) {
+-      const pos = c.mesh.position;
+-      const dx = c.tx - pos.x;
+-      const dz = c.tz - pos.z;
+-      const dist = Math.hypot(dx, dz);
+-      if (dist > 0.4) {
+-        const step = Math.min(dist, 22 * dt);
+-        pos.x += (dx / dist) * step;
+-        pos.z += (dz / dist) * step;
+-        c.mesh.rotation.y = Math.atan2(dx, dz);
++  private stepAction() {
++    const now = performance.now();
++    if (this.actionT0 && (this.actionCars.length || this.crowd.length)) {
++      const k = Math.min(1, (now - this.actionT0) / 1000);
++      const ease = k * k * (3 - 2 * k);
++      for (const c of this.actionCars) {
++        c.mesh.position.x = c.sx + (c.tx - c.sx) * ease;
++        c.mesh.position.z = c.sz + (c.tz - c.sz) * ease;
++        c.mesh.rotation.y = Math.atan2(c.tx - c.sx, c.tz - c.sz);
++      }
++      for (const p of this.crowd) {
++        p.mesh.position.lerpVectors(p.from, p.to, ease);
++        p.mesh.position.y = Math.abs(Math.sin(now / 140 + p.bob)) * 0.16;
++        p.mesh.rotation.y = Math.atan2(p.to.x - p.from.x, p.to.z - p.from.z);
+       }
+     }
+-    if (t < this.action.next) return;
++    if (!this.action.active) return;
++    if (now < this.action.next) return;
+     const { heat, x, z } = this.action;
+     if (heat === 'quiet') {
+       this.spawnQuietPulse(x + (Math.random() - 0.5) * 2, z + (Math.random() - 0.5) * 2);
+-      this.action.next = t + 0.55;
++      this.action.next = now + 550;
+       return;
+     }
+     const n = heat === 'hot' ? 2 : 1;
+@@ -646,9 +713,10 @@
+       this.spawnMuzzle(mx, 1.5 + Math.random() * 1.2, mz, heat === 'hot' ? 0xffe7a0 : 0xffc14d);
+       this.spawnTracer(x, z);
+     }
+-    this.action.next = t + (heat === 'hot' ? 0.09 : 0.26);
++    this.action.next = now + (heat === 'hot' ? 90 : 260);
+   }
+ 
++
+   private stepFx(dt: number) {
+     for (let i = this.fx.length - 1; i >= 0; i--) {
+       const f = this.fx[i];
+@@ -673,10 +741,9 @@
+     }
+   }
+ 
+-  private stepFly(dt: number) {
++  private stepFly() {
+     if (!this.fly.active) return;
+-    this.fly.t += dt / this.fly.dur;
+-    const k = Math.min(1, this.fly.t);
++    const k = Math.min(1, (performance.now() - this.fly.t0) / this.fly.dur);
+     const s = k * k * (3 - 2 * k);
+     this.camera.position.lerpVectors(this.fly.fromPos, this.fly.toPos, s);
+     this.controls.target.lerpVectors(this.fly.fromTarget, this.fly.toTarget, s);
+@@ -687,7 +754,6 @@
+       if (!this.action.active) {
+         this.cameraLock = false;
+         this.controls.enabled = true;
+-        this.controls.update();
+       }
+     }
+   }
+@@ -968,8 +1034,8 @@
+   }
+ 
+   update(dt: number) {
+-    this.stepFly(dt);
+-    this.stepAction(dt);
++    this.stepFly();
++    this.stepAction();
+     this.stepFx(dt);
+     if (!this.cameraLock) this.controls.update();
+     const t = this.clock.elapsedTime;
