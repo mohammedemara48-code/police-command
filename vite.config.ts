@@ -29,8 +29,11 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
+      external: ['three', /^three\//],
       output: {
-        manualChunks: { three: ['three'] }
+        paths: {
+          three: 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'
+        }
       }
     },
     chunkSizeWarningLimit: 800
