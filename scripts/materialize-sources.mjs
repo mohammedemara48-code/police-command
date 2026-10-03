@@ -1,15 +1,10 @@
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
 
-function materialize(prefix, dest) {
-  const dir = 'scripts/restore';
-  const parts = readdirSync(dir)
-    .filter((name) => name.startsWith(prefix) && name.endsWith('.ts'))
-    .sort();
-  if (!parts.length) throw new Error(`missing restore parts for ${prefix}`);
-  const text = parts.map((name) => readFileSync(join(dir, name), 'utf8')).join('');
+function materialize(name, dest) {
+  const text = readFileSync('scripts/restore/' + name, 'utf8');
+  if (!text.includes('export class')) throw new Error('restore part incomplete: ' + name);
   writeFileSync(dest, text);
 }
 
-materialize('city-', 'src/game/CityScene.ts');
-materialize('ui-', 'src/game/UI.ts');
+materialize('city-00.ts', 'src/game/CityScene.ts');
+materialize('ui-00.ts', 'src/game/UI.ts');
