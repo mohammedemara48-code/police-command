@@ -75,6 +75,42 @@ export class AudioManager {
     this.tone(440, 0.04, 'square', 0.05, 0);
   }
 
+  /** Short muzzle crack — cinematic, not a weapon sim. */
+  gunshot() {
+    if (!this.enabled) return;
+    this.ensure();
+    if (!this.ctx || !this.master) return;
+    const ctx = this.ctx;
+    const dur = 0.07;
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const env = Math.pow(1 - i / data.length, 2.2);
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 700 + Math.random() * 900;
+    filter.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.value = 0.42;
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.master);
+    src.start();
+    this.tone(140 + Math.random() * 40, 0.05, 'square', 0.04, 0);
+  }
+
+  radio() {
+    if (!this.enabled) return;
+    this.resume();
+    this.tone(740, 0.06, 'sine', 0.06, 0);
+    this.tone(980, 0.08, 'sine', 0.05, 0.12);
+    this.tone(620, 0.1, 'triangle', 0.04, 0.28);
+  }
+
   startAmbient() {
     if (!this.enabled) return;
     this.ensure();
