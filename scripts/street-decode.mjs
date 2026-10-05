@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 
 function decode(prefix, dest) {
   const parts = readdirSync('scripts/street-b64')
@@ -11,10 +11,19 @@ function decode(prefix, dest) {
   console.log('street-decode', dest, buf.length);
 }
 
-decode('StreetPlay.ts.b64.part', 'src/game/StreetPlay.ts');
-decode('street-city.patch.b64.part', 'scripts/patches/street-city.patch');
-decode('street-ui.patch.b64.part', 'scripts/patches/street-ui.patch');
-decode('street-css.patch.b64.part', 'scripts/patches/street-css.patch');
+function preferCommitted(path, minBytes, decodePrefix) {
+  if (existsSync(path) && statSync(path).size >= minBytes) {
+    console.log('street-decode: using committed', path, statSync(path).size);
+    return true;
+  }
+  decode(decodePrefix, path);
+  return false;
+}
+
+preferCommitted('src/game/StreetPlay.ts', 20000, 'StreetPlay.ts.b64.part');
+preferCommitted('scripts/patches/street-city.patch', 500, 'street-city.patch.b64.part');
+preferCommitted('scripts/patches/street-ui.patch', 500, 'street-ui.patch.b64.part');
+preferCommitted('scripts/patches/street-css.patch', 1000, 'street-css.patch.b64.part');
 
 const matPath = 'scripts/materialize-sources.mjs';
 let mat = readFileSync(matPath, 'utf8');
