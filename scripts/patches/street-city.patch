@@ -1,0 +1,70 @@
+--- /tmp/pc-base/CityScene.ts	2026-10-04 08:18:20.335688186 +0300
++++ src/game/CityScene.ts	2026-10-04 08:18:57.883605325 +0300
+@@ -2,6 +2,7 @@
+ import * as THREE from 'three';
+ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+ import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
++import { StreetPlay } from './StreetPlay';
+ 
+ type CarMesh = THREE.Group & { userData: { unitId?: string; flashing?: boolean; lights?: THREE.PointLight[] } };
+ 
+@@ -64,6 +65,8 @@
+   private muzzleGeo = new THREE.SphereGeometry(0.22, 8, 8);
+   private muzzleMat = new THREE.MeshBasicMaterial({ color: 0xfff1c4 });
+ 
++  street: StreetPlay;
++
+   constructor(canvas: HTMLCanvasElement) {
+     this.renderer = new THREE.WebGLRenderer({
+       canvas,
+@@ -101,6 +104,7 @@
+     this.buildLighting();
+     this.buildCity();
+     this.spawnFleetCars();
++    this.street = new StreetPlay(this.scene, this.camera, this.root, this.carRoot, this.markerRoot);
+     this.setTimeOfDay(8);
+ 
+     window.addEventListener('resize', () => this.onResize());
+@@ -536,11 +540,19 @@
+   }
+ 
+   focusOn(x: number, z: number, close = false) {
++    if (this.street?.active) {
++      this.street.goToWorld(x, z, true);
++      return;
++    }
+     this.flyTo(x, z, close);
+   }
+ 
+   /** Smooth camera move. Wall-clock so a slow frame still arrives in ~1s, and the first paint already jumps. */
+   flyTo(x: number, z: number, close = false) {
++    if (this.street?.active) {
++      this.street.goToWorld(x, z, false);
++      return;
++    }
+     this.fly.active = true;
+     this.fly.dur = close ? 1000 : 1300;
+     this.fly.fromPos.copy(this.camera.position);
+@@ -760,7 +772,8 @@
+ 
+   /** Drive cinematic day→dusk→night→dawn from in-game city hour (0–24). */
+   setTimeOfDay(hour: number) {
+-    this.cityHour = ((hour % 24) + 24) % 24;
++    const h = this.street?.active ? 22.4 : hour;
++    this.cityHour = ((h % 24) + 24) % 24;
+     this.applyTimeOfDay();
+   }
+ 
+@@ -1034,6 +1047,12 @@
+   }
+ 
+   update(dt: number) {
++    if (this.street?.active) {
++      this.renderer.toneMappingExposure = 1.18;
++      this.street.update(dt);
++      this.renderer.render(this.scene, this.camera);
++      return;
++    }
+     this.stepFly();
+     this.stepAction();
+     this.stepFx(dt);

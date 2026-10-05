@@ -1,0 +1,50 @@
+--- /tmp/pc-base/UI.ts	2026-10-04 08:18:20.335688186 +0300
++++ src/game/UI.ts	2026-10-04 08:18:57.883605325 +0300
+@@ -81,11 +81,10 @@
+           <h1>POLICE COMMAND</h1>
+           <p class="sub">قيادة الشرطة — غرفة عمليات ثلاثية الأبعاد</p>
+           <ul>
+-            <li>اختَر قراراً: الكاميرا تروح للمكان وتشوف اللي بيحصل</li>
+-            <li>مربع نتيجة بأرقامك، وبعدين انتقال لحي تاني</li>
+-            <li>شجرة تقنيات قابلة للفتح تؤثر على اللعب</li>
+-            <li>دورة نهار/ليل سينمائية · شوارع نهارية وإنارة ليلية</li>
+-            <li>واجهة مكتب + موبايل · سحب للكاميرا · عجلة للزوم</li>
++            <li>شارع ليلي ممطر: امشِ أو اركب دورية الشرطة (WASD أو الأزرار)</li>
++            <li>خريطة المهام: اختَر دبوس الحي وانتقل أو سوق إليه</li>
++            <li>نساء ورجال ماشيين في الشارع، والمطاردة تبدأ عند المهمة</li>
++            <li>النتيجة تفضل على الشاشة لحد ما تضغط تمام</li>
+           </ul>
+           <button class="btn" id="btn-start" style="padding:12px 28px;font-size:15px">بدء الوردية</button>
+         </div>
+@@ -95,14 +94,14 @@
+       audio.startAmbient();
+       this.overlay.innerHTML = '';
+       this.game.start();
+-      const first = this.incidents.spawnTutorialBankRobbery();
+-      if (first) {
+-        this.city.syncIncidents(this.incidents.openIncidents);
+-        this.city.focusOn(first.x, first.z);
+-        this.city.setSelectedIncident(first.id);
+-        this.mode = 'play';
+-        this.toast(`🚨 ${first.title} — ${first.districtName}. اختَر قراراً من الأزرار.`, 'warn');
+-      }
++      this.city.setTimeOfDay(22.4);
++      this.city.street.engage();
++      this.city.street.onReport = (r) => {
++        this.game.AddRewards(r.money, r.rep);
++        if (r.success) this.game.state.incidentsResolved += 1;
++        else this.game.state.incidentsFailed += 1;
++      };
++      this.mode = 'play';
+       this.render();
+     });
+   }
+@@ -139,7 +138,7 @@
+     const layout = this.layout();
+     document.body.dataset.layout = layout;
+ 
+-    if (layout === 'portrait' && this.mode === 'play') {
++    if (layout === 'portrait' && this.mode === 'play' && !this.city.street?.active) {
+       this.hud.appendChild(this.rotateGate());
+       return;
+     }
