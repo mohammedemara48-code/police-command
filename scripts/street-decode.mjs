@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 function decode(prefix, dest) {
   const parts = readdirSync('scripts/street-b64')
@@ -20,7 +21,18 @@ function preferCommitted(path, minBytes, decodePrefix) {
   return false;
 }
 
-preferCommitted('src/game/StreetPlay.ts', 20000, 'StreetPlay.ts.b64.part');
+const srcParts = existsSync('scripts/street-src')
+  ? readdirSync('scripts/street-src').filter((n) => n.startsWith('part') && n.endsWith('.ts.txt')).sort()
+  : [];
+if (srcParts.length >= 4) {
+  const r = spawnSync('node', ['scripts/join-street-src.mjs'], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(r.stderr || r.stdout || 'join-street-src failed');
+  console.log(r.stdout.trim());
+} else {
+  // Incomplete street-src must not block; use b64 (or committed StreetPlay.ts).
+  preferCommitted('src/game/StreetPlay.ts', 20000, 'StreetPlay.ts.b64.part');
+}
+
 preferCommitted('scripts/patches/street-city.patch', 500, 'street-city.patch.b64.part');
 preferCommitted('scripts/patches/street-ui.patch', 500, 'street-ui.patch.b64.part');
 preferCommitted('scripts/patches/street-css.patch', 1000, 'street-css.patch.b64.part');
