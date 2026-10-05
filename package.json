@@ -1,14 +1,14 @@
 {
   "name": "police-command",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/street-decode.mjs && node scripts/materialize-sources.mjs && node scripts/gen-icons.mjs && tsc && vite build",
+    "build": "node scripts/reset-for-build.mjs && node scripts/street-decode.mjs && node scripts/materialize-sources.mjs && node scripts/gen-icons.mjs && tsc && vite build",
     "preview": "vite preview",
     "gen:icons": "node scripts/gen-icons.mjs",
-    "predev": "node scripts/street-decode.mjs && node scripts/materialize-sources.mjs && node scripts/gen-icons.mjs",
+    "predev": "node scripts/reset-for-build.mjs && node scripts/street-decode.mjs && node scripts/materialize-sources.mjs && node scripts/gen-icons.mjs",
     "assemble": "bash scripts/assemble-game.sh",
     "decode": "node scripts/decode-sources.mjs",
     "encode": "node scripts/encode-sources.mjs"
