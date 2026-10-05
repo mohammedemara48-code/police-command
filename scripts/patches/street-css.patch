@@ -1,0 +1,143 @@
+--- /tmp/pc-base/style.css	2026-10-04 08:18:20.335688186 +0300
++++ src/style.css	2026-10-04 08:18:57.891605307 +0300
+@@ -496,3 +496,140 @@
+   .action-caption { top: 40px; font-size: 12px; }
+   .result-dialog { width: min(380px, 62vw); max-height: 70vh; overflow: auto; }
+ }
++
++/* ===== STREET PLAY ===== */
++body[data-play="street"] .panel-left,
++body[data-play="street"] .panel-right,
++body[data-play="street"] .bottom-nav,
++body[data-play="street"] .decision-dock,
++body[data-play="street"] .rotate-lock,
++body[data-play="street"] .hint { display: none !important; }
++
++#street-ui { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
++#street-mini {
++  position: absolute; top: 64px; left: 12px;
++  width: 132px; height: 132px; border-radius: 12px;
++  pointer-events: auto; cursor: pointer;
++  border: 1px solid rgba(126,200,255,.35);
++}
++#street-status {
++  position: absolute; top: 64px; left: 156px; right: 12px;
++  pointer-events: none;
++  background: rgba(6,12,20,.72);
++  border: 1px solid rgba(126,200,255,.25);
++  border-radius: 10px;
++  padding: 8px 12px;
++  font-size: 13px; font-weight: 700;
++  max-width: 520px;
++}
++#street-prompt {
++  position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
++  background: rgba(8,18,32,.88); border: 1px solid rgba(255,200,80,.45);
++  color: #ffe9a8; font-weight: 800; font-size: 14px;
++  padding: 8px 16px; border-radius: 999px; pointer-events: none;
++  z-index: 7;
++}
++.street-pad {
++  position: absolute; bottom: 18px; left: 16px;
++  display: flex; flex-direction: column; align-items: center; gap: 6px;
++  pointer-events: auto;
++}
++.street-pad button, .street-actions button {
++  width: 64px; height: 54px;
++  border-radius: 12px;
++  border: 1px solid rgba(126,200,255,.4);
++  background: rgba(8,16,28,.82);
++  color: #f2f6ff;
++  font-family: inherit;
++  font-weight: 800;
++  font-size: 18px;
++  touch-action: none;
++}
++.street-mid { display: flex; gap: 46px; }
++.street-actions {
++  position: absolute; bottom: 18px; right: 12px;
++  display: flex; flex-direction: column; gap: 8px;
++  pointer-events: auto;
++}
++.street-actions button { width: auto; min-width: 128px; height: 46px; font-size: 14px; padding: 0 12px; }
++.street-actions button.intervene {
++  background: linear-gradient(180deg,#8b1e2d,#5a101c);
++  border-color: rgba(255,100,120,.6);
++  min-width: 148px; font-size: 15px;
++}
++
++#street-map, #street-result {
++  position: absolute; inset: 0; z-index: 20;
++  background: rgba(2,6,12,.62);
++  display: flex; align-items: center; justify-content: center;
++  pointer-events: auto;
++}
++.map-card, .street-result-card {
++  width: min(460px, 94vw);
++  background: rgba(8,14,24,.94);
++  border: 1px solid rgba(126,200,255,.3);
++  border-radius: 16px;
++  padding: 14px;
++  color: #edf3ff;
++}
++.street-result-card { max-height: 82vh; overflow: auto; }
++.map-card header { display: flex; justify-content: space-between; align-items: center; }
++.map-card h2, .street-result-card h2 { font-size: 18px; }
++.map-card header button, .map-actions button, .street-result-card button {
++  font-family: inherit; font-weight: 800;
++  background: #14324e; color: #fff; border: 1px solid rgba(126,200,255,.4);
++  border-radius: 10px; padding: 8px 12px;
++}
++.map-help { color: #9eb4cc; font-size: 13px; margin: 8px 0; }
++.map-active { color: #ffd56a; font-size: 13px; font-weight: 700; margin: 4px 0 8px; }
++.map-board {
++  position: relative; height: 280px; margin: 8px 0;
++  background: #101820; border-radius: 12px; overflow: hidden;
++}
++.map-board .avenue {
++  position: absolute; left: 50%; top: 8%; bottom: 8%; width: 18px;
++  transform: translateX(-50%);
++  background: #2a3848; border-radius: 8px;
++}
++.map-board .pin {
++  position: absolute; right: 8%; left: 58%;
++  display: flex; align-items: center; gap: 8px;
++  background: transparent; border: 0; color: #e8f1ff;
++  font-family: inherit; font-weight: 800; font-size: 14px;
++  cursor: pointer;
++}
++.map-board .pin .dot {
++  width: 12px; height: 12px; border-radius: 50%; background: #3aa0ff;
++  box-shadow: 0 0 0 3px rgba(58,160,255,.25);
++}
++.map-board .pin.mission .dot { background: #ff4d6d; box-shadow: 0 0 0 3px rgba(255,77,109,.3); }
++.map-board .pin.picked .lab { color: #ffd56a; }
++.map-actions { display: flex; gap: 8px; }
++.map-actions button { flex: 1; }
++.street-result-card.ok { border-color: rgba(46,229,157,.55); }
++.street-result-card.bad { border-color: rgba(255,77,109,.55); }
++.street-result-card .result-kicker {
++  margin: 0 0 4px; font-size: 13px; font-weight: 800;
++  color: #9dffe0; letter-spacing: .02em;
++}
++.street-result-card.bad .result-kicker { color: #ff9aaf; }
++.street-result-card .where { color: #ffd56a; font-weight: 800; margin: 6px 0; }
++.street-result-card .result-events {
++  margin: 8px 0 12px; padding-right: 18px; color: #c9d7ea;
++  font-size: 13px; line-height: 1.55;
++}
++.street-result-card .result-events li { margin-bottom: 4px; }
++.result-stats {
++  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
++  margin: 10px 0 14px;
++}
++.result-stats div {
++  background: rgba(20,40,64,.65);
++  border: 1px solid rgba(126,200,255,.18);
++  border-radius: 10px; padding: 8px 10px;
++  display: flex; flex-direction: column; gap: 2px;
++}
++.result-stats span { font-size: 11px; color: #9eb4cc; font-weight: 700; }
++.result-stats b { font-size: 15px; color: #f2f7ff; }
++.street-result-card .nums { margin: 10px 0; font-weight: 800; color: #9dffe0; }
++.street-result-card button { width: 100%; font-size: 16px; padding: 12px; }
