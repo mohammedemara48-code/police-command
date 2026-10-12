@@ -1,3 +1,4 @@
+import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z } from './City';
 import { Combat } from './Combat';
 import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
@@ -264,6 +265,8 @@ export class StreetPlay {
     this.car.add(this.driver);
     this.group.add(this.eventGroup);
     this.mergeStatic();
+    buildCity(this.group, Q.lowDetailPeople);
+    this.spawnCrossTraffic();
     this.combat = new Combat(this.group, () => {
       const g = this.makePerson(false, [0x2a2a2a, 0x7a1f1f, 0x3a2a4a][Math.floor(Math.random() * 3)], 0x0e0e0e).g;
       models.setClip(g, 'idle');
@@ -327,6 +330,7 @@ export class StreetPlay {
     let n = 0;
     for (const side of [-1, 1]) {
       for (let z = -96; z <= 232; z += 9) {
+        if (nearCross(z, 8)) continue;
         const near = STREET_PLACES.reduce((a, p) => (Math.abs(p.z - z) < Math.abs(a.z - z) ? p : a));
         const seed = Math.abs(Math.floor(z * 7 + side * 13));
         const h = near.id === 'downtown' ? 9 + (seed % 12) : near.id === 'suburb' ? 4 + (seed % 3) : 5 + (seed % 7);
@@ -741,6 +745,22 @@ export class StreetPlay {
     g.add(tail);
     models.dress(g, 'challenger', { length: 4.7 });
     return g;
+  }
+
+  private cross: { mesh: THREE.Group; speed: number }[] = [];
+  private spawnCrossTraffic() {
+    const tints = [0xd94a4a, 0xffffff, 0x4a7bd6, 0x3a3a3a, 0xd9b44a, 0x3f9a5a];
+    CROSS_Z.slice(1, 4).forEach((z, i) => {
+      for (let k = 0; k < 2; k++) {
+        const mesh = new THREE.Group();
+        const dir = k ? 1 : -1;
+        mesh.position.set(-100 + i * 70 + k * 40, 0, z + dir * 1.7);
+        mesh.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+        models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[0], { length: 4.5, tint: Q.lowDetailPeople ? undefined : tints[(i * 2 + k) % tints.length] });
+        this.group.add(mesh);
+        this.cross.push({ mesh, speed: dir * (5 + i) });
+      }
+    });
   }
 
   private spawnTraffic() {
@@ -1303,8 +1323,12 @@ export class StreetPlay {
       this.car.position.z += Math.cos(this.yaw) * this.speed * dt;
       this.distAcc += Math.abs(this.speed) * dt;
       if (this.distAcc > 25) { addStat('distance', this.distAcc); this.distAcc = 0; }
-      this.car.position.x = THREE.MathUtils.clamp(this.car.position.x, -3.2, 3.2);
-      this.car.position.z = THREE.MathUtils.clamp(this.car.position.z, -100, 240);
+      if (!onRoad(this.car.position.x, this.car.position.z, 0.4)) {
+        // hit a kerb/building: back out and bleed speed
+        this.car.position.x -= Math.sin(this.yaw) * this.speed * dt * 1.5;
+        this.car.position.z -= Math.cos(this.yaw) * this.speed * dt * 1.5;
+        this.speed *= -0.25;
+      }
     } else {
       const moving = throttle !== 0 || turn !== 0;
       if (turn !== 0 && throttle === 0) this.yaw += turn * dt * 2.2;
@@ -1315,7 +1339,7 @@ export class StreetPlay {
       const spd = (input.run ? 5.2 : 2.6) * (throttle || (turn ? 0.8 : 0));
       const nx = this.player.position.x + Math.sin(this.yaw) * spd * dt;
       const nz = this.player.position.z + Math.cos(this.yaw) * spd * dt;
-      this.player.position.set(THREE.MathUtils.clamp(nx, -7.4, 7.4), this.player.position.y, THREE.MathUtils.clamp(nz, -100, 240));
+      if (onRoad(nx, nz, 3.6)) this.player.position.set(nx, this.player.position.y, nz);
       this.player.rotation.y = this.yaw;
       if (spd !== 0) {
         this.stepT -= dt * Math.abs(spd);
@@ -1351,6 +1375,11 @@ export class StreetPlay {
   }
 
   private stepTraffic(dt: number) {
+    for (const t of this.cross) {
+      t.mesh.position.x += t.speed * dt;
+      if (t.mesh.position.x > 122) t.mesh.position.x = -122;
+      if (t.mesh.position.x < -122) t.mesh.position.x = 122;
+    }
     for (const t of this.traffic) {
       t.mesh.position.z += t.speed * dt;
       if (t.mesh.position.z > 250) t.mesh.position.z = -110;
@@ -1399,21 +1428,15 @@ export class StreetPlay {
     if (!c) return;
     const ctx = c.getContext('2d');
     if (!ctx) return;
-    const w = c.width;
-    const h = c.height;
-    const zOf = (z: number) => h - 20 - ((z + 100) / 340) * (h - 40);
-    ctx.fillStyle = 'rgba(6,12,20,0.82)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#1c2836';
-    ctx.fillRect(w / 2 - 10, 16, 20, h - 32);
-    for (const p of STREET_PLACES) { ctx.fillStyle = p.id === this.missionId ? '#ff4d6d' : '#3aa0ff'; ctx.beginPath(); ctx.arc(w / 2, zOf(p.z), 4, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = '#ff3b3b';
-    for (const m of this.combat.gang) if (m.hp > 0) { ctx.beginPath(); ctx.arc(w / 2 + m.g.position.x * 1.5, zOf(m.g.position.z), 3, 0, Math.PI * 2); ctx.fill(); }
-    const pz = this.inCar ? this.car.position.z : this.player.position.z;
-    ctx.fillStyle = '#ffe08a';
-    ctx.beginPath(); ctx.arc(w / 2, zOf(pz), 5, 0, Math.PI * 2); ctx.fill();
+    const pos = this.inCar ? this.car.position : this.player.position;
+    const target = STREET_PLACES.find((p) => p.id === this.level.placeId);
+    const dots: { x: number; z: number; c: string; r: number }[] = STREET_PLACES.map((p) => ({ x: 0, z: p.z, c: p.id === this.missionId ? '#ff4d6d' : '#3aa0ff', r: p.id === this.missionId ? 5 : 3 }));
+    for (const m of this.combat.gang) if (m.hp > 0) dots.push({ x: m.g.position.x, z: m.g.position.z, c: '#ff3b3b', r: 2.5 });
+    if (this.chasing && this.suspect) dots.push({ x: this.suspect.position.x, z: this.suspect.position.z, c: '#ffd23d', r: 4 });
+    else if (target) dots.push({ x: 0, z: target.z, c: '#ffd23d', r: 4 });
+    dots.push({ x: pos.x, z: pos.z, c: '#ffffff', r: 4 });
+    drawCityMap(ctx, c.width, c.height, dots);
   }
-
 
 }
 
