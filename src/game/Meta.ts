@@ -1,0 +1,93 @@
+import type { GameManager } from './GameManager';
+import { audio } from './AudioManager';
+
+const KEY = 'pc.save.v1';
+interface Save { best: number; shifts: number; resolved: number; level: number }
+
+function load(): Save {
+  try { return { best: 0, shifts: 0, resolved: 0, level: 1, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; }
+  catch { return { best: 0, shifts: 0, resolved: 0, level: 1 }; }
+}
+function store(s: Save) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* ignore */ } }
+
+/** Pause menu, game over, persistent career progress (best score, career level). */
+export class Meta {
+  paused = false;
+  over = false;
+  save = load();
+  private el: HTMLDivElement;
+  private btn: HTMLButtonElement;
+  private resolvedAtStart = 0;
+
+  constructor(private game: GameManager) {
+    this.el = document.createElement('div');
+    this.el.className = 'meta-overlay';
+    this.el.hidden = true;
+    document.body.appendChild(this.el);
+    this.btn = document.createElement('button');
+    this.btn.className = 'meta-pause-btn';
+    this.btn.setAttribute('aria-label', 'إيقاف مؤقت');
+    this.btn.textContent = '⏸';
+    this.btn.addEventListener('click', () => this.togglePause());
+    document.body.appendChild(this.btn);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') this.togglePause();
+    });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.game.state.running) this.setPause(true); });
+    setInterval(() => this.persist(), 5000);
+  }
+
+  get active() { return this.game.state.running && !this.paused && !this.over; }
+
+  togglePause() { if (this.game.state.running && !this.over) this.setPause(!this.paused); }
+
+  setPause(p: boolean) {
+    this.paused = p;
+    audio.click();
+    if (p) {
+      this.show(`<h2>إيقاف مؤقت</h2>
+        <p>أفضل نتيجة: <b>${this.save.best}</b> · مستوى المسيرة: <b>${this.save.level}</b></p>
+        <button class="btn" data-a="resume">استكمال</button>
+        <button class="btn ghost" data-a="restart">وردية جديدة</button>`);
+    } else this.hide();
+  }
+
+  check() {
+    const s = this.game.state;
+    if (!s.running || this.over) return;
+    if (s.reputation <= 0 || s.budget < -50000) {
+      this.over = true;
+      this.persist();
+      audio.fail();
+      const record = s.score >= this.save.best && s.score > 0;
+      this.show(`<h2>انتهت الوردية</h2>
+        <p>${s.reputation <= 0 ? 'فقدت ثقة المدينة' : 'نفدت الميزانية'}</p>
+        <p class="meta-score">${s.score}</p>
+        ${record ? '<p class="meta-record">🏆 رقم قياسي جديد!</p>' : `<p>أفضل نتيجة: ${this.save.best}</p>`}
+        <p>بلاغات محلولة: ${s.incidentsResolved} · فاشلة: ${s.incidentsFailed}</p>
+        <button class="btn" data-a="restart">حاول مرة أخرى</button>`);
+    }
+  }
+
+  persist() {
+    const s = this.game.state;
+    if (!s.running) return;
+    const delta = s.incidentsResolved - this.resolvedAtStart;
+    if (delta > 0) { this.save.resolved += delta; this.resolvedAtStart = s.incidentsResolved; }
+    this.save.best = Math.max(this.save.best, s.score);
+    this.save.level = 1 + Math.floor(Math.sqrt(this.save.resolved / 3));
+    store(this.save);
+  }
+
+  private show(html: string) {
+    this.el.innerHTML = `<div class="meta-card glass">${html}</div>`;
+    this.el.hidden = false;
+    this.el.querySelectorAll<HTMLButtonElement>('[data-a]').forEach((b) =>
+      b.addEventListener('click', () => {
+        if (b.dataset.a === 'resume') this.setPause(false);
+        else { this.persist(); this.save.shifts += 1; store(this.save); location.reload(); }
+      })
+    );
+  }
+  private hide() { this.el.hidden = true; this.el.innerHTML = ''; }
+}
