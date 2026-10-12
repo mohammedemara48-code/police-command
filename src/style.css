@@ -644,3 +644,13 @@ body[data-play="street"] .hint { display: none !important; }
 .meta-card .btn{min-width:180px;padding:12px 20px;font-size:15px}
 .meta-pause-btn{position:fixed;bottom:calc(14px + env(safe-area-inset-bottom));left:14px;z-index:8000;width:48px;height:48px;border-radius:50%;border:1px solid rgba(126,200,255,.4);background:rgba(10,22,40,.75);color:#fff;font-size:20px;touch-action:manipulation;cursor:pointer}
 @keyframes metaIn{from{opacity:0}to{opacity:1}}
+.meta-settings{display:flex;flex-direction:column;gap:8px;width:100%;margin:6px 0 4px;text-align:right}
+.meta-settings label{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}
+.meta-settings input[type=range]{flex:1;max-width:160px;accent-color:#7ec8ff}
+.meta-settings select{background:#0e1c30;color:#eaf2ff;border:1px solid rgba(126,200,255,.4);border-radius:8px;padding:4px 6px;font-family:inherit}
+
+/* Analog joystick (touch) */
+.street-stick{display:none;position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:24px;width:130px;height:130px;border-radius:50%;background:rgba(10,22,40,.45);border:2px solid rgba(126,200,255,.35);touch-action:none;z-index:60}
+.street-knob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(126,200,255,.75);box-shadow:0 0 18px rgba(126,200,255,.5);pointer-events:none}
+@media (pointer:coarse){.street-stick{display:block}.street-pad{display:none!important}.meta-pause-btn{left:auto;right:14px;top:calc(70px + env(safe-area-inset-top));bottom:auto}}
+.street-actions button{touch-action:manipulation}

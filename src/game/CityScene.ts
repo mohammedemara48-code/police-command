@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
 import { StreetPlay } from './StreetPlay';
+import { Q } from './Quality';
+import { models, fx, PEOPLE, LOW_BUILDINGS, TOWERS } from './Models';
 
 type CarMesh = THREE.Group & { userData: { unitId?: string; flashing?: boolean; lights?: THREE.PointLight[] } };
 
@@ -70,13 +72,15 @@ export class CityScene {
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: Q.antialias,
       alpha: false,
       powerPreference: 'high-performance'
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, Q.pixelRatio));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = Q.shadows;
+    models.shadows = Q.shadows;
+    fx.particles = Q.particles;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -117,7 +121,7 @@ export class CityScene {
     this.sun = new THREE.DirectionalLight(0xfff0d0, 1.35);
     this.sun.position.set(40, 70, 20);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
     this.sun.shadow.camera.near = 5;
     this.sun.shadow.camera.far = 180;
     this.sun.shadow.camera.left = -70;
@@ -240,6 +244,11 @@ export class CityScene {
     g.add(this.box(w + 0.3, 0.25, d + 0.3, this.mat(0x0d1520), 0, h + 0.1, 0));
     this.addWindows(g, w, h, d, 0);
     if (name) g.name = name;
+    if (name !== 'bank') {
+      const kinds = h > 11 ? TOWERS : LOW_BUILDINGS;
+      const pick = Math.abs(Math.round(x * 7 + z * 13)) % kinds.length;
+      models.dress(g, kinds[pick], { box: [w, h, d] });
+    }
     this.root.add(g);
     return g;
   }
@@ -367,6 +376,8 @@ export class CityScene {
     g.add(red, blue);
     g.userData.lights = [red, blue];
     g.userData.flashing = false;
+    fx.glow(red, 0xff2244, 3);
+    fx.glow(blue, 0x2288ff, 3);
     // wheels
     const wheelMat = this.mat(0x111111);
     for (const [wx, wz] of [[-0.7, 1], [0.7, 1], [-0.7, -1], [0.7, -1]] as const) {
@@ -375,6 +386,7 @@ export class CityScene {
       wh.position.set(wx, 0.28, wz);
       g.add(wh);
     }
+    models.dress(g, 'police', { length: 3.4 });
     return g;
   }
 
@@ -587,6 +599,7 @@ export class CityScene {
       stripe.position.set(0, 1.2, 0.3);
       g.add(cap, stripe);
     }
+    models.dress(g, kind === 'cop' ? 'character-male-c' : PEOPLE[shirt % PEOPLE.length], { height: 2.0 });
     return g;
   }
 
@@ -1047,6 +1060,8 @@ export class CityScene {
   }
 
   update(dt: number) {
+    models.update(dt);
+    fx.update(dt);
     if (this.street?.active) {
       this.renderer.toneMappingExposure = 1.18;
       this.street.update(dt);
