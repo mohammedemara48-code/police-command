@@ -4,14 +4,16 @@ import { IncidentManager } from './game/IncidentManager';
 import { CityScene } from './game/CityScene';
 import { UI } from './game/UI';
 import { audio } from './game/AudioManager';
+import { Meta } from './game/Meta';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const game = new GameManager();
 const city = new CityScene(canvas);
 const incidents = new IncidentManager(game, city.pois);
 const ui = new UI(game, incidents, city);
+const meta = new Meta(game);
 
-(window as unknown as { __PC: unknown }).__PC = { game, incidents, city, ui, audio };
+(window as unknown as { __PC: unknown }).__PC = { meta, game, incidents, city, ui, audio };
 
 let last = performance.now();
 
@@ -19,8 +21,12 @@ function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  game.tick(dt);
-  incidents.tick(dt);
+  if (meta.active || !game.state.running) {
+    game.tick(dt);
+    incidents.tick(dt);
+  }
+  meta.check();
+  if (meta.paused || meta.over) { requestAnimationFrame(frame); return; }
   city.syncIncidents(incidents.openIncidents);
 
   for (const u of game.units) {
@@ -39,6 +45,3 @@ function frame(now: number) {
 }
 requestAnimationFrame(frame);
 
-setInterval(() => {
-  if (game.state.running) ui.render();
-}, 500);
