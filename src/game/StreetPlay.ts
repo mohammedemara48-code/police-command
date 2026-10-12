@@ -1,3 +1,4 @@
+import { Combat } from './Combat';
 import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
 import { models, CARS, LOW_CARS, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
@@ -104,6 +105,12 @@ export class StreetPlay {
   private traffic: Traffic[] = [];
   private flash: THREE.PointLight[] = [];
   private inCar = false;
+  private combat!: Combat;
+  private gangOn = false;
+  private firing = false;
+  private aimRay = new THREE.Raycaster();
+  private aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private aimPt = new THREE.Vector3();
   private distAcc = 0;
   private driver: THREE.Group | null = null;
   level: LevelDef = levelById(progress.current);
@@ -142,6 +149,18 @@ export class StreetPlay {
   private mounted = false;
   private boundKeyDown = (e: KeyboardEvent) => this.onKey(e, true);
   private boundKeyUp = (e: KeyboardEvent) => this.onKey(e, false);
+  /** Desktop: left-click on the 3D view aims at the cursor and fires. */
+  private boundMouse = (e: MouseEvent) => {
+    if (!this.gangOn || e.button !== 0 || (e.target as HTMLElement).tagName !== 'CANVAS' || (e.target as HTMLElement).id === 'street-mini') return;
+    const r = (e.target as HTMLElement).getBoundingClientRect();
+    this.aimRay.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.camera);
+    if (this.aimRay.ray.intersectPlane(this.aimPlane, this.aimPt)) {
+      this.yaw = Math.atan2(this.aimPt.x - this.player.position.x, this.aimPt.z - this.player.position.z);
+      this.player.rotation.y = this.yaw;
+    }
+    this.firing = true;
+  };
+  private boundMouseUp = () => { if (!this.hold.run) this.firing = false; };
 
   constructor(
     private scene: THREE.Scene,
@@ -245,6 +264,12 @@ export class StreetPlay {
     this.car.add(this.driver);
     this.group.add(this.eventGroup);
     this.mergeStatic();
+    this.combat = new Combat(this.group, () => {
+      const g = this.makePerson(false, [0x2a2a2a, 0x7a1f1f, 0x3a2a4a][Math.floor(Math.random() * 3)], 0x0e0e0e).g;
+      models.setClip(g, 'idle');
+      return g;
+    });
+    this.combat.onEnd = (win) => this.finishChase(win);
     this.spawnPeople();
     this.spawnTraffic();
     this.buildRain();
@@ -467,14 +492,14 @@ export class StreetPlay {
     const dist = Math.abs(pos.z - place.z);
     const steps = [
       { t: 'اركب الدورية', done: this.inCar || this.chasing || this.phase === 'result' },
-      { t: `روح ${place.name} (${Math.round(dist)} م)`, done: this.chasing },
-      { t: 'الحق العربية الهاربة واقفل عليها', done: false }
+      { t: `روح ${place.name} (${Math.round(dist)} م)`, done: this.chasing || this.gangOn },
+      this.level.kind === 'gang' ? { t: `حيّد العصابة المسلحة (${this.combat.alive().length} باقيين)`, done: false } : { t: 'الحق العربية الهاربة واقفل عليها', done: false }
     ];
     const cur = steps.findIndex((x) => !x.done);
     if (this.objEl) {
       const html = `<b>المستوى ${this.level.id}: ${this.level.title}</b>` + steps.map((x, i) =>
         `<div class="obj ${x.done ? 'done' : i === cur ? 'cur' : ''}">${x.done ? '✔' : i === cur ? '➤' : '•'} ${x.t}</div>`).join('') +
-        (this.chasing ? `<div class="obj timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.chaseTime))} ث</div>` : '');
+        (this.chasing || this.gangOn ? `<div class="obj timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.chaseTime))} ث</div>` : '');
       if (html !== this.objHtml) { this.objEl.innerHTML = html; this.objHtml = html; }
     }
     // target in world
@@ -761,6 +786,7 @@ export class StreetPlay {
     progress.current = this.level.id;
     this.missionId = this.level.placeId;
     this.chasing = false;
+    this.endGang();
     if (this.suspect) { this.group.remove(this.suspect); this.suspect = null; }
     this.closeResultSilently();
     const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
@@ -794,6 +820,9 @@ export class StreetPlay {
     this.ui = null;
     this.mounted = false;
     window.removeEventListener('keydown', this.boundKeyDown);
+    window.removeEventListener('mousedown', this.boundMouse);
+    window.removeEventListener('mouseup', this.boundMouseUp);
+    this.endGang();
     window.removeEventListener('keyup', this.boundKeyUp);
     this.keys.clear();
   }
@@ -808,6 +837,8 @@ export class StreetPlay {
     document.body.dataset.play = 'street';
     this.mountUi();
     window.addEventListener('keydown', this.boundKeyDown);
+    window.addEventListener('mousedown', this.boundMouse);
+    window.addEventListener('mouseup', this.boundMouseUp);
     window.addEventListener('keyup', this.boundKeyUp);
     this.snapCamera(1);
   }
@@ -835,7 +866,9 @@ export class StreetPlay {
         <button type="button" data-act="car">ركب الدورية</button>
         <button type="button" data-act="run">ركض</button>
         <button type="button" data-act="map">خريطة المهام</button>
+        <button type="button" data-act="shoot">🔫 اضرب</button>
       </div>
+      <div id="street-hp"></div>
     `;
     document.getElementById('app')!.appendChild(ui);
     this.ui = ui;
@@ -872,8 +905,11 @@ export class StreetPlay {
     });
     this.mountStick(ui.querySelector('.street-stick') as HTMLElement);
     holdBtn(ui.querySelector('[data-act="run"]') as HTMLElement, (v) => (this.hold.run = v));
+    holdBtn(ui.querySelector('[data-act="shoot"]') as HTMLElement, (v) => (this.firing = v));
+    this.combat.hud = ui.querySelector('#street-hp');
+    this.combat.renderHud();
     // Stop the browser from turning touches on the controls into scroll/zoom/long-press.
-    ui.addEventListener('touchstart', (e) => { if ((e.target as HTMLElement).closest('[data-k], [data-act="run"], .street-stick')) e.preventDefault(); }, { passive: false });
+    ui.addEventListener('touchstart', (e) => { if ((e.target as HTMLElement).closest('[data-k], [data-act="run"], [data-act="shoot"], .street-stick')) e.preventDefault(); }, { passive: false });
     ui.querySelector('[data-act="car"]')!.addEventListener('click', () => this.toggleCar());
     ui.querySelector('[data-act="map"]')!.addEventListener('click', () => this.openMap());
     this.mini!.addEventListener('click', () => this.openMap());
@@ -915,6 +951,7 @@ export class StreetPlay {
     if (!this.active) return;
     this.keys[down ? 'add' : 'delete'](e.code);
     if (down && (e.code === 'KeyE' || e.code === 'Enter')) this.toggleCar();
+    if (e.code === 'KeyF' || e.code === 'Space') this.firing = down;
     if (down && e.code === 'KeyM') this.mapEl ? this.closeMap() : this.openMap();
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   }
@@ -1004,7 +1041,8 @@ export class StreetPlay {
   }
 
   private maybeStartChase(place: StreetPlace) {
-    if (place.id !== this.missionId || this.chasing || this.resultEl) return;
+    if (place.id !== this.missionId || this.chasing || this.gangOn || this.resultEl) return;
+    if (this.level.kind === 'gang') { this.beginGang(place); return; }
     if (!this.inCar) {
       this.setStatus(`${place.name}: المهمة هنا. اركب الدورية عشان المطاردة تبدأ.`);
       this.missionId = place.id;
@@ -1026,8 +1064,32 @@ export class StreetPlay {
     this.setStatus(`مطاردة في ${place.name} — الحق السيارة السودا.`);
   }
 
+  private beginGang(place: StreetPlace) {
+    this.gangOn = true;
+    this.chaseTime = 0;
+    this.travel = null;
+    this.combat.start(0, place.z, this.level.gang ?? 3);
+    document.documentElement.classList.add('armed');
+    audio.setTrack('music');
+    this.setStatus(this.inCar ? 'عصابة مسلحة! انزل من الدورية (E) واضرب.' : 'عصابة مسلحة! اضرب بزرار 🔫 (أو كليك / F).');
+  }
+
+  private endGang() {
+    this.gangOn = false;
+    this.firing = false;
+    this.combat?.clear();
+    document.documentElement.classList.remove('armed');
+  }
+
   private finishChase(success: boolean) {
-    if (!this.chasing) return;
+    const wasGang = this.gangOn;
+    if (!this.chasing && !wasGang) return;
+    if (wasGang) {
+      this.gangOn = false;
+      this.firing = false;
+      document.documentElement.classList.remove('armed');
+      setTimeout(() => { if (!this.gangOn) this.combat.clear(); }, 2500);
+    }
     this.chasing = false;
     const place = STREET_PLACES.find((p) => p.id === this.missionId) || STREET_PLACES[1];
     if (this.suspect) {
@@ -1049,12 +1111,13 @@ export class StreetPlay {
           money: 0,
           rep: -3
         };
+    if (wasGang) report.summary = success ? `العصابة المسلحة اتحيّدت في ${place.name} من غير خساير.` : `الضابط اتصاب والعصابة فلتت من ${place.name}.`;
     audio.sirenLoop(false);
     if (success) audio.success();
     else audio.fail();
     const lv = this.level;
     const stars = completeLevel(lv.id, success, this.chaseTime);
-    if (success) { addStat('arrests'); addStat('missions'); } else checkAch();
+    if (success) { if (!wasGang) addStat('arrests'); addStat('missions'); } else checkAch();
     report.title = `المستوى ${lv.id}: ${lv.title}`;
     report.durationSec = Math.round(this.chaseTime);
     if (success) {
@@ -1179,6 +1242,14 @@ export class StreetPlay {
     this.stepPeds(dt);
     this.stepTraffic(dt);
     this.stepChase(dt);
+    if (this.gangOn || this.combat.gang.length) {
+      if (this.gangOn) {
+        this.chaseTime += dt;
+        if (this.chaseTime > this.level.limit) this.combat.hp = 0;
+        if (this.firing && !this.inCar) this.combat.shoot(this.player.position, this.yaw);
+      }
+      this.combat.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
+    }
     this.stepRain(dt);
     this.stepLights();
     if (this.key) {
@@ -1242,10 +1313,9 @@ export class StreetPlay {
         this.yaw = approachAngle(this.yaw, aim, dt * 6);
       }
       const spd = (input.run ? 5.2 : 2.6) * (throttle || (turn ? 0.8 : 0));
-      this.player.position.x += Math.sin(this.yaw) * spd * dt;
-      this.player.position.z += Math.cos(this.yaw) * spd * dt;
-      this.player.position.x = THREE.MathUtils.clamp(this.player.position.x, -7.4, 7.4);
-      this.player.position.z = THREE.MathUtils.clamp(this.player.position.z, -100, 240);
+      const nx = this.player.position.x + Math.sin(this.yaw) * spd * dt;
+      const nz = this.player.position.z + Math.cos(this.yaw) * spd * dt;
+      this.player.position.set(THREE.MathUtils.clamp(nx, -7.4, 7.4), this.player.position.y, THREE.MathUtils.clamp(nz, -100, 240));
       this.player.rotation.y = this.yaw;
       if (spd !== 0) {
         this.stepT -= dt * Math.abs(spd);
@@ -1331,45 +1401,20 @@ export class StreetPlay {
     if (!ctx) return;
     const w = c.width;
     const h = c.height;
-    ctx.clearRect(0, 0, w, h);
+    const zOf = (z: number) => h - 20 - ((z + 100) / 340) * (h - 40);
     ctx.fillStyle = 'rgba(6,12,20,0.82)';
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#2a6ea8';
-    ctx.strokeRect(4, 4, w - 8, h - 8);
     ctx.fillStyle = '#1c2836';
     ctx.fillRect(w / 2 - 10, 16, 20, h - 32);
-    const zOf = (z: number) => h - 20 - ((z + 100) / 340) * (h - 40);
-    for (const p of STREET_PLACES) {
-      const y = zOf(p.z);
-      ctx.fillStyle = p.id === this.missionId ? '#ff4d6d' : '#3aa0ff';
-      ctx.beginPath();
-      ctx.arc(w / 2, y, p.id === this.missionId ? 6 : 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    for (const p of STREET_PLACES) { ctx.fillStyle = p.id === this.missionId ? '#ff4d6d' : '#3aa0ff'; ctx.beginPath(); ctx.arc(w / 2, zOf(p.z), 4, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#ff3b3b';
+    for (const m of this.combat.gang) if (m.hp > 0) { ctx.beginPath(); ctx.arc(w / 2 + m.g.position.x * 1.5, zOf(m.g.position.z), 3, 0, Math.PI * 2); ctx.fill(); }
     const pz = this.inCar ? this.car.position.z : this.player.position.z;
-    const tz = this.chasing && this.suspect ? this.suspect.position.z : (STREET_PLACES.find((p) => p.id === this.level.placeId)?.z ?? 0);
-    ctx.strokeStyle = '#ffd23d';
-    ctx.lineWidth = 4;
-    ctx.setLineDash([6, 5]);
-    ctx.beginPath();
-    ctx.moveTo(w / 2, zOf(pz));
-    ctx.lineTo(w / 2, zOf(tz));
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.lineWidth = 1;
-    ctx.fillStyle = '#ffd23d';
-    ctx.beginPath();
-    ctx.moveTo(w / 2, zOf(tz) - 9); ctx.lineTo(w / 2 + 7, zOf(tz) + 3); ctx.lineTo(w / 2 - 7, zOf(tz) + 3);
-    ctx.fill();
     ctx.fillStyle = '#ffe08a';
-    ctx.beginPath();
-    ctx.arc(w / 2, zOf(pz), 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#d5e4f5';
-    ctx.font = '12px Cairo, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('خريطة', w / 2, 16);
+    ctx.beginPath(); ctx.arc(w / 2, zOf(pz), 5, 0, Math.PI * 2); ctx.fill();
   }
+
+
 }
 
 function approachAngle(current: number, target: number, maxStep: number) {

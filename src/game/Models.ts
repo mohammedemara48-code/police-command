@@ -132,6 +132,8 @@ class ModelLib {
         idle: find(/(^|\|)(female_)?idle(_neutral)?$/i) ?? find(/idle/i, /gun|sword|sit/i),
         walk: find(/walk(ing)?$/i),
         sprint: find(/(^|\||_)run(ning)?$/i) ?? find(/sprint/i),
+        gun: find(/gun_?shoot|shoot|pistol|gun/i, /run|walk/i),
+        down: find(/death|die|dead/i),
         drive: find(/^drive$/i) ?? find(/sit(ting|idle)?$/i) ?? find(/idle/i, /gun|sword/i)
       };
       for (const [k, c] of Object.entries(alias)) if (c && !actions[k]) actions[k] = mixer.clipAction(c);
