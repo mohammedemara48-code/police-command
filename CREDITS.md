@@ -6,3 +6,11 @@
 - Calm music: "Empty City" — OpenGameArt (https://opengameart.org/content/emptycity-background-music), CC0.
 - Siren: "Sirens and alarm noise" — OpenGameArt (https://opengameart.org/content/sirens-and-alarm-noise), CC0.
 - Gunshot: "Gunshots" (22 Pistol) — OpenGameArt (https://opengameart.org/content/gunshots), CC0.
+
+## Realistic models (v1.8)
+- Police officer: "SWAT" by Quaternius — CC0 (https://poly.pizza/m/Btfn3G5Xv4)
+- Pedestrian man: "Business Man" by Quaternius — CC0 (https://poly.pizza/m/JFrLIKqvCH)
+- Pedestrian women: "Animated Woman" (https://poly.pizza/m/9kF7eTDbhO) and "Woman" (https://poly.pizza/m/AQsd9ngvKU) by Quaternius — CC0
+- Patrol car: "Police Car" by Quaternius — CC0 (https://poly.pizza/m/BwwnUrWGmV)
+- Traffic / suspect car: "2015 Dodge Challenger" by Grzybek — CC-BY 3.0 (https://poly.pizza/m/1jB8I4t5w4). Attribution required: model by Grzybek via Poly Pizza.
+- All compressed with glTF-Transform (meshopt geometry, WebP textures ≤512px).
