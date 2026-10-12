@@ -24,7 +24,7 @@ export const TOWERS: ModelKind[] = ['building-skyscraper-a', 'building-skyscrape
 
 interface Loaded { scene: THREE.Group; clips: THREE.AnimationClip[]; size: THREE.Vector3 }
 interface Pending { group: THREE.Object3D; kind: ModelKind; fit: Fit }
-export interface Fit { length?: number; height?: number; box?: [number, number, number]; yaw?: number }
+export interface Fit { length?: number; height?: number; box?: [number, number, number]; yaw?: number; tint?: number; noShadow?: boolean }
 interface Actor {
   obj: THREE.Object3D; mixer: THREE.AnimationMixer; actions: Record<string, THREE.AnimationAction>;
   cur: string; last: THREE.Vector3; speed: number;
@@ -47,7 +47,8 @@ class ModelLib {
         g.scene.traverse((o) => { if ((o as THREE.Light).isLight) lights.push(o); });
         lights.forEach((o) => o.removeFromParent());
         g.scene.traverse((o) => {
-          (o as THREE.Mesh).frustumCulled = false;
+          // skinned meshes have bind-pose bounds that do not follow animation; keep them unculled, cull everything else
+          if ((o as THREE.SkinnedMesh).isSkinnedMesh) (o as THREE.Mesh).frustumCulled = false;
           const m = o as THREE.Mesh;
           if (m.isMesh) { m.castShadow = this.shadows; m.receiveShadow = true; }
         });
@@ -111,6 +112,14 @@ class ModelLib {
     model.position.set(-c.x, -bb.min.y, -c.z);
     holder.rotation.y = fit.yaw ?? 0;
     holder.userData.keep = true;
+    if (fit.tint !== undefined || fit.noShadow || !this.shadows) {
+      model.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        if (fit.noShadow || !this.shadows) m.castShadow = false;
+        if (fit.tint !== undefined) m.material = this.tintMat(m.material as THREE.Material, fit.tint);
+      });
+    }
     group.add(holder);
     if (kind.startsWith('building')) this.decorate(group, holder, kind);
     if (l.clips.length) {
@@ -132,6 +141,19 @@ class ModelLib {
       this.actors.push(a);
       group.userData.actor = a;
     }
+  }
+
+  private tints = new Map<string, THREE.Material>();
+  /** Cached tinted copy of a material (multiplies the palette texture), shared by all cars of that colour. */
+  private tintMat(src: THREE.Material, tint: number) {
+    const key = src.uuid + ':' + tint;
+    let m = this.tints.get(key);
+    if (!m) {
+      m = src.clone();
+      (m as THREE.MeshStandardMaterial).color?.multiply(new THREE.Color(tint));
+      this.tints.set(key, m);
+    }
+    return m;
   }
 
   /** Shared night-window material; CityScene drives its emissive by time of day. */
@@ -179,7 +201,7 @@ class ModelLib {
       const geo = tank ? new THREE.CylinderGeometry(0.5, 0.5, 1.1, 10) : new THREE.BoxGeometry(0.9, 0.5, 0.7);
       const u = new THREE.Mesh(geo, this.roofMat);
       u.position.set(c.x + (this.rnd() - 0.5) * size.x * 0.6, bb.max.y + (tank ? 0.55 : 0.25), c.z + (this.rnd() - 0.5) * size.z * 0.6);
-      u.castShadow = this.shadows;
+      u.castShadow = false;
       u.userData.keep = true;
       group.add(u);
     }

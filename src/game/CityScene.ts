@@ -73,6 +73,7 @@ export class CityScene {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: Q.antialias,
+      stencil: false,
       alpha: false,
       powerPreference: 'high-performance'
     });
@@ -81,7 +82,7 @@ export class CityScene {
     this.renderer.shadowMap.enabled = Q.shadows;
     models.shadows = Q.shadows;
     fx.particles = Q.particles;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -786,7 +787,7 @@ export class CityScene {
 
   /** Drive cinematic day→dusk→night→dawn from in-game city hour (0–24). */
   setTimeOfDay(hour: number) {
-    const h = this.street?.active ? 22.4 : hour;
+    const h = this.street?.active ? 18.9 : hour;
     this.cityHour = ((h % 24) + 24) % 24;
     this.applyTimeOfDay();
   }
