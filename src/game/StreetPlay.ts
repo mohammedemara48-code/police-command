@@ -1,3 +1,4 @@
+import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
 import { models, CARS, LOW_CARS, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
@@ -103,6 +104,7 @@ export class StreetPlay {
   private traffic: Traffic[] = [];
   private flash: THREE.PointLight[] = [];
   private inCar = false;
+  private distAcc = 0;
   private driver: THREE.Group | null = null;
   level: LevelDef = levelById(progress.current);
   private stepT = 0;
@@ -1052,6 +1054,7 @@ export class StreetPlay {
     else audio.fail();
     const lv = this.level;
     const stars = completeLevel(lv.id, success, this.chaseTime);
+    if (success) { addStat('arrests'); addStat('missions'); } else checkAch();
     report.title = `المستوى ${lv.id}: ${lv.title}`;
     report.durationSec = Math.round(this.chaseTime);
     if (success) {
@@ -1227,6 +1230,8 @@ export class StreetPlay {
       this.car.rotation.y = this.yaw;
       this.car.position.x += Math.sin(this.yaw) * this.speed * dt;
       this.car.position.z += Math.cos(this.yaw) * this.speed * dt;
+      this.distAcc += Math.abs(this.speed) * dt;
+      if (this.distAcc > 25) { addStat('distance', this.distAcc); this.distAcc = 0; }
       this.car.position.x = THREE.MathUtils.clamp(this.car.position.x, -3.2, 3.2);
       this.car.position.z = THREE.MathUtils.clamp(this.car.position.z, -100, 240);
     } else {
