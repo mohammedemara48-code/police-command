@@ -19,6 +19,9 @@ export class Combat {
   private tracerMat = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true });
   private flashLight = new THREE.PointLight(0xffc860, 0, 6, 2);
   hud: HTMLElement | null = null;
+  ammo = 12;
+  readonly mag = 12;
+  private reload = 0;
   onEnd: ((win: boolean) => void) | null = null;
 
   constructor(private group: THREE.Group, private makeGangster: () => THREE.Group) {
@@ -29,6 +32,7 @@ export class Combat {
     this.clear();
     this.hp = 100;
     this.armor = 50;
+    this.ammo = this.mag;
     this.active = true;
     for (let i = 0; i < count; i++) {
       const g = this.makeGangster();
@@ -55,8 +59,11 @@ export class Combat {
 
   /** Shoot from `from` (facing yaw). Auto-aims at the closest living gangster inside a forward cone. */
   shoot(from: THREE.Vector3, yaw: number) {
-    if (this.cool > 0) return null;
+    if (this.cool > 0 || this.reload > 0) return null;
+    if (this.ammo <= 0) { this.reload = 1.2; this.renderHud(); return null; }
     this.cool = 0.32;
+    this.ammo--;
+    if (this.ammo <= 0) this.reload = 1.2;
     audio.gunshot();
     addStat('shots');
     let best: Gangster | null = null;
@@ -100,6 +107,7 @@ export class Combat {
   /** Returns false if the player was taken down. */
   update(dt: number, player: THREE.Vector3, inCar: boolean) {
     this.cool = Math.max(0, this.cool - dt);
+    if (this.reload > 0) { this.reload -= dt; if (this.reload <= 0) { this.ammo = this.mag; this.renderHud(); } }
     this.flashLight.intensity = Math.max(0, this.flashLight.intensity - dt * 60);
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
@@ -153,9 +161,9 @@ export class Combat {
 
   renderHud() {
     if (!this.hud) return;
-    if (!this.active && !this.gang.length) { this.hud.style.display = 'none'; return; }
-    this.hud.style.display = 'block';
-    this.hud.innerHTML = `<div class="bar hp"><i style="width:${this.hp}%"></i><span>❤ ${Math.round(this.hp)}</span></div>
+    const gun = `<div class="gun">🔫 <b>${this.reload > 0 ? 'تعمير…' : this.ammo + '/' + this.mag}</b></div>`;
+    if (!this.active && !this.gang.length) { this.hud.innerHTML = gun; return; }
+    this.hud.innerHTML = gun + `<div class="bar hp"><i style="width:${this.hp}%"></i><span>❤ ${Math.round(this.hp)}</span></div>
       <div class="bar ar"><i style="width:${this.armor * 2}%"></i><span>🛡 ${Math.round(this.armor)}</span></div>
       <div class="gang-left">العصابة: ${this.alive().length}/${this.gang.length}</div>`;
   }
