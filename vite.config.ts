@@ -23,7 +23,16 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}']
+        // HTML is never precached: navigations go to the network first, so one refresh picks up a new deploy.
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
+        navigateFallback: null,
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          { urlPattern: ({ request }) => request.mode === 'navigate', handler: 'NetworkFirst', options: { cacheName: 'pages', networkTimeoutSeconds: 4 } },
+          { urlPattern: /\/(models|audio)\//, handler: 'StaleWhileRevalidate', options: { cacheName: 'game-assets' } }
+        ]
       }
     })
   ],
