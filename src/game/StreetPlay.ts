@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { models, CARS, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
+import { Q } from './Quality';
 
 export interface StreetPlace {
   id: string;
@@ -99,6 +101,7 @@ export class StreetPlay {
   private traffic: Traffic[] = [];
   private flash: THREE.PointLight[] = [];
   private inCar = false;
+  private stepT = 0;
   private yaw = 0;
   private speed = 0;
   private placeId = 'downtown';
@@ -214,6 +217,17 @@ export class StreetPlay {
       this.addLamp(5.2, z + 10);
     }
     for (let z = -80; z < 220; z += 40) this.addProps(z);
+
+    this.player = this.makeOfficer();
+    this.player.position.set(0.9, 0, 0);
+    this.group.add(this.player);
+    this.car = this.makePoliceCar(true);
+    this.car.position.set(-1.4, 0, 2);
+    this.group.add(this.car);
+    this.group.add(this.eventGroup);
+    this.spawnPeople();
+    this.spawnTraffic();
+    this.buildRain();
   }
 
   private buildBlock(place: StreetPlace) {
@@ -229,9 +243,14 @@ export class StreetPlay {
         const m = this.mat(palette[i % palette.length], { roughness: 0.8 });
         const z = place.z - 24 + i * 10;
         const x = side * (10.5 + w / 2);
-        const b = this.box(w, h, 8, m, x, h / 2, z);
+        const bg = new THREE.Group();
+        bg.position.set(x, 0, z);
+        const b = this.box(w, h, 8, m, 0, h / 2, 0);
         b.castShadow = true;
-        this.group.add(b);
+        bg.add(b);
+        const kinds = h > 9 ? TOWERS : LOW_BUILDINGS;
+        models.dress(bg, kinds[i % kinds.length], { box: [w, h, 8], yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
+        this.group.add(bg);
         for (let y = 2; y < h - 1; y += 2.6) {
           this.group.add(this.box(0.05, 0.9, 1.2, glow, x - side * (w / 2 + 0.03), y, z - 2));
           this.group.add(this.box(0.05, 0.9, 1.2, glow, x - side * (w / 2 + 0.03), y, z + 2));
@@ -329,6 +348,7 @@ export class StreetPlay {
     const legR = this.box(0.14, 0.7, 0.16, navy, 0.12, 0.35, 0);
     g.add(legL, legR);
     g.userData.legs = [legL, legR];
+    models.dress(g, 'character-male-c', { height: 1.8 });
     return g;
   }
 
@@ -388,6 +408,7 @@ export class StreetPlay {
       cap.position.set(0, 1.7, 0);
       g.add(cap);
     }
+    models.dress(g, PEOPLE[(female ? 1 : 0) + ((hair >> 4) % 2) * 2], { height: female ? 1.68 : 1.78 });
     return { g, legL, legR, armL, armR };
   }
 
@@ -463,7 +484,10 @@ export class StreetPlay {
       g.add(lr, lb);
       g.userData.lights = [lr, lb];
       this.flash.push(lr, lb);
+      fx.glow(lr, 0xff2244);
+      fx.glow(lb, 0x2266ff);
     }
+    models.dress(g, 'police', { length: 4.2 });
     return g;
   }
 
@@ -473,8 +497,9 @@ export class StreetPlay {
     g.add(this.box(1.65, 0.4, 4.0, body, 0, 0.5, 0));
     g.add(this.box(1.45, 0.35, 1.6, this.mat(0x111111, { metalness: 0.4 }), 0, 0.88, -0.2));
     const tail = new THREE.PointLight(0xff2200, 1.4, 6, 2);
-    tail.position.set(0, 0.55, 1.9);
+    tail.position.set(0, 0.55, -1.9);
     g.add(tail);
+    models.dress(g, 'sedan-sports', { length: 4.0 });
     return g;
   }
 
@@ -488,13 +513,14 @@ export class StreetPlay {
       const laneX = i % 2 === 0 ? -1.7 : 1.7;
       mesh.position.set(laneX, 0, -60 + i * 38);
       mesh.rotation.y = i % 2 === 0 ? 0 : Math.PI;
+      models.dress(mesh, CARS[i % CARS.length], { length: 3.8 });
       this.group.add(mesh);
       this.traffic.push({ mesh, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
     }
   }
 
   private buildRain() {
-    const count = 700;
+    const count = Q.rain;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(count * 3);
     this.rainVel = new Float32Array(count);
@@ -535,6 +561,7 @@ export class StreetPlay {
     ui.innerHTML = `
       <canvas id="street-mini" width="180" height="180"></canvas>
       <div id="street-status"></div>
+      <div class="street-stick" dir="ltr"><div class="street-knob"></div></div>
       <div class="street-pad" dir="ltr">
         <button type="button" data-k="f">▲</button>
         <div class="street-mid">
@@ -571,6 +598,7 @@ export class StreetPlay {
       btn.addEventListener('pointerleave', up);
       btn.addEventListener('pointercancel', up);
     });
+    this.mountStick(ui.querySelector('.street-stick') as HTMLElement);
     const runBtn = ui.querySelector('[data-act="run"]')!;
     runBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -582,6 +610,36 @@ export class StreetPlay {
     ui.querySelector('[data-act="map"]')!.addEventListener('click', () => this.openMap());
     this.mini!.addEventListener('click', () => this.openMap());
     this.setStatus('ليل ممطر — امشِ أو اركب الدورية. الخريطة فيها المهام.');
+  }
+
+  /** Analog virtual joystick for touch screens; maps to the same hold flags as the D-pad. */
+  private mountStick(el: HTMLElement) {
+    const knob = el.firstElementChild as HTMLElement;
+    let id: number | null = null;
+    const R = 50;
+    const set = (dx: number, dy: number) => {
+      const m = Math.hypot(dx, dy);
+      const k = m > R ? R / m : 1;
+      dx *= k; dy *= k;
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      const nx = dx / R, ny = dy / R;
+      this.hold.f = ny < -0.3; this.hold.b = ny > 0.3;
+      this.hold.l = nx < -0.35; this.hold.r = nx > 0.35;
+      this.hold.run = m * k / R > 0.92 && !this.inCar;
+    };
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); id = e.pointerId; el.setPointerCapture(e.pointerId);
+      const r = el.getBoundingClientRect();
+      set(e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id) return;
+      const r = el.getBoundingClientRect();
+      set(e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
+    });
+    const end = (e: PointerEvent) => { if (e.pointerId !== id) return; id = null; set(0, 0); this.hold.run = false; };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
   }
 
   private onKey(e: KeyboardEvent, down: boolean) {
@@ -605,6 +663,8 @@ export class StreetPlay {
     if (this.chasing && this.inCar) return;
     if (this.inCar) {
       this.inCar = false;
+      audio.sample('door');
+      audio.engine(false);
       this.player.visible = true;
       this.player.position.set(this.car.position.x + 2.2, 0, this.car.position.z);
       this.setStatus('نزلت من الدورية.');
@@ -618,6 +678,7 @@ export class StreetPlay {
       return;
     }
     this.inCar = true;
+    audio.sample('door');
     this.player.visible = false;
     this.yaw = this.car.rotation.y;
     this.setStatus('داخل الدورية. امشِ بالأسهم أو الأزرار. صفارة المطاردة لما توصل المهمة.');
@@ -835,6 +896,11 @@ export class StreetPlay {
     this.stepChase(dt);
     this.stepRain(dt);
     this.stepLights();
+    const sp = Math.abs(this.speed);
+    audio.engine(this.inCar, Math.min(1, sp / 18));
+    if (this.inCar && sp > 2 && Math.random() < dt * 30) {
+      fx.smoke(this.group, this.car.position.x - Math.sin(this.yaw) * 2.1, 0.35, this.car.position.z - Math.cos(this.yaw) * 2.1);
+    }
     this.snapCamera(1 - Math.pow(0.0008, dt));
     this.drawMini();
     const here = this.currentPlace();
@@ -887,6 +953,10 @@ export class StreetPlay {
       this.player.position.x = THREE.MathUtils.clamp(this.player.position.x, -7.4, 7.4);
       this.player.position.z = THREE.MathUtils.clamp(this.player.position.z, -100, 240);
       this.player.rotation.y = this.yaw;
+      if (spd !== 0) {
+        this.stepT -= dt * Math.abs(spd);
+        if (this.stepT <= 0) { this.stepT = 1.5; audio.sample(Math.random() < 0.5 ? 'step1' : 'step2', 0.5, 0.9 + Math.random() * 0.2); }
+      }
       const legs = (this.player.userData.legs || []) as THREE.Object3D[];
       const swing = moving ? Math.sin(performance.now() / 140) * 0.6 : 0;
       if (legs[0]) legs[0].rotation.x = swing;
