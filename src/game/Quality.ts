@@ -27,5 +27,7 @@ export const Q = {
   shadows: quality !== 'low',
   shadowMap: quality === 'high' ? 2048 : 1024,
   particles: quality === 'low' ? 0.3 : quality === 'medium' ? 0.7 : 1,
+  /** LOD: on low quality, crowds/traffic use the light Kenney models; the player officer and patrol car stay realistic. */
+  lowDetailPeople: quality === 'low',
   rain: quality === 'low' ? 250 : quality === 'medium' ? 450 : 700
 };
