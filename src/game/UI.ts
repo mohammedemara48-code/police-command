@@ -1,3 +1,4 @@
+import { achHtml } from './Achievements';
 // @source-complete
 import { GameManager } from './GameManager';
 import { IncidentManager } from './IncidentManager';
@@ -82,7 +83,7 @@ export class UI {
   }
 
   private launched = false;
-  private menu(screen: 'main' | 'levels' | 'settings' | 'credits') {
+  private menu(screen: 'main' | 'levels' | 'settings' | 'credits' | 'ach') {
     const cur = levelById(progress.current);
     const body =
       screen === 'main'
@@ -91,6 +92,7 @@ export class UI {
           <div class="menu-col">
             <button class="btn menu-big" data-m="play">▶ العب — المستوى ${cur.id}: ${cur.title}</button>
             <button class="btn ghost" data-m="levels">المستويات</button>
+            <button class="btn ghost" data-m="ach">🏆 الإنجازات</button>
             <button class="btn ghost" data-m="command">غرفة العمليات (استراتيجية)</button>
             <button class="btn ghost" data-m="settings">الإعدادات</button>
             <button class="btn ghost" data-m="credits">الحقوق</button>
@@ -105,6 +107,8 @@ export class UI {
                 <b>${l.id}</b><span>${l.title}</span><i>${locked ? '🔒' : '★'.repeat(st) + '☆'.repeat(3 - st)}</i></button>`;
             }).join('')}</div>
             <button class="btn ghost" data-m="main">رجوع</button>`
+          : screen === 'ach'
+            ? `${achHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
           : screen === 'settings'
             ? `<h2>الإعدادات</h2>${settingsHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
             : `<h2>الحقوق</h2>
