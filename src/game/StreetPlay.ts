@@ -1,12 +1,12 @@
 import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z } from './City';
-import { Combat } from './Combat';
+import { Squad } from './Npc';
 import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
 import { models, CARS, LOW_CARS, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
 import { Q } from './Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { LEVELS, levelById, completeLevel, progress, type LevelDef } from './Levels';
+import { LEVELS, levelById, completeLevel, progress, rank, type LevelDef, type Line, type Behaviour } from './Levels';
 
 export interface StreetPlace {
   id: string;
@@ -106,8 +106,35 @@ export class StreetPlay {
   private traffic: Traffic[] = [];
   private flash: THREE.PointLight[] = [];
   private inCar = false;
-  private combat!: Combat;
+  private squad!: Squad;
   private gangOn = false;
+  // ---- mission runner (docs/GAME_DESIGN.md §2)
+  private msIdx = -1;
+  private msTime = 0;
+  private msText = '';
+  private msTarget = new THREE.Vector3();
+  private msHasTarget = false;
+  private chaseThen: Behaviour | null = null;
+  private chaseArrest = false;
+  private chaseLimit = 45;
+  private chaseSpeed = 1;
+  private chaseDir = 1;
+  private radioQ: Line[] = [];
+  private radioDone: (() => void) | null = null;
+  private radioT = 0;
+  private radioEl: HTMLElement | null = null;
+  private retEl: HTMLElement | null = null;
+  private hudEl: HTMLElement | null = null;
+  private hudHtml = '';
+  private flags = '';
+  private gun = new THREE.Group();
+  private recoil = 0;
+  private panicAt = new THREE.Vector3();
+  private panicT = 0;
+  private lights: { z: number; mats: THREE.MeshBasicMaterial[] }[] = [];
+  private lightT = 0;
+  private avenueGreen = true;
+  private tmpV = new THREE.Vector3();
   private firing = false;
   private aimRay = new THREE.Raycaster();
   private aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -152,7 +179,7 @@ export class StreetPlay {
   private boundKeyUp = (e: KeyboardEvent) => this.onKey(e, false);
   /** Desktop: left-click on the 3D view aims at the cursor and fires. */
   private boundMouse = (e: MouseEvent) => {
-    if (!this.gangOn || e.button !== 0 || (e.target as HTMLElement).tagName !== 'CANVAS' || (e.target as HTMLElement).id === 'street-mini') return;
+    if (this.inCar || e.button !== 0 || (e.target as HTMLElement).tagName !== 'CANVAS' || (e.target as HTMLElement).id === 'street-mini') return;
     const r = (e.target as HTMLElement).getBoundingClientRect();
     this.aimRay.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.camera);
     if (this.aimRay.ray.intersectPlane(this.aimPlane, this.aimPt)) {
@@ -267,12 +294,17 @@ export class StreetPlay {
     this.mergeStatic();
     buildCity(this.group, Q.lowDetailPeople);
     this.spawnCrossTraffic();
-    this.combat = new Combat(this.group, () => {
-      const g = this.makePerson(false, [0x2a2a2a, 0x7a1f1f, 0x3a2a4a][Math.floor(Math.random() * 3)], 0x0e0e0e).g;
+    this.squad = new Squad(this.group, (hostage) => {
+      const g = hostage
+        ? this.makePerson(true, 0xe7d7c1, 0x3a2416).g
+        : this.makePerson(false, [0x2a2a2a, 0x7a1f1f, 0x3a2a4a, 0x1f3a2a][Math.floor(Math.random() * 4)], 0x0e0e0e).g;
       models.setClip(g, 'idle');
       return g;
     });
-    this.combat.onEnd = (win) => this.finishChase(win);
+    this.squad.onGunfire = (x, z) => { this.panicAt.set(x, 0, z); this.panicT = 6; };
+    this.squad.onShot = () => { this.recoil = 1; };
+    this.buildGun();
+    this.buildTrafficLights();
     this.spawnPeople();
     this.spawnTraffic();
     this.buildRain();
@@ -484,50 +516,32 @@ export class StreetPlay {
   /** GTA-style objective list + target marker + on-screen direction arrow. */
   private objectiveWorld() {
     if (!this.arrow || !this.arrow.visible) return;
-    const t = this.chasing && this.suspect ? this.suspect.position : null;
-    if (t) this.arrow.position.set(t.x, 3, t.z);
-    this.arrow.position.y = (this.chasing ? 3 : 6) + Math.sin(performance.now() / 250) * 0.3;
+    this.arrow.position.set(this.msTarget.x, (this.chasing ? 3 : 4.5) + Math.sin(performance.now() / 250) * 0.3, this.msTarget.z);
     this.arrow.rotation.y += 0.04;
   }
 
+
+  /** Current objective card (8 Hz): big step text + distance + timer; drives beacon, 3D chevron and edge arrow. */
   private objective() {
-    const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
     const pos = this.inCar ? this.car.position : this.player.position;
-    const dist = Math.hypot(pos.x, pos.z - place.z);
-    const steps = [
-      { t: 'اركب الدورية', done: this.inCar || this.chasing || this.phase === 'result' },
-      { t: `روح ${place.name} (${Math.round(dist)} م)`, done: this.chasing || this.gangOn },
-      this.level.kind === 'gang' ? { t: `حيّد العصابة المسلحة (${this.combat.alive().length} باقيين)`, done: false } : { t: 'الحق العربية الهاربة واقفل عليها', done: false }
-    ];
-    const cur = steps.findIndex((x) => !x.done);
+    const has = this.msHasTarget && !this.resultEl;
+    const dist = has ? Math.hypot(this.msTarget.x - pos.x, this.msTarget.z - pos.z) : 0;
     if (this.objEl) {
-      const now = steps[Math.max(0, cur)];
-      const timer = this.chasing || this.gangOn ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.chaseTime))}ث</span>` : '';
-      const html = `<small>المستوى ${this.level.id} · ${this.level.title} ${timer}</small><div class="now">➤ ${now.t}</div>`;
+      const timer = this.msIdx >= 0 ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.msTime))}ث</span>` : '';
+      const html = `<small>مهمة ${this.level.id}/${LEVELS.length} · ${this.level.title} ${timer}</small><div class="now">➤ ${this.msText || '...'}${has ? ` <em>${Math.round(dist)} م</em>` : ''}</div>`;
       if (html !== this.objHtml) { this.objEl.innerHTML = html; this.objHtml = html; }
     }
+    const step = this.level.steps[this.msIdx];
+    this.beacon.visible = has && step?.t === 'goto';
+    this.beacon.position.set(this.msTarget.x, 0, this.msTarget.z);
+    if (this.arrow) this.arrow.visible = has && step?.t !== 'goto';
     if (this.dirEl) {
-      const tgt = this.chasing && this.suspect ? this.suspect.position : null;
-      const dz = tgt ? Math.hypot(tgt.x - pos.x, tgt.z - pos.z) : dist;
-      this.dirEl.dataset.d = `${Math.round(dz)} م`;
-    }
-    // target in world
-    const target = this.chasing && this.suspect ? this.suspect.position : new THREE.Vector3(0, 0, place.z);
-    this.beacon.visible = !this.chasing && !this.resultEl;
-    this.beacon.position.set(0, 0, place.z);
-    if (this.arrow) {
-      this.arrow.visible = !this.resultEl && (this.chasing || cur === 1);
-      this.arrow.position.set(target.x, (this.chasing ? 3 : 6) + Math.sin(performance.now() / 250) * 0.3, target.z);
-      this.arrow.rotation.y += 0.04;
-    }
-    // screen-edge direction arrow
-    if (this.dirEl) {
-      const v = target.clone().setY(1.5).project(this.camera);
+      this.dirEl.dataset.d = `${Math.round(dist)} م`;
+      const v = this.tmpV.copy(this.msTarget).setY(1.5).project(this.camera);
       const on = Math.abs(v.x) < 0.9 && Math.abs(v.y) < 0.85 && v.z < 1;
-      this.dirEl.style.display = this.resultEl ? 'none' : 'block';
+      this.dirEl.style.display = has && dist > 4 ? 'block' : 'none';
       this.dirEl.classList.toggle('onscreen', on);
       if (on) {
-        // waypoint marker sits on the target
         this.dirEl.style.left = `${(v.x * 0.5 + 0.5) * 100}%`;
         this.dirEl.style.top = `${(-v.y * 0.5 + 0.5) * 100}%`;
         this.dirEl.style.transform = 'translate(-50%,-100%)';
@@ -539,27 +553,229 @@ export class StreetPlay {
         this.dirEl.style.transform = `translate(-50%,-50%) rotate(${-ang}rad)`;
       }
     }
+    this.renderHud();
   }
+
+  // ===================== mission runner =====================
+  private startMission() {
+    this.msIdx = 0;
+    this.msTime = 0;
+    this.squad.resetPlayer();
+    this.enterStep();
+  }
+
+  private nextStep() {
+    if (this.msIdx < 0) return;
+    this.msIdx++;
+    this.enterStep();
+  }
+
+  private enterStep() {
+    const st = this.level.steps[this.msIdx];
+    this.msHasTarget = false;
+    if (!st) { this.finishMission(true); return; }
+    switch (st.t) {
+      case 'radio': this.msText = 'اسمع اللاسلكي'; this.radio(st.lines, () => this.nextStep()); break;
+      case 'car': this.msText = st.text ?? 'اركب الدورية'; if (this.inCar) this.nextStep(); break;
+      case 'goto': this.msText = st.text; this.msTarget.set(st.x, 0, st.z); this.msHasTarget = true; break;
+      case 'chase': this.msText = st.text ?? 'الحق العربية'; this.chaseThen = st.then ?? null; this.chaseLimit = st.limit; this.chaseSpeed = st.speed; this.beginChase(); break;
+      case 'suspects': {
+        this.msText = st.text;
+        const prev = [...this.level.steps].slice(0, this.msIdx).reverse().find((x) => x.t === 'goto');
+        const approachZ = prev && prev.t === 'goto' ? prev.z : this.player.position.z;
+        this.squad.spawn(st.x, st.z, st.list, { cover: st.cover, hostage: st.hostage, approachZ });
+        if (st.list.some((x) => x.b === 'fight')) { audio.setTrack('music'); this.setStatus('⚠ مسلحين! اتحامى واضرب.'); }
+        break;
+      }
+    }
+  }
+
+  /** per-frame mission logic: cheap distance checks only */
+  private tickMission(dt: number) {
+    if (this.msIdx < 0 || this.resultEl) return;
+    const st = this.level.steps[this.msIdx];
+    if (!st) return;
+    this.msTime += dt;
+    const pos = this.inCar ? this.car.position : this.player.position;
+    switch (st.t) {
+      case 'car':
+        this.msTarget.copy(this.car.position); this.msHasTarget = !this.inCar;
+        if (this.inCar) this.nextStep();
+        break;
+      case 'goto':
+        // 2D distance from whatever the player controls (car or on foot): fixes the old "1 m" stall
+        if (Math.hypot(st.x - pos.x, st.z - pos.z) < (st.r ?? 9)) { this.setStatus('وصلت.'); this.nextStep(); }
+        break;
+      case 'chase':
+        if (this.chaseArrest) {
+          const t = this.squad.list.find((x) => x.state !== 'cuffed' && x.state !== 'down');
+          if (t) { this.msTarget.copy(t.g.position); this.msHasTarget = true; }
+          this.msText = this.inCar ? 'انزل واقبض على السواق' : 'اقبض على السواق';
+          if (this.squad.done()) { this.chaseArrest = false; this.nextStep(); }
+        } else if (this.suspect) { this.msTarget.copy(this.suspect.position); this.msHasTarget = true; }
+        break;
+      case 'suspects': {
+        const left = this.squad.remaining();
+        const t = this.squad.list.find((x) => x.state !== 'cuffed' && x.state !== 'down');
+        if (t) { this.msTarget.copy(t.g.position); this.msHasTarget = true; }
+        this.msText = `${st.text} (${left} باقيين)`;
+        if (this.squad.done() && !this.squad.hostage) this.nextStep();
+        else if (this.squad.done() && this.squad.hostage?.state === 'free') this.nextStep();
+        break;
+      }
+      case 'radio': break;
+    }
+    if (this.squad.failed) this.finishMission(false, this.squad.failed);
+    else if (this.msTime > this.level.limit) this.finishMission(false, 'الوقت خلص.');
+  }
+
+  // ---- radio dialogue
+  private static WHO: Record<string, [string, string]> = {
+    mona: ['الرقيب منى · العمليات', '#3aa0ff'], hamed: ['النقيب حامد', '#ffd23d'], yasser: ['ياسر', '#7dff9a'],
+    suspect: ['المشتبه به', '#ff6b81'], informant: ['الواشي', '#c39bff'], boss: ['الزعيم', '#ff3b3b']
+  };
+  private radio(lines: Line[], done: (() => void) | null) {
+    this.radioQ = [...lines];
+    this.radioDone = done;
+    this.showRadio();
+  }
+  private showRadio() {
+    const l = this.radioQ.shift();
+    if (!l) {
+      this.radioEl?.classList.remove('show');
+      const d = this.radioDone; this.radioDone = null; d?.();
+      return;
+    }
+    const [name, col] = StreetPlay.WHO[l.who] ?? ['', '#fff'];
+    if (this.radioEl) {
+      this.radioEl.innerHTML = `<i style="background:${col}">📻</i><div><b style="color:${col}">${name}</b><p>${l.text}</p></div><span>اضغط ▶</span>`;
+      this.radioEl.classList.add('show');
+    }
+    audio.click();
+    this.radioT = 2.6 + l.text.length * 0.045;
+  }
+  private tickRadio(dt: number) {
+    if (this.radioT <= 0) return;
+    this.radioT -= dt;
+    if (this.radioT <= 0) this.showRadio();
+  }
+
+  // ---- HUD: weapon, health, threat, rank (8 Hz, string-compared)
+  private renderHud() {
+    const q = this.squad;
+    const stars = Math.round(q.threat);
+    const html = `<div class="gun">🔫 <b>${q.reloading ? 'تعمير…' : `${q.ammo}/${q.mag}`}</b></div>
+      <div class="bar hp"><i style="width:${q.hp}%"></i><span>❤ ${Math.round(q.hp)}</span></div>
+      <div class="bar ar"><i style="width:${q.armor * 2}%"></i><span>🛡 ${Math.round(q.armor)}</span></div>
+      <div class="threat">${stars ? 'تهديد ' + '★'.repeat(stars) + '☆'.repeat(5 - stars) : `رتبة: ${rank().name}`}</div>`;
+    if (this.hudEl && html !== this.hudHtml) { this.hudEl.innerHTML = html; this.hudHtml = html; }
+    // contextual buttons
+    const me = this.player.position;
+    const t = this.inCar ? null : q.target(me, this.yaw, 18);
+    const can = (t && t.state !== 'hands' && t.state !== 'hostage' ? 'o' : '') + (!this.inCar && q.cuffable(me) ? 'c' : '');
+    if (can !== this.flags) {
+      this.flags = can;
+      document.documentElement.classList.toggle('can-order', can.includes('o'));
+      document.documentElement.classList.toggle('can-cuff', can.includes('c'));
+    }
+  }
+
+  /** reticle on the locked target (per frame, one projection) */
+  private tickReticle() {
+    if (!this.retEl) return;
+    const t = this.inCar || this.resultEl ? null : this.squad.target(this.player.position, this.yaw, 24);
+    if (!t) { if (this.retEl.style.display !== 'none') this.retEl.style.display = 'none'; return; }
+    const v = this.tmpV.set(t.g.position.x, 1.25 + t.g.position.y, t.g.position.z).project(this.camera);
+    this.retEl.style.display = 'block';
+    this.retEl.style.left = `${(v.x * 0.5 + 0.5) * 100}%`;
+    this.retEl.style.top = `${(-v.y * 0.5 + 0.5) * 100}%`;
+    const cls = t.state === 'hands' ? 'cuff' : t.hidden ? 'cover' : 'hot';
+    if (this.retEl.dataset.c !== cls) { this.retEl.dataset.c = cls; this.retEl.className = cls; }
+  }
+
+  private orderSurrender() {
+    if (this.inCar) return;
+    audio.sample('door', 0.01);
+    this.setStatus('📢 «شرطة! ارفع إيدك!» — ' + this.squad.order(this.player.position, this.yaw));
+  }
+  private cuffNow() {
+    const s = this.squad.cuffable(this.player.position);
+    if (!s) { this.setStatus('قرّب من المشتبه به المستسلم.'); return; }
+    this.squad.cuff(s);
+    this.setStatus('🔗 اتكلبش.');
+  }
+
+  // ---- visible pistol in the officer's hand + recoil
+  private buildGun() {
+    const m = new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.4, metalness: 0.6 });
+    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.22), m);
+    slide.position.z = 0.06;
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.06), m);
+    grip.position.set(0, -0.07, -0.02); grip.rotation.x = 0.25;
+    this.gun.add(slide, grip);
+    this.gun.userData.dynamic = true;
+    this.player.add(this.gun);
+  }
+  private tickGun(dt: number) {
+    const aiming = !this.inCar && (this.firing || !!this.squad.target(this.player.position, this.yaw, 24));
+    this.recoil = Math.max(0, this.recoil - dt * 8);
+    // arm extended forward when aiming, holstered at the hip otherwise
+    if (aiming) this.gun.position.set(0.22, 1.36, 0.55 - this.recoil * 0.06);
+    else this.gun.position.set(0.24, 0.95, 0.05);
+    this.gun.rotation.set(aiming ? -this.recoil * 0.5 : 1.2, 0, 0);
+    this.player.userData.forceClip = this.inCar ? null : this.firing ? 'gun' : aiming ? 'aim' : null;
+  }
+
+  // ---- traffic lights at the three avenue intersections
+  private buildTrafficLights() {
+    const pole = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.6 });
+    const ave = new THREE.MeshBasicMaterial({ color: 0x33ff66 });
+    const cross = new THREE.MeshBasicMaterial({ color: 0xff3030 });
+    for (const z of CROSS_Z.slice(1, 4)) {
+      for (const sx of [-1, 1]) {
+        const g = new THREE.Group();
+        const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, 4.2, 0.16), pole); p.position.y = 2.1;
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.9, 0.35), pole); head.position.y = 4.2;
+        const la = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), ave); la.position.set(0, 4.2, 0.2 * -sx);
+        const lc = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), cross); lc.position.set(0.24 * sx, 4.2, 0);
+        g.add(p, head, la, lc);
+        g.position.set(sx * 5.4, 0, z - sx * 5.6);
+        g.userData.dynamic = true;
+        this.group.add(g);
+      }
+      this.lights.push({ z, mats: [ave, cross] });
+    }
+  }
+  private tickLights(dt: number) {
+    this.lightT += dt;
+    const green = this.lightT % 16 < 10;
+    if (green === this.avenueGreen) return;
+    this.avenueGreen = green;
+    for (const l of this.lights) { l.mats[0].color.setHex(green ? 0x33ff66 : 0xff3030); l.mats[1].color.setHex(green ? 0xff3030 : 0x33ff66); }
+  }
+
   private objEl: HTMLElement | null = null;
   private dirEl: HTMLElement | null = null;
   private objHtml = '';
 
   /** Mission start card; blocks input until "start". */
   private briefing() {
-    const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
     this.closeResultSilently();
+    const steps = this.level.steps.filter((x) => x.t !== 'radio').map((x) =>
+      x.t === 'car' ? 'اركب الدورية' : x.t === 'goto' ? x.text + ' (اتبع الـGPS الأصفر)' : x.t === 'chase' ? x.text ?? 'الحق العربية' : x.text);
     const el = document.createElement('div');
     el.id = 'street-result';
-    el.innerHTML = `<div class="street-result-card mission-card"><div class="mc-tag">${this.level.kind === 'gang' ? '🔫 مواجهة عصابة' : '🚓 مطاردة'}</div><h2>المستوى ${this.level.id}: ${this.level.title}</h2>
+    el.innerHTML = `<div class="street-result-card mission-card"><div class="mc-tag">مهمة ${this.level.id} من ${LEVELS.length} · رتبتك: ${rank().name}</div><h2>${this.level.title}</h2>
       <p>${this.level.brief}</p>
-      <ol class="mc-steps"><li><span>1</span>اركب الدورية (زرار «ركب الدورية»)</li><li><span>2</span>روح ${place.name} — اتبع السهم الأصفر والعمود المنور</li>
-      <li><span>3</span>${this.level.kind === 'gang' ? `انزل وحيّد ${this.level.gang} من العصابة بزرار 🔫` : `الحق العربية الهاربة واقفل عليها قبل ${this.level.limit} ثانية`}</li></ol>
+      <ol class="mc-steps">${steps.map((t, i) => `<li><span>${i + 1}</span>${t}</li>`).join('')}</ol>
+      <p class="mc-help">🔫 اضرب · 📢 «استسلم!» لما توجّه على مشتبه به · 🔗 «كلبش» لما يرفع إيده</p>
       <p class="mc-reward">المكافأة: $${this.level.reward.toLocaleString('en')} · ⭐ لو خلصت بسرعة</p>
       <button type="button" data-ok>ابدأ المهمة</button></div>`;
     document.getElementById('app')!.appendChild(el);
     this.resultEl = el;
-    el.querySelector('[data-ok]')!.addEventListener('click', () => { audio.click(); this.closeResultSilently(); });
+    el.querySelector('[data-ok]')!.addEventListener('click', () => { audio.click(); this.closeResultSilently(); this.startMission(); });
   }
+
 
   private buildLights() {
     this.group.add(new THREE.HemisphereLight(0xcfe0ff, 0x56606c, 1.7));
@@ -664,8 +880,9 @@ export class StreetPlay {
       cap.position.set(0, 1.7, 0);
       g.add(cap);
     }
-    const pool = Q.lowDetailPeople ? PEOPLE : REAL_PEOPLE;
-    const pick = Q.lowDetailPeople ? PEOPLE[(female ? 1 : 0) + ((hair >> 4) % 2) * 2] : female ? pool[1 + ((hair >> 4) % 2)] : pool[0];
+    // always the realistic (Quaternius) set — the blocky Kenney people looked like toys on phones
+    const pool = REAL_PEOPLE;
+    const pick = female ? pool[1 + ((hair >> 4) % 2)] : pool[0];
     models.dress(g, pick, { height: female ? 1.68 : 1.8 });
     return { g, legL, legR, armL, armR };
   }
@@ -676,7 +893,7 @@ export class StreetPlay {
     const jackets = [0x1c2430, 0x4a4038, 0x202228, 0x16324a];
     let n = 0;
     for (const place of STREET_PLACES) {
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < (Q.lowDetailPeople ? 4 : 6); i++) {
         const female = i % 2 === 0;
         const col = female ? dresses[n % dresses.length] : jackets[n % jackets.length];
         const built = this.makePerson(female, col, hairs[n % hairs.length]);
@@ -820,11 +1037,16 @@ export class StreetPlay {
     progress.current = this.level.id;
     this.missionId = this.level.placeId;
     this.chasing = false;
+    this.chaseArrest = false;
+    this.msIdx = -1;
+    this.msText = 'اقرا المهمة واضغط «ابدأ»';
+    this.msHasTarget = false;
     this.endGang();
+    this.radioQ = []; this.radioT = 0; this.radioEl?.classList.remove('show');
     if (this.suspect) { this.group.remove(this.suspect); this.suspect = null; }
     this.closeResultSilently();
     const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
-    const startZ = place.z - 40 < -95 ? place.z + 40 : place.z - 40;
+    const startZ = place.z - 48 < -95 ? place.z + 48 : place.z - 48;
     this.car.position.set(-1.4, 0, startZ);
     this.car.rotation.y = startZ < place.z ? 0 : Math.PI;
     this.player.position.set(0.9, 0, startZ);
@@ -863,6 +1085,8 @@ export class StreetPlay {
   }
 
   engage() {
+    // test hook for headless play-throughs (only with ?autotest)
+    if (location.search.includes('autotest')) (window as unknown as { __sp: unknown }).__sp = this;
     this.active = true;
     this.group.visible = true;
     this.root.visible = false;
@@ -902,8 +1126,12 @@ export class StreetPlay {
         <button type="button" data-act="car">ركب الدورية</button>
         <button type="button" data-act="run">ركض</button>
         <button type="button" data-act="map">خريطة المهام</button>
-        <button type="button" data-act="shoot">🔫 اضرب</button>
+        <button type="button" data-act="shoot">🔫<br>اضرب</button>
+        <button type="button" data-act="order">📢 استسلم!</button>
+        <button type="button" data-act="cuff">🔗 كلبش</button>
       </div>
+      <div id="street-radio"></div>
+      <div id="street-ret"></div>
       <div id="street-hp"></div>
     `;
     document.getElementById('app')!.appendChild(ui);
@@ -942,8 +1170,13 @@ export class StreetPlay {
     this.mountStick(ui.querySelector('.street-stick') as HTMLElement);
     holdBtn(ui.querySelector('[data-act="run"]') as HTMLElement, (v) => (this.hold.run = v));
     holdBtn(ui.querySelector('[data-act="shoot"]') as HTMLElement, (v) => (this.firing = v));
-    this.combat.hud = ui.querySelector('#street-hp');
-    this.combat.renderHud();
+    this.hudEl = ui.querySelector('#street-hp');
+    this.hudHtml = '';
+    this.radioEl = ui.querySelector('#street-radio');
+    this.retEl = ui.querySelector('#street-ret');
+    this.radioEl!.addEventListener('click', () => { this.radioT = 0; this.showRadio(); });
+    ui.querySelector('[data-act="order"]')!.addEventListener('click', () => this.orderSurrender());
+    ui.querySelector('[data-act="cuff"]')!.addEventListener('click', () => this.cuffNow());
     // Stop the browser from turning touches on the controls into scroll/zoom/long-press.
     ui.addEventListener('touchstart', (e) => { if ((e.target as HTMLElement).closest('[data-k], [data-act="run"], [data-act="shoot"], .street-stick')) e.preventDefault(); }, { passive: false });
     ui.querySelector('[data-act="car"]')!.addEventListener('click', () => this.toggleCar());
@@ -988,6 +1221,8 @@ export class StreetPlay {
     this.keys[down ? 'add' : 'delete'](e.code);
     if (down && (e.code === 'KeyE' || e.code === 'Enter')) this.toggleCar();
     if (e.code === 'KeyF' || e.code === 'Space') this.firing = down;
+    if (down && e.code === 'KeyQ') this.orderSurrender();
+    if (down && e.code === 'KeyC') this.cuffNow();
     if (down && e.code === 'KeyM') this.mapEl ? this.closeMap() : this.openMap();
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   }
@@ -1087,97 +1322,75 @@ export class StreetPlay {
     this.setStatus(`بتسوق نحو ${place.name}…`);
   }
 
-  private maybeStartChase(place: StreetPlace) {
-    if (place.id !== this.missionId || this.chasing || this.gangOn || this.resultEl) return;
-    if (this.level.kind === 'gang') { this.beginGang(place); return; }
-    if (!this.inCar) {
-      this.setStatus(`${place.name}: المهمة هنا. اركب الدورية عشان المطاردة تبدأ.`);
-      this.missionId = place.id;
-      return;
-    }
-    this.beginChase(place);
+  private maybeStartChase(_place: StreetPlace) {
+    /* legacy trigger: missions are driven by the step runner now */
   }
 
-  private beginChase(place: StreetPlace) {
+
+  private beginChase() {
     this.chasing = true;
     this.chaseTime = 0;
+    this.chaseArrest = false;
     this.travel = null;
     if (this.suspect) this.group.remove(this.suspect);
     this.suspect = this.makeSuspectCar();
-    this.suspect.position.set(-1.6, 0, this.car.position.z + 16);
+    this.chaseDir = this.car.position.z < 120 ? 1 : -1;
+    this.suspect.position.set(-1.6, 0, this.car.position.z + this.chaseDir * 18);
+    this.suspect.rotation.y = this.chaseDir > 0 ? 0 : Math.PI;
     this.group.add(this.suspect);
     audio.sirenLoop(true);
     audio.setTrack('music');
-    this.setStatus(`مطاردة في ${place.name} — الحق السيارة السودا.`);
+    this.setStatus(this.inCar ? '🚨 مطاردة! الحق العربية السودا.' : '🚨 اركب الدورية بسرعة — العربية هربت!');
   }
 
-  private beginGang(place: StreetPlace) {
-    this.gangOn = true;
-    this.chaseTime = 0;
-    this.travel = null;
-    this.combat.start(0, place.z, this.level.gang ?? 3);
-    document.documentElement.classList.add('armed');
-    audio.setTrack('music');
-    this.setStatus(this.inCar ? 'عصابة مسلحة! انزل من الدورية (E) واضرب.' : 'عصابة مسلحة! اضرب بزرار 🔫 (أو كليك / F).');
-  }
+
+  private beginGang() { /* replaced by 'suspects' steps */ }
+
 
   private endGang() {
     this.gangOn = false;
     this.firing = false;
-    this.combat?.clear();
-    document.documentElement.classList.remove('armed');
+    this.squad?.clear();
+    document.documentElement.classList.remove('armed', 'can-order', 'can-cuff');
+    this.flags = '';
   }
 
-  private finishChase(success: boolean) {
-    const wasGang = this.gangOn;
-    if (!this.chasing && !wasGang) return;
-    if (wasGang) {
-      this.gangOn = false;
-      this.firing = false;
-      document.documentElement.classList.remove('armed');
-      setTimeout(() => { if (!this.gangOn) this.combat.clear(); }, 2500);
-    }
+
+  private finishChase(success: boolean) { this.finishMission(success); }
+
+  private finishMission(success: boolean, reason = '') {
+    if (this.msIdx < 0 || this.resultEl) return;
+    this.msIdx = -1;
     this.chasing = false;
-    const place = STREET_PLACES.find((p) => p.id === this.missionId) || STREET_PLACES[1];
-    if (this.suspect) {
-      this.group.remove(this.suspect);
-      this.suspect = null;
-    }
-    const report: ChaseReport = success
-      ? {
-          success: true,
-          placeName: place.name,
-          summary: `قبضت على الهارب في ${place.name}. الدورية قفلت عليه قبل ما يطلع من الحي.`,
-          money: 2400,
-          rep: 6
-        }
-      : {
-          success: false,
-          placeName: place.name,
-          summary: `الهارب أفلت من ${place.name}. المطاردة طولت والمخرج فضل مفتوح.`,
-          money: 0,
-          rep: -3
-        };
-    if (wasGang) report.summary = success ? `العصابة المسلحة اتحيّدت في ${place.name} من غير خساير.` : `الضابط اتصاب والعصابة فلتت من ${place.name}.`;
+    this.chaseArrest = false;
+    this.firing = false;
     audio.sirenLoop(false);
-    if (success) audio.success();
-    else audio.fail();
+    if (success) audio.success(); else audio.fail();
     const lv = this.level;
-    const stars = completeLevel(lv.id, success, this.chaseTime);
-    if (success) { if (!wasGang) addStat('arrests'); addStat('missions'); } else checkAch();
-    report.title = `المستوى ${lv.id}: ${lv.title}`;
-    report.durationSec = Math.round(this.chaseTime);
-    if (success) {
-      report.money = lv.reward;
-      report.rep = lv.rep;
-      report.summary += ` ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} — ${lv.id < LEVELS.length ? `اتفتح المستوى ${lv.id + 1}.` : 'خلصت كل المستويات!'}`;
-    } else {
-      report.summary += ' جرّب المستوى تاني.';
-    }
+    const place = STREET_PLACES.find((p) => p.id === lv.placeId) || STREET_PLACES[0];
+    const before = rank().name;
+    const stars = completeLevel(lv.id, success, this.msTime);
+    if (success) addStat('missions'); else checkAch();
+    const after = rank().name;
+    const report: ChaseReport = {
+      success,
+      placeName: place.name,
+      title: `مهمة ${lv.id}: ${lv.title}`,
+      durationSec: Math.round(this.msTime),
+      money: success ? lv.reward : 0,
+      rep: success ? lv.rep : -3,
+      summary: success
+        ? `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} في ${Math.round(this.msTime)} ثانية. +${100 + 50 * stars} خبرة.${after !== before ? ` 🎖 ترقية: بقيت ${after}!` : ''}`
+        : `${reason || 'المهمة فشلت.'} جرّب تاني.`
+    };
     this.lastResult = { success, levelId: lv.id };
+    setTimeout(() => this.squad.clear(), 1500);
+    if (this.suspect) { this.group.remove(this.suspect); this.suspect = null; }
     this.onReport?.(report);
+    if (success && lv.ending) this.radio(lv.ending, null);
     this.showResult(report);
   }
+
 
   private showResult(r: ChaseReport) {
     this.closeMap();
@@ -1301,14 +1514,14 @@ export class StreetPlay {
     this.stepPeds(dt);
     this.stepTraffic(dt);
     this.stepChase(dt);
-    if (this.firing && !this.inCar && !this.resultEl) this.combat.shoot(this.player.position, this.yaw);
-    {
-      if (this.gangOn) {
-        this.chaseTime += dt;
-        if (this.chaseTime > this.level.limit) this.combat.hp = 0;
-      }
-      this.combat.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
-    }
+    if (this.firing && !this.inCar && !this.resultEl) this.squad.shoot(this.player.position, this.yaw);
+    this.squad.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
+    this.tickMission(dt);
+    this.tickRadio(dt);
+    this.tickGun(dt);
+    this.tickReticle();
+    this.tickLights(dt);
+    if (this.panicT > 0) this.panicT -= dt;
     this.stepRain(dt);
     this.stepLights();
     if (this.key) {
@@ -1322,6 +1535,7 @@ export class StreetPlay {
       fx.smoke(this.group, this.car.position.x - Math.sin(this.yaw) * 2.1, 0.35, this.car.position.z - Math.cos(this.yaw) * 2.1);
     }
     this.snapCamera(1 - Math.pow(0.0008, dt));
+    if (this.recoil > 0) { this.camera.position.y += this.recoil * 0.05; this.camera.rotation.x += this.recoil * 0.012; }
     this.uiT += dt;
     if (this.uiT > 0.12) { this.uiT = 0; this.drawMini(); this.objective(); }
     else this.objectiveWorld();
@@ -1354,7 +1568,7 @@ export class StreetPlay {
 
     if (this.inCar) {
       this.yaw += turn * dt * 1.5;
-      const max = this.chasing ? 18 : 12;
+      const max = (this.chasing ? 18 : 12) + rank().car;
       const target = throttle * max;
       this.speed += (target - this.speed) * Math.min(1, dt * 2.2);
       this.car.rotation.y = this.yaw;
@@ -1398,48 +1612,98 @@ export class StreetPlay {
   }
 
   private stepPeds(dt: number) {
-    for (const p of this.peds) {
-      p.phase += dt * p.speed * 6;
-      p.mesh.position.z += p.dir * p.speed * dt;
-      if (p.mesh.position.z > p.z1) p.dir = -1;
-      if (p.mesh.position.z < p.z0) p.dir = 1;
+    const me = this.inCar ? this.car.position : this.player.position;
+    const n = this.peds.length;
+    for (let i = 0; i < n; i++) {
+      const p = this.peds[i];
+      const m = p.mesh.position;
+      let speed = p.speed;
+      // flee from gunfire: run along the sidewalk away from the shots
+      if (this.panicT > 0 && Math.abs(m.z - this.panicAt.z) < 30 && Math.abs(m.x - this.panicAt.x) < 30) {
+        p.dir = m.z >= this.panicAt.z ? 1 : -1;
+        speed = 4.2;
+      }
+      m.z += p.dir * speed * dt;
+      if (m.z > p.z1) p.dir = -1;
+      if (m.z < p.z0) p.dir = 1;
+      // collision avoidance: sidestep other pedestrians and the officer
+      let side = 0;
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        const o = this.peds[j].mesh.position;
+        const dz = o.z - m.z, dx = o.x - m.x;
+        if (Math.abs(dz) < 1.4 && Math.abs(dx) < 0.8 && Math.sign(dz) === p.dir) side += dx >= 0 ? -1 : 1;
+      }
+      if (!this.inCar && Math.abs(me.z - m.z) < 1.6 && Math.abs(me.x - m.x) < 1) side += me.x >= m.x ? -1.5 : 1.5;
+      const home = m.x > 0 ? 6.5 : -6.5;
+      m.x += (side ? side * 1.6 * dt : (home - m.x) * dt * 0.8);
+      m.x = m.x > 0 ? THREE.MathUtils.clamp(m.x, 5, 7.9) : THREE.MathUtils.clamp(m.x, -7.9, -5);
       p.mesh.rotation.y = p.dir > 0 ? 0 : Math.PI;
+      p.phase += dt * speed * 6;
       const swing = Math.sin(p.phase) * 0.65;
       p.legL.rotation.x = swing;
       p.legR.rotation.x = -swing;
       p.armL.rotation.x = -swing * 0.6;
       p.armR.rotation.x = swing * 0.6;
-      p.mesh.position.y = Math.abs(Math.sin(p.phase)) * 0.04;
     }
   }
 
+
   private stepTraffic(dt: number) {
+    const red = !this.avenueGreen;
     for (const t of this.cross) {
-      t.mesh.position.x += t.speed * dt;
+      const x = t.mesh.position.x;
+      // cross traffic waits while the avenue is green
+      const ahead = t.speed > 0 ? -8 - x : x - 8;
+      const stop = this.avenueGreen && ahead > 0 && ahead < 6;
+      if (!stop) t.mesh.position.x += t.speed * dt;
       if (t.mesh.position.x > 122) t.mesh.position.x = -122;
       if (t.mesh.position.x < -122) t.mesh.position.x = 122;
     }
     for (const t of this.traffic) {
-      t.mesh.position.z += t.speed * dt;
+      const z = t.mesh.position.z;
+      let stop = false;
+      if (red) for (const l of this.lights) {
+        const ahead = t.speed > 0 ? (l.z - 6) - z : z - (l.z + 6);
+        if (ahead > 0 && ahead < 7) { stop = true; break; }
+      }
+      // don't drive through the officer or the patrol car
+      const me = this.inCar ? this.car.position : this.player.position;
+      const dz = (me.z - z) * Math.sign(t.speed);
+      if (Math.abs(me.x - t.mesh.position.x) < 1.8 && dz > 0 && dz < 6) stop = true;
+      if (!stop) t.mesh.position.z += t.speed * dt;
       if (t.mesh.position.z > 250) t.mesh.position.z = -110;
       if (t.mesh.position.z < -110) t.mesh.position.z = 250;
     }
   }
 
+
   private stepChase(dt: number) {
     if (!this.chasing || !this.suspect) return;
     this.chaseTime += dt;
-    const flee = (9.5 + Math.min(4, this.chaseTime * 0.15)) * this.level.speed;
-    this.suspect.position.z += flee * dt;
-    this.suspect.position.x += Math.sin(this.chaseTime * 1.4) * dt * 0.8;
-    this.suspect.position.x = THREE.MathUtils.clamp(this.suspect.position.x, -2.4, 2.4);
+    const flee = (9.5 + Math.min(4, this.chaseTime * 0.15)) * this.chaseSpeed;
+    this.suspect.position.z += flee * dt * this.chaseDir;
+    this.suspect.position.x = THREE.MathUtils.clamp(-1.6 + Math.sin(this.chaseTime * 1.4) * 0.9, -2.6, 2.6);
     const dist = this.suspect.position.distanceTo(this.car.position);
-    if (this.inCar && dist < 3.4) this.finishChase(true);
-    else if (this.suspect.position.z > 235 || this.chaseTime > this.level.limit) this.finishChase(false);
-    else if (Math.floor(this.chaseTime) % 4 === 0) {
-      /* status stays until next set */
-    }
+    if (this.inCar && dist < 3.6) this.caught();
+    else if (this.suspect.position.z > 236 || this.suspect.position.z < -96 || this.chaseTime > this.chaseLimit) this.finishMission(false, 'العربية هربت.');
   }
+
+  /** chase won: the car stops, the driver steps out with the scripted behaviour */
+  private caught() {
+    this.chasing = false;
+    audio.sirenLoop(false);
+    this.speed = 0;
+    const p = this.suspect!.position;
+    if (this.chaseThen) {
+      const b = this.chaseThen;
+      this.squad.spawnOne(b, p.x + 2.2, p.z);
+      if (b === 'fight') this.squad.spawnOne('fight', p.x - 2.4, p.z + 1);
+      this.chaseArrest = true;
+      this.setStatus(b === 'flee' ? 'السواق نزل يجري! انزل والحقه.' : b === 'fight' ? '⚠ نزلوا مسلحين! انزل واتعامل.' : 'العربية وقفت. انزل واقبض على السواق.');
+    } else this.nextStep();
+  }
+
 
   private stepRain(dt: number) {
     if (!this.rain || !this.rainVel) return;
@@ -1470,9 +1734,10 @@ export class StreetPlay {
     const pos = this.inCar ? this.car.position : this.player.position;
     const target = STREET_PLACES.find((p) => p.id === this.level.placeId);
     const dots: { x: number; z: number; c: string; r: number }[] = STREET_PLACES.map((p) => ({ x: 0, z: p.z, c: p.id === this.missionId ? '#ff4d6d' : '#3aa0ff', r: p.id === this.missionId ? 5 : 3 }));
-    for (const m of this.combat.gang) if (m.hp > 0) dots.push({ x: m.g.position.x, z: m.g.position.z, c: '#ff3b3b', r: 2.5 });
+    for (const m of this.squad.list) if (m.state !== 'down' && m.state !== 'cuffed') dots.push({ x: m.g.position.x, z: m.g.position.z, c: m.state === 'hands' ? '#7dff9a' : '#ff3b3b', r: 2.5 });
+    if (this.msHasTarget) dots.push({ x: this.msTarget.x, z: this.msTarget.z, c: '#ffd23d', r: 4 });
     if (this.chasing && this.suspect) dots.push({ x: this.suspect.position.x, z: this.suspect.position.z, c: '#ffd23d', r: 4 });
-    else if (target) dots.push({ x: 0, z: target.z, c: '#ffd23d', r: 4 });
+
     dots.push({ x: pos.x, z: pos.z, c: '#ffffff', r: 4 });
     drawCityMap(ctx, c.width, c.height, dots);
   }

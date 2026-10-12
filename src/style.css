@@ -775,3 +775,26 @@ html.onfoot .street-actions button[data-act="shoot"],html.armed .street-actions 
 .mission-card h2{font-size:22px}
 .mission-card [data-ok]{font-size:18px;padding:12px 28px}
 body.gl-lost::before{content:"الرسوميات اتوقفت مؤقتًا… بنعيد التحميل";position:fixed;inset:0;display:grid;place-items:center;background:#0b1320;color:#fff;z-index:99999;font:16px Cairo,sans-serif}
+
+/* ===== Story HUD: radio, reticle, contextual arrest buttons ===== */
+#street-radio{position:fixed;left:10px;right:10px;bottom:calc(196px + env(safe-area-inset-bottom));z-index:58;display:none;gap:10px;align-items:flex-start;background:rgba(6,12,22,.92);border:1px solid rgba(126,200,255,.45);border-radius:14px;padding:10px 12px;color:#eaf2ff;font:14px/1.6 Cairo,sans-serif;pointer-events:auto;max-width:560px;margin:0 auto}
+#street-radio.show{display:flex}
+#street-radio i{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:18px}
+#street-radio b{display:block;font-size:12px}
+#street-radio p{margin:0;font-size:15px;font-weight:700}
+#street-radio span{position:absolute;left:12px;bottom:6px;font-size:10px;opacity:.6}
+body[data-play="street"] #street-status{top:calc(268px + env(safe-area-inset-top));bottom:auto}
+#street-obj .now em{font-style:normal;color:#ffd23d;font-size:14px;margin-inline-start:6px}
+#street-ret{position:fixed;z-index:53;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;border:3px solid #fff;pointer-events:none;display:none;box-shadow:0 0 0 2px #0008}
+#street-ret::before,#street-ret::after{content:"";position:absolute;background:inherit;border-color:inherit}
+#street-ret.hot{border-color:#ff3b3b}
+#street-ret.cover{border-color:#aaa;border-style:dashed}
+#street-ret.cuff{border-color:#7dff9a}
+#street-ret.cuff::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:#7dff9a;font-weight:900}
+.street-actions button[data-act="order"],.street-actions button[data-act="cuff"]{display:none;font-size:15px!important;height:48px!important}
+.street-actions button[data-act="order"]{background:rgba(255,190,40,.9)!important;color:#1a1300!important}
+.street-actions button[data-act="cuff"]{background:rgba(60,170,255,.9)!important}
+html.onfoot.can-order .street-actions button[data-act="order"]{display:block}
+html.onfoot.can-cuff .street-actions button[data-act="cuff"]{display:block}
+#street-hp .threat{display:inline-block;background:#0009;border-radius:8px;padding:2px 8px;color:#ffd23d;font-size:12px}
+.mission-card .mc-help{font-size:12px;opacity:.85}

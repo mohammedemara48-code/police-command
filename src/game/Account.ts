@@ -53,6 +53,7 @@ function merge(a: Snap, b: Partial<Snap>): Snap {
   if (L) {
     out.levels.unlocked = Math.max(a.levels.unlocked, L.unlocked || 1);
     out.levels.current = Math.max(a.levels.current, L.current || 1);
+    out.levels.xp = Math.max(a.levels.xp ?? 0, L.xp ?? 0);
     for (const [k, v] of Object.entries(L.stars || {})) out.levels.stars[+k] = Math.max(a.levels.stars[+k] ?? 0, v as number);
   }
   const A = b.ach;
