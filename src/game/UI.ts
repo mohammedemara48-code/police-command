@@ -61,6 +61,7 @@ export class UI {
       this.toast(`🚨 ${inc.title} — ${inc.districtName}`, 'warn');
     };
     window.addEventListener('resize', () => this.render());
+    window.addEventListener('pointerdown', () => (this.pointerDownAt = performance.now()), { capture: true, passive: true });
     this.renderStart();
   }
 
@@ -156,7 +157,22 @@ export class UI {
     this.render();
   }
 
+  private renderQueued = 0;
+  private lastRenderAt = 0;
+  private pointerDownAt = 0;
+  /** Coalesced HUD render: the HUD is rebuilt with innerHTML, so bursts of change events (and rebuilds under a finger) made taps lag for seconds on phones. */
   render() {
+    if (this.renderQueued) return;
+    const wait = Math.max(0, 250 - (performance.now() - this.lastRenderAt));
+    this.renderQueued = window.setTimeout(() => {
+      this.renderQueued = 0;
+      if (performance.now() - this.pointerDownAt < 350) { this.render(); return; }
+      this.lastRenderAt = performance.now();
+      this.renderNow();
+    }, wait);
+  }
+
+  renderNow() {
     if (!this.game.state.running) return;
     const s = this.game.state;
     const open = this.incidents.openIncidents;

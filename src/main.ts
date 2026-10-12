@@ -19,6 +19,8 @@ const meta = new Meta(game);
 (window as unknown as { __PC: unknown }).__PC = { meta, game, incidents, city, ui, audio };
 
 let last = performance.now();
+let lastHour = -1;
+let lastStreet = false;
 
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
@@ -26,7 +28,7 @@ function frame(now: number) {
 
   if (meta.active || !game.state.running) {
     game.tick(dt);
-    incidents.tick(dt);
+    if (!city.street.active) incidents.tick(dt);
   }
   meta.check();
   if (meta.paused || meta.over) { requestAnimationFrame(frame); return; }
@@ -44,7 +46,11 @@ function frame(now: number) {
 
   // Street patrol is always played at golden-hour/dusk; keep the HUD clock in sync with what is on screen.
   if (city.street.active) game.state.cityHour = 18.9;
-  city.setTimeOfDay(game.state.cityHour);
+  if (Math.abs(game.state.cityHour - lastHour) > 0.02 || city.street.active !== lastStreet) {
+    lastHour = game.state.cityHour;
+    lastStreet = city.street.active;
+    city.setTimeOfDay(game.state.cityHour);
+  }
   city.update(dt);
   requestAnimationFrame(frame);
 }
