@@ -493,7 +493,7 @@ export class StreetPlay {
   private objective() {
     const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
     const pos = this.inCar ? this.car.position : this.player.position;
-    const dist = Math.abs(pos.z - place.z);
+    const dist = Math.hypot(pos.x, pos.z - place.z);
     const steps = [
       { t: 'اركب الدورية', done: this.inCar || this.chasing || this.phase === 'result' },
       { t: `روح ${place.name} (${Math.round(dist)} م)`, done: this.chasing || this.gangOn },
@@ -501,10 +501,15 @@ export class StreetPlay {
     ];
     const cur = steps.findIndex((x) => !x.done);
     if (this.objEl) {
-      const html = `<b>المستوى ${this.level.id}: ${this.level.title}</b>` + steps.map((x, i) =>
-        `<div class="obj ${x.done ? 'done' : i === cur ? 'cur' : ''}">${x.done ? '✔' : i === cur ? '➤' : '•'} ${x.t}</div>`).join('') +
-        (this.chasing || this.gangOn ? `<div class="obj timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.chaseTime))} ث</div>` : '');
+      const now = steps[Math.max(0, cur)];
+      const timer = this.chasing || this.gangOn ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.chaseTime))}ث</span>` : '';
+      const html = `<small>المستوى ${this.level.id} · ${this.level.title} ${timer}</small><div class="now">➤ ${now.t}</div>`;
       if (html !== this.objHtml) { this.objEl.innerHTML = html; this.objHtml = html; }
+    }
+    if (this.dirEl) {
+      const tgt = this.chasing && this.suspect ? this.suspect.position : null;
+      const dz = tgt ? Math.hypot(tgt.x - pos.x, tgt.z - pos.z) : dist;
+      this.dirEl.dataset.d = `${Math.round(dz)} م`;
     }
     // target in world
     const target = this.chasing && this.suspect ? this.suspect.position : new THREE.Vector3(0, 0, place.z);
@@ -519,10 +524,18 @@ export class StreetPlay {
     if (this.dirEl) {
       const v = target.clone().setY(1.5).project(this.camera);
       const on = Math.abs(v.x) < 0.9 && Math.abs(v.y) < 0.85 && v.z < 1;
-      this.dirEl.style.display = this.resultEl || on ? 'none' : 'block';
-      if (!on) {
+      this.dirEl.style.display = this.resultEl ? 'none' : 'block';
+      this.dirEl.classList.toggle('onscreen', on);
+      if (on) {
+        // waypoint marker sits on the target
+        this.dirEl.style.left = `${(v.x * 0.5 + 0.5) * 100}%`;
+        this.dirEl.style.top = `${(-v.y * 0.5 + 0.5) * 100}%`;
+        this.dirEl.style.transform = 'translate(-50%,-100%)';
+      } else {
         let ang = Math.atan2(v.y, v.x);
         if (v.z > 1) ang += Math.PI;
+        this.dirEl.style.left = `${50 + Math.cos(ang) * 38}%`;
+        this.dirEl.style.top = `${50 - Math.sin(ang) * 30}%`;
         this.dirEl.style.transform = `translate(-50%,-50%) rotate(${-ang}rad)`;
       }
     }
@@ -537,9 +550,10 @@ export class StreetPlay {
     this.closeResultSilently();
     const el = document.createElement('div');
     el.id = 'street-result';
-    el.innerHTML = `<div class="street-result-card mission-card"><div class="mc-tag">مهمة جديدة</div><h2>المستوى ${this.level.id}: ${this.level.title}</h2>
+    el.innerHTML = `<div class="street-result-card mission-card"><div class="mc-tag">${this.level.kind === 'gang' ? '🔫 مواجهة عصابة' : '🚓 مطاردة'}</div><h2>المستوى ${this.level.id}: ${this.level.title}</h2>
       <p>${this.level.brief}</p>
-      <ol><li>اركب الدورية</li><li>روح ${place.name} (اتبع العمود الأصفر والسهم)</li><li>الحق العربية الهاربة قبل ${this.level.limit} ثانية</li></ol>
+      <ol class="mc-steps"><li><span>1</span>اركب الدورية (زرار «ركب الدورية»)</li><li><span>2</span>روح ${place.name} — اتبع السهم الأصفر والعمود المنور</li>
+      <li><span>3</span>${this.level.kind === 'gang' ? `انزل وحيّد ${this.level.gang} من العصابة بزرار 🔫` : `الحق العربية الهاربة واقفل عليها قبل ${this.level.limit} ثانية`}</li></ol>
       <p class="mc-reward">المكافأة: $${this.level.reward.toLocaleString('en')} · ⭐ لو خلصت بسرعة</p>
       <button type="button" data-ok>ابدأ المهمة</button></div>`;
     document.getElementById('app')!.appendChild(el);
@@ -832,6 +846,7 @@ export class StreetPlay {
     this.markerRoot.visible = true;
     if (this.rain) this.rain.visible = false;
     delete document.body.dataset.play;
+    document.documentElement.classList.remove('onfoot', 'armed');
     audio.engine(false);
     audio.sirenLoop(false);
     this.closeMap();
@@ -855,6 +870,7 @@ export class StreetPlay {
     this.markerRoot.visible = false;
     if (this.rain) this.rain.visible = true;
     document.body.dataset.play = 'street';
+    document.documentElement.classList.toggle('onfoot', !this.inCar);
     this.mountUi();
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('mousedown', this.boundMouse);
@@ -872,7 +888,7 @@ export class StreetPlay {
       <canvas id="street-mini" width="180" height="180"></canvas>
       <div id="street-status"></div>
       <div id="street-obj"></div>
-      <div id="street-dir">➤</div>
+      <div id="street-dir"><i>➤</i></div>
       <div class="street-stick" dir="ltr"><div class="street-knob"></div></div>
       <div class="street-pad" dir="ltr">
         <button type="button" data-k="f">▲</button>
@@ -993,7 +1009,12 @@ export class StreetPlay {
       audio.sample('door');
       audio.engine(false);
       this.player.visible = true;
-      this.player.position.set(this.car.position.x + 2.2, 0, this.car.position.z);
+      const cy = this.car.rotation.y;
+      const ex = this.car.position.x + Math.cos(cy) * 2.2, ez = this.car.position.z - Math.sin(cy) * 2.2;
+      if (onRoad(ex, ez, 3.6)) this.player.position.set(ex, 0, ez);
+      else this.player.position.set(this.car.position.x, 0, this.car.position.z);
+      this.yaw = cy;
+      document.documentElement.classList.add('onfoot');
       this.setStatus('نزلت من الدورية.');
       const btn = this.ui?.querySelector('[data-act="car"]');
       if (btn) btn.textContent = 'ركب الدورية';
@@ -1005,6 +1026,7 @@ export class StreetPlay {
       return;
     }
     this.inCar = true;
+    document.documentElement.classList.remove('onfoot');
     audio.sample('door');
     this.player.visible = false;
     if (this.driver) this.driver.visible = true;
@@ -1014,8 +1036,13 @@ export class StreetPlay {
     if (btn) btn.textContent = 'انزل';
   }
 
+  private statusT = 0;
   private setStatus(text: string) {
-    if (this.statusEl) this.statusEl.textContent = text;
+    if (!this.statusEl) return;
+    this.statusEl.textContent = text;
+    this.statusEl.classList.add('show');
+    clearTimeout(this.statusT);
+    this.statusT = window.setTimeout(() => this.statusEl?.classList.remove('show'), 3500);
   }
 
   private currentPlace() {
@@ -1244,11 +1271,15 @@ export class StreetPlay {
     const yaw = this.inCar ? this.car.rotation.y : this.yaw;
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
+    let b = back;
+    // pull the camera in when the spot behind the player is inside a building block
+    while (b > 1.6 && !onRoad(target.position.x - sin * b, target.position.z - cos * b, 4.5)) b -= 1.2;
     const dest = this.camDest.set(
-      target.position.x - sin * back,
-      up,
-      target.position.z - cos * back
+      target.position.x - sin * b,
+      b < back ? up + 1.6 : up,
+      target.position.z - cos * b
     );
+    if (!Number.isFinite(this.camPos.x + this.camPos.y + this.camPos.z)) this.camPos.copy(dest);
     this.camPos.lerp(dest, k);
     this.camera.position.copy(this.camPos);
     this.look.set(target.position.x, this.inCar ? 1.1 : 1.3, target.position.z);
@@ -1257,16 +1288,24 @@ export class StreetPlay {
 
   update(dt: number) {
     if (!this.active) return;
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    const P = this.player.position, C = this.car.position;
+    if (!Number.isFinite(P.x + P.z + C.x + C.z + this.yaw + this.speed)) {
+      // never leave the player stranded in an invalid spot (blank screen): snap back to the avenue
+      this.speed = 0; this.yaw = 0;
+      C.set(-1.4, 0, Number.isFinite(C.z) ? THREE.MathUtils.clamp(C.z, -95, 235) : 0);
+      P.set(0.9, 0, C.z);
+    }
     const input = this.wants();
     this.stepActor(dt, input);
     this.stepPeds(dt);
     this.stepTraffic(dt);
     this.stepChase(dt);
-    if (this.gangOn || this.combat.gang.length) {
+    if (this.firing && !this.inCar && !this.resultEl) this.combat.shoot(this.player.position, this.yaw);
+    {
       if (this.gangOn) {
         this.chaseTime += dt;
         if (this.chaseTime > this.level.limit) this.combat.hp = 0;
-        if (this.firing && !this.inCar) this.combat.shoot(this.player.position, this.yaw);
       }
       this.combat.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
     }

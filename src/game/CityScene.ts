@@ -77,6 +77,8 @@ export class CityScene {
       alpha: false,
       powerPreference: 'high-performance'
     });
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); document.body.classList.add('gl-lost'); });
+    canvas.addEventListener('webglcontextrestored', () => location.reload());
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, Q.pixelRatio));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = Q.shadows;
