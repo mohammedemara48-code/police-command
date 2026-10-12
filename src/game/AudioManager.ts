@@ -1,4 +1,7 @@
-/** WebAudio stingers + loops — no external assets required */
+/** WebAudio: recorded CC0 samples (Kenney, OpenGameArt) with synth fallback */
+
+const VOL_KEY = 'pc.vol.v1';
+export interface Volumes { master: number; music: number; sfx: number }
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
@@ -8,14 +11,114 @@ export class AudioManager {
   private sirenOsc: OscillatorNode | null = null;
   private sirenGain: GainNode | null = null;
   enabled = true;
+  private sfxGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
+  private buffers = new Map<string, AudioBuffer>();
+  private loading: Promise<void> | null = null;
+  private musicSrc: AudioBufferSourceNode | null = null;
+  private engineSrc: AudioBufferSourceNode | null = null;
+  private engineGain: GainNode | null = null;
+  vol: Volumes = (() => {
+    try { return { master: 0.8, music: 0.45, sfx: 0.9, ...JSON.parse(localStorage.getItem(VOL_KEY) || '{}') }; }
+    catch { return { master: 0.8, music: 0.45, sfx: 0.9 }; }
+  })();
+
+  setVolume(k: keyof Volumes, v: number) {
+    this.vol[k] = Math.max(0, Math.min(1, v));
+    try { localStorage.setItem(VOL_KEY, JSON.stringify(this.vol)); } catch { /* ignore */ }
+    this.applyVol();
+  }
+  private applyVol() {
+    if (this.master) this.master.gain.value = 0.35 * this.vol.master;
+    if (this.sfxGain) this.sfxGain.gain.value = this.vol.sfx;
+    if (this.musicGain) this.musicGain.gain.value = 0.5 * this.vol.music;
+  }
+
+  private loadSamples() {
+    if (this.loading || !this.ctx) return this.loading;
+    const ctx = this.ctx;
+    this.loading = fetch('/audio/sounds.json')
+      .then((r) => r.json() as Promise<Record<string, string>>)
+      .then((map) => Promise.all(Object.entries(map).map(async ([k, uri]) => {
+        const bin = atob(uri.slice(uri.indexOf(',') + 1));
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        try { this.buffers.set(k, await ctx.decodeAudioData(u8.buffer)); } catch { /* skip */ }
+      })))
+      .then(() => { if (this.wantMusic) this.startMusic(); })
+      .catch(() => undefined);
+    return this.loading;
+  }
+
+  /** Play a recorded sample; returns false if not loaded yet (caller falls back to synth). */
+  sample(name: string, gain = 1, rate = 1) {
+    if (!this.enabled) return true;
+    this.ensure();
+    const buf = this.buffers.get(name);
+    if (!buf || !this.ctx || !this.sfxGain) return false;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(this.sfxGain);
+    src.start();
+    return true;
+  }
+
+  private wantMusic = false;
+  startMusic() {
+    this.wantMusic = true;
+    if (!this.enabled || this.musicSrc) return;
+    this.ensure();
+    const buf = this.buffers.get('music');
+    if (!buf || !this.ctx || !this.musicGain) return;
+    this.musicSrc = this.ctx.createBufferSource();
+    this.musicSrc.buffer = buf;
+    this.musicSrc.loop = true;
+    this.musicSrc.connect(this.musicGain);
+    this.musicSrc.start();
+  }
+  stopMusic() {
+    this.wantMusic = false;
+    try { this.musicSrc?.stop(); } catch { /* ignore */ }
+    this.musicSrc = null;
+  }
+
+  /** Car engine loop; speed01 0..1 drives pitch and level. */
+  engine(on: boolean, speed01 = 0) {
+    if (!this.ctx || !this.sfxGain) return;
+    if (!on || !this.enabled) {
+      try { this.engineSrc?.stop(); } catch { /* ignore */ }
+      this.engineSrc = null;
+      return;
+    }
+    const buf = this.buffers.get('engine');
+    if (!buf) return;
+    if (!this.engineSrc) {
+      this.engineGain = this.ctx.createGain();
+      this.engineSrc = this.ctx.createBufferSource();
+      this.engineSrc.buffer = buf;
+      this.engineSrc.loop = true;
+      this.engineSrc.connect(this.engineGain).connect(this.sfxGain);
+      this.engineSrc.start();
+    }
+    this.engineSrc.playbackRate.value = 0.7 + speed01 * 0.9;
+    if (this.engineGain) this.engineGain.gain.value = 0.25 + speed01 * 0.35;
+  }
 
   private ensure() {
     if (this.ctx) return;
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.28;
     this.master.connect(this.ctx.destination);
+    this.sfxGain = this.ctx.createGain();
+    this.sfxGain.connect(this.master);
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.connect(this.master);
+    this.applyVol();
+    void this.loadSamples();
   }
 
   resume() {
@@ -28,6 +131,8 @@ export class AudioManager {
     if (!on) {
       this.stopAmbient();
       this.stopSiren();
+      this.stopMusic();
+      this.engine(false);
     } else if (this.ctx) {
       this.startAmbient();
     }
@@ -46,7 +151,7 @@ export class AudioManager {
     g.gain.exponentialRampToValueAtTime(gain, t0 + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     osc.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxGain ?? this.master);
     osc.start(t0);
     osc.stop(t0 + dur + 0.05);
   }
@@ -102,6 +207,7 @@ export class AudioManager {
   success() {
     if (!this.enabled) return;
     this.resume();
+    if (this.sample('success')) return;
     this.tone(523, 0.12, 'triangle', 0.16, 0);
     this.tone(659, 0.12, 'triangle', 0.16, 0.1);
     this.tone(784, 0.28, 'triangle', 0.18, 0.2);
@@ -111,6 +217,7 @@ export class AudioManager {
   fail() {
     if (!this.enabled) return;
     this.resume();
+    if (this.sample('fail')) return;
     this.tone(220, 0.28, 'sawtooth', 0.14, 0);
     this.tone(165, 0.4, 'sawtooth', 0.16, 0.22);
     this.tone(110, 0.35, 'triangle', 0.1, 0.45);
@@ -119,6 +226,7 @@ export class AudioManager {
   click() {
     if (!this.enabled) return;
     this.resume();
+    if (this.sample('click')) return;
     this.tone(620, 0.035, 'square', 0.05, 0);
     this.tone(880, 0.03, 'square', 0.03, 0.03);
   }
@@ -126,6 +234,7 @@ export class AudioManager {
   radio() {
     if (!this.enabled) return;
     this.resume();
+    if (this.sample('alert')) return;
     this.tone(740, 0.06, 'sine', 0.06, 0);
     this.tone(980, 0.08, 'sine', 0.05, 0.12);
     this.tone(620, 0.1, 'triangle', 0.04, 0.28);
@@ -160,6 +269,7 @@ export class AudioManager {
   }
 
   startAmbient() {
+    this.startMusic();
     if (!this.enabled) return;
     this.ensure();
     if (!this.ctx || !this.master || this.ambientNodes.length) return;
@@ -208,6 +318,7 @@ export class AudioManager {
   }
 
   stopAmbient() {
+    this.stopMusic();
     for (const n of this.ambientNodes) {
       try {
         if ('stop' in n && typeof (n as OscillatorNode).stop === 'function') {

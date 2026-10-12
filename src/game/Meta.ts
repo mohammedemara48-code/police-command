@@ -1,5 +1,6 @@
 import type { GameManager } from './GameManager';
 import { audio } from './AudioManager';
+import { quality, setQuality, type Quality } from './Quality';
 
 const KEY = 'pc.save.v1';
 interface Save { best: number; shifts: number; resolved: number; level: number }
@@ -47,6 +48,14 @@ export class Meta {
     if (p) {
       this.show(`<h2>إيقاف مؤقت</h2>
         <p>أفضل نتيجة: <b>${this.save.best}</b> · مستوى المسيرة: <b>${this.save.level}</b></p>
+        <div class="meta-settings">
+          <label>الصوت العام <input type="range" min="0" max="1" step="0.05" data-v="master" value="${audio.vol.master}"></label>
+          <label>الموسيقى <input type="range" min="0" max="1" step="0.05" data-v="music" value="${audio.vol.music}"></label>
+          <label>المؤثرات <input type="range" min="0" max="1" step="0.05" data-v="sfx" value="${audio.vol.sfx}"></label>
+          <label>جودة الرسوم <select data-q>
+            ${(['low', 'medium', 'high'] as Quality[]).map((q) => `<option value="${q}" ${q === quality ? 'selected' : ''}>${{ low: 'منخفضة (موبايل ضعيف)', medium: 'متوسطة', high: 'عالية' }[q]}</option>`).join('')}
+          </select></label>
+        </div>
         <button class="btn" data-a="resume">استكمال</button>
         <button class="btn ghost" data-a="restart">وردية جديدة</button>`);
     } else this.hide();
@@ -82,12 +91,19 @@ export class Meta {
   private show(html: string) {
     this.el.innerHTML = `<div class="meta-card glass">${html}</div>`;
     this.el.hidden = false;
+    this.bindSettings();
     this.el.querySelectorAll<HTMLButtonElement>('[data-a]').forEach((b) =>
       b.addEventListener('click', () => {
         if (b.dataset.a === 'resume') this.setPause(false);
         else { this.persist(); this.save.shifts += 1; store(this.save); location.reload(); }
       })
     );
+  }
+  private bindSettings() {
+    this.el.querySelectorAll<HTMLInputElement>('[data-v]').forEach((r) =>
+      r.addEventListener('input', () => audio.setVolume(r.dataset.v as 'master' | 'music' | 'sfx', Number(r.value))));
+    const q = this.el.querySelector<HTMLSelectElement>('[data-q]');
+    q?.addEventListener('change', () => { this.persist(); setQuality(q.value as Quality); });
   }
   private hide() { this.el.hidden = true; this.el.innerHTML = ''; }
 }
