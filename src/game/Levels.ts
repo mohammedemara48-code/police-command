@@ -12,6 +12,9 @@ export interface LevelDef {
   rep: number;
   /** finish under these seconds for 3 / 2 stars */
   stars: [number, number];
+  /** gang shootout instead of a car chase */
+  kind?: 'gang';
+  gang?: number;
 }
 
 export const LEVELS: LevelDef[] = [
@@ -22,7 +25,11 @@ export const LEVELS: LevelDef[] = [
   { id: 5, placeId: 'port', title: 'شحنة الميناء', brief: 'عصابة تهريب بعربية سريعة.', speed: 1.15, limit: 26, reward: 3300, rep: 7, stars: [12, 19] },
   { id: 6, placeId: 'downtown', title: 'سطو البنك', brief: 'لصوص البنك هاربين — أسرع هارب لحد دلوقتي.', speed: 1.25, limit: 25, reward: 4000, rep: 8, stars: [12, 19] },
   { id: 7, placeId: 'corniche', title: 'مطاردة المطر', brief: 'الطريق مبلول والهارب محترف.', speed: 1.32, limit: 24, reward: 4700, rep: 9, stars: [13, 19] },
-  { id: 8, placeId: 'suburb', title: 'الزعيم', brief: 'زعيم العصابة بنفسه. دي المهمة الأخيرة.', speed: 1.42, limit: 24, reward: 6000, rep: 12, stars: [13, 20] }
+  { id: 8, placeId: 'suburb', title: 'الزعيم', brief: 'زعيم العصابة بنفسه بيهرب بعربية.', speed: 1.42, limit: 24, reward: 6000, rep: 12, stars: [13, 20] },
+  { id: 9, placeId: 'port', kind: 'gang', gang: 3, title: 'مخزن الميناء', brief: 'عصابة مسلحة في الميناء. انزل على رجلك وحيّدهم بالمسدس.', speed: 1, limit: 90, reward: 5000, rep: 10, stars: [30, 50] },
+  { id: 10, placeId: 'downtown', kind: 'gang', gang: 4, title: 'حرب الشوارع', brief: 'عصابتين بيتخانقوا بالسلاح في وسط البلد.', speed: 1, limit: 90, reward: 6000, rep: 11, stars: [35, 55] },
+  { id: 11, placeId: 'corniche', kind: 'gang', gang: 5, title: 'كمين الكورنيش', brief: 'كمين مسلح على الكورنيش. خلي بالك من الدرع.', speed: 1, limit: 100, reward: 7000, rep: 12, stars: [40, 60] },
+  { id: 12, placeId: 'suburb', kind: 'gang', gang: 6, title: 'وكر الزعيم', brief: 'آخر مواجهة: وكر العصابة الرئيسي.', speed: 1, limit: 110, reward: 9000, rep: 15, stars: [45, 70] }
 ];
 
 const KEY = 'pc.levels.v1';
