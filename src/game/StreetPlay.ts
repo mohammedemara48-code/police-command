@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { models, CARS, LOW_CARS, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
 import { Q } from './Quality';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { LEVELS, levelById, completeLevel, progress, type LevelDef } from './Levels';
 
 export interface StreetPlace {
@@ -105,6 +106,7 @@ export class StreetPlay {
   private driver: THREE.Group | null = null;
   level: LevelDef = levelById(progress.current);
   private stepT = 0;
+  private uiT = 0;
   lastResult: { success: boolean; levelId: number } | null = null;
   onResultClosed: (() => void) | null = null;
   private yaw = 0;
@@ -134,6 +136,7 @@ export class StreetPlay {
   private statusEl: HTMLElement | null = null;
   private camPos = new THREE.Vector3(0, 3, -8);
   private look = new THREE.Vector3();
+  private camDest = new THREE.Vector3();
   private mounted = false;
   private boundKeyDown = (e: KeyboardEvent) => this.onKey(e, true);
   private boundKeyUp = (e: KeyboardEvent) => this.onKey(e, false);
@@ -239,9 +242,47 @@ export class StreetPlay {
     this.driver.visible = false;
     this.car.add(this.driver);
     this.group.add(this.eventGroup);
+    this.mergeStatic();
     this.spawnPeople();
     this.spawnTraffic();
     this.buildRain();
+  }
+
+  /** Merge all static street meshes (road, lines, lamps, props, shop fronts) into one mesh per material: ~400 draw calls -> ~30. */
+  private mergeStatic() {
+    this.group.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(this.group.matrixWorld).invert();
+    const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const remove: THREE.Object3D[] = [];
+    const take = (m: THREE.Mesh) => {
+      const g = m.geometry.clone();
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
+      for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+      if (!g.index) return null;
+      const mat = m.material as THREE.Material;
+      if (!byMat.has(mat)) byMat.set(mat, []);
+      byMat.get(mat)!.push(g);
+      return true;
+    };
+    for (const c of [...this.group.children]) {
+      const m = c as THREE.Mesh;
+      if (m.isMesh && !c.userData.dynamic && !Array.isArray(m.material) && m.geometry.index) {
+        if (take(m)) remove.push(c);
+      } else if (c.userData.static) {
+        c.traverse((o) => { const mm = o as THREE.Mesh; if (mm.isMesh && mm.geometry.index) take(mm); });
+        remove.push(c);
+      }
+    }
+    for (const c of remove) c.removeFromParent();
+    for (const [mat, geos] of byMat) {
+      const merged = mergeGeometries(geos, false);
+      geos.forEach((g) => g.dispose());
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.receiveShadow = true;
+      mesh.castShadow = false;
+      this.group.add(mesh);
+    }
   }
 
   private buildBlock(place: StreetPlace) {
@@ -267,7 +308,7 @@ export class StreetPlay {
         bg.position.set(side * (8.4 + w / 2), 0, z);
         bg.add(this.box(w, h, 8.4, this.mat(0x8a94a0), 0, h / 2, 0));
         const kinds = h > 10 ? TOWERS : LOW_BUILDINGS;
-        models.dress(bg, kinds[seed % kinds.length], { box: [w, h, 8.4], yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
+        models.dress(bg, kinds[seed % kinds.length], { box: [w, h, 8.4], yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2, noShadow: true });
         this.group.add(bg);
         if (near.id !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
       }
@@ -281,6 +322,7 @@ export class StreetPlay {
     const g = new THREE.Group();
     g.position.set(fx0, 0, z);
     g.rotation.y = rot;
+    g.userData.static = true;
     // lit shop window
     const glass = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.2),
       new THREE.MeshStandardMaterial({ color: 0xfff4dc, emissive: 0xffe2b0, emissiveIntensity: 0.9, roughness: 0.2 }));
@@ -404,10 +446,19 @@ export class StreetPlay {
     this.arrow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 4),
       new THREE.MeshBasicMaterial({ color: 0xff3355 }));
     this.arrow.rotation.x = Math.PI;
+    this.arrow.userData.dynamic = true;
     this.group.add(this.arrow);
   }
 
   /** GTA-style objective list + target marker + on-screen direction arrow. */
+  private objectiveWorld() {
+    if (!this.arrow || !this.arrow.visible) return;
+    const t = this.chasing && this.suspect ? this.suspect.position : null;
+    if (t) this.arrow.position.set(t.x, 3, t.z);
+    this.arrow.position.y = (this.chasing ? 3 : 6) + Math.sin(performance.now() / 250) * 0.3;
+    this.arrow.rotation.y += 0.04;
+  }
+
   private objective() {
     const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
     const pos = this.inCar ? this.car.position : this.player.position;
@@ -675,7 +726,8 @@ export class StreetPlay {
       const laneX = i % 2 === 0 ? -1.7 : 1.7;
       mesh.position.set(laneX, 0, -60 + i * 38);
       mesh.rotation.y = i % 2 === 0 ? 0 : Math.PI;
-      models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[i % CARS.length], { length: 4.5 });
+      const tints = [0xffffff, 0x4a7bd6, 0xbfc4cc, 0x3a3a3a, 0x3f9a5a, 0xf2f2f2, 0xd9b44a];
+      models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[i % CARS.length], { length: 4.5, tint: Q.lowDetailPeople ? undefined : tints[i % tints.length] });
       this.group.add(mesh);
       this.traffic.push({ mesh, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
     }
@@ -1106,7 +1158,7 @@ export class StreetPlay {
     const yaw = this.inCar ? this.car.rotation.y : this.yaw;
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
-    const dest = new THREE.Vector3(
+    const dest = this.camDest.set(
       target.position.x - sin * back,
       up,
       target.position.z - cos * back
@@ -1137,8 +1189,9 @@ export class StreetPlay {
       fx.smoke(this.group, this.car.position.x - Math.sin(this.yaw) * 2.1, 0.35, this.car.position.z - Math.cos(this.yaw) * 2.1);
     }
     this.snapCamera(1 - Math.pow(0.0008, dt));
-    this.drawMini();
-    this.objective();
+    this.uiT += dt;
+    if (this.uiT > 0.12) { this.uiT = 0; this.drawMini(); this.objective(); }
+    else this.objectiveWorld();
     const here = this.currentPlace();
     if (here.id !== this.placeId && !this.travel && !this.chasing) {
       this.placeId = here.id;

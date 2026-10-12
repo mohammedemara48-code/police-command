@@ -4,8 +4,9 @@ const KEY = 'pc.quality.v1';
 function detect(): Quality {
   const nav = navigator as Navigator & { deviceMemory?: number };
   const mobile = matchMedia('(pointer:coarse)').matches;
-  if ((nav.deviceMemory ?? 8) <= 3 || (mobile && (nav.hardwareConcurrency ?? 8) <= 4)) return 'low';
-  return mobile ? 'medium' : 'high';
+  // Phones default to low: real devices showed multi-second input delay at medium.
+  if (mobile || (nav.deviceMemory ?? 8) <= 4) return 'low';
+  return (nav.hardwareConcurrency ?? 8) <= 4 ? 'medium' : 'high';
 }
 
 export const quality: Quality = (() => {
@@ -22,12 +23,14 @@ export function setQuality(q: Quality) {
 }
 
 export const Q = {
-  pixelRatio: quality === 'low' ? 1 : quality === 'medium' ? 1.5 : 2,
+  pixelRatio: quality === 'low' ? 0.9 : quality === 'medium' ? 1.25 : 1.75,
   antialias: quality !== 'low',
   shadows: quality !== 'low',
   shadowMap: quality === 'high' ? 2048 : 1024,
+  /** max simultaneous animated characters updated per frame */
+  animBudget: quality === 'low' ? 6 : 40,
   particles: quality === 'low' ? 0.3 : quality === 'medium' ? 0.7 : 1,
   /** LOD: on low quality, crowds/traffic use the light Kenney models; the player officer and patrol car stay realistic. */
   lowDetailPeople: quality === 'low',
-  rain: quality === 'low' ? 250 : quality === 'medium' ? 450 : 700
+  rain: quality === 'low' ? 120 : quality === 'medium' ? 450 : 700
 };
