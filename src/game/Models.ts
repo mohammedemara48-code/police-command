@@ -132,11 +132,15 @@ class ModelLib {
         idle: find(/(^|\|)(female_)?idle(_neutral)?$/i) ?? find(/idle/i, /gun|sword|sit/i),
         walk: find(/walk(ing)?$/i),
         sprint: find(/(^|\||_)run(ning)?$/i) ?? find(/sprint/i),
-        gun: find(/gun_?shoot|shoot|pistol|gun/i, /run|walk/i),
+        gun: find(/idle_gun_shoot/i) ?? find(/gun_?shoot|shoot|pistol|gun/i, /run|walk/i),
+        aim: find(/gun_pointing/i) ?? find(/idle_gun/i),
+        hit: find(/hitrec/i),
         down: find(/death|die|dead/i),
         drive: find(/^drive$/i) ?? find(/sit(ting|idle)?$/i) ?? find(/idle/i, /gun|sword/i)
       };
       for (const [k, c] of Object.entries(alias)) if (c && !actions[k]) actions[k] = mixer.clipAction(c);
+      for (const k of ['down', 'hit']) { const x = actions[k]; if (x) { x.setLoop(THREE.LoopOnce, 1); x.clampWhenFinished = true; } }
+      group.userData.clips = Object.keys(actions);
       const a: Actor = { obj: group, mixer, actions, cur: 'idle', last: group.getWorldPosition(new THREE.Vector3()), speed: 0 };
       actions.idle?.play();
       mixer.update(Math.random());
