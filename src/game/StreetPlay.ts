@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { models, CARS, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
 import { Q } from './Quality';
+import { LEVELS, levelById, completeLevel, progress, type LevelDef } from './Levels';
 
 export interface StreetPlace {
   id: string;
@@ -101,7 +102,11 @@ export class StreetPlay {
   private traffic: Traffic[] = [];
   private flash: THREE.PointLight[] = [];
   private inCar = false;
+  private driver: THREE.Group | null = null;
+  level: LevelDef = levelById(progress.current);
   private stepT = 0;
+  lastResult: { success: boolean; levelId: number } | null = null;
+  onResultClosed: (() => void) | null = null;
   private yaw = 0;
   private speed = 0;
   private placeId = 'downtown';
@@ -175,7 +180,7 @@ export class StreetPlay {
   }
 
   private buildWorld() {
-    const roadMat = this.mat(0x0c1016, { roughness: 0.05, metalness: 0.75, envMapIntensity: 1.2 });
+    const roadMat = this.mat(0x3b4048, { roughness: 0.82, metalness: 0.05 });
     const road = new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.08, 340), roadMat);
     road.position.set(0, 0.04, 60);
     road.receiveShadow = true;
@@ -184,21 +189,21 @@ export class StreetPlay {
     const wet = new THREE.Mesh(
       new THREE.PlaneGeometry(8.4, 330),
       new THREE.MeshStandardMaterial({
-        color: 0x152838,
-        roughness: 0.03,
-        metalness: 0.92,
+        color: 0x6a8aa8,
+        roughness: 0.15,
+        metalness: 0.2,
         transparent: true,
-        opacity: 0.55
+        opacity: 0.12
       })
     );
     wet.rotation.x = -Math.PI / 2;
     wet.position.set(0, 0.09, 60);
     this.group.add(wet);
 
-    const walkMat = this.mat(0x2a3038, { roughness: 0.55, metalness: 0.2 });
+    const walkMat = this.mat(0x9a9ea4, { roughness: 0.8, metalness: 0.02 });
     for (const side of [-1, 1]) {
-      const sw = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.1, 340), walkMat);
-      sw.position.set(side * 6.3, 0.06, 60);
+      const sw = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.14, 340), walkMat);
+      sw.position.set(side * 6.4, 0.07, 60);
       sw.receiveShadow = true;
       this.group.add(sw);
     }
@@ -208,6 +213,7 @@ export class StreetPlay {
       this.group.add(this.box(0.16, 0.02, 3.2, line, 0, 0.1, z));
     }
 
+    this.buildStreetRows();
     for (const place of STREET_PLACES) {
       this.buildBlock(place);
       this.addCrosswalk(place.z + 12);
@@ -218,12 +224,20 @@ export class StreetPlay {
     }
     for (let z = -80; z < 220; z += 40) this.addProps(z);
 
+    this.buildLights();
+    this.buildBeacon();
     this.player = this.makeOfficer();
     this.player.position.set(0.9, 0, 0);
     this.group.add(this.player);
     this.car = this.makePoliceCar(true);
     this.car.position.set(-1.4, 0, 2);
     this.group.add(this.car);
+    this.driver = this.makeOfficer();
+    this.driver.scale.setScalar(0.62);
+    this.driver.position.set(0.32, 0.12, -0.15);
+    models.setClip(this.driver, 'drive');
+    this.driver.visible = false;
+    this.car.add(this.driver);
     this.group.add(this.eventGroup);
     this.spawnPeople();
     this.spawnTraffic();
@@ -231,35 +245,67 @@ export class StreetPlay {
   }
 
   private buildBlock(place: StreetPlace) {
-    const palette = place.id === 'port' ? [0x4a5560, 0x6b5a48, 0x2f4858]
-      : place.id === 'corniche' ? [0xd8c8a8, 0xb8c8d8, 0xe0d0c0]
-      : place.id === 'suburb' ? [0xc8a888, 0xa8b898, 0xd8b8a0]
-      : [0x384858, 0x2a3a4a, 0x485868];
-    const glow = this.mat(0xffe6a0, { emissive: 0xffc860, emissiveIntensity: 0.6 });
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < 5; i++) {
-        const h = place.id === 'downtown' ? 10 + ((i * 7) % 14) : place.id === 'suburb' ? 3.5 + (i % 2) : 5 + ((i * 3) % 6);
-        const w = 5 + (i % 3);
-        const m = this.mat(palette[i % palette.length], { roughness: 0.8 });
-        const z = place.z - 24 + i * 10;
-        const x = side * (10.5 + w / 2);
-        const bg = new THREE.Group();
-        bg.position.set(x, 0, z);
-        const b = this.box(w, h, 8, m, 0, h / 2, 0);
-        b.castShadow = true;
-        bg.add(b);
-        const kinds = h > 9 ? TOWERS : LOW_BUILDINGS;
-        models.dress(bg, kinds[i % kinds.length], { box: [w, h, 8], yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
-        this.group.add(bg);
-        for (let y = 2; y < h - 1; y += 2.6) {
-          this.group.add(this.box(0.05, 0.9, 1.2, glow, x - side * (w / 2 + 0.03), y, z - 2));
-          this.group.add(this.box(0.05, 0.9, 1.2, glow, x - side * (w / 2 + 0.03), y, z + 2));
-        }
-      }
-    }
     const sign = this.makeSign(place.name);
     sign.position.set(-8, 0, place.z);
     this.group.add(sign);
+  }
+
+  /** Continuous rows of buildings with ground-floor shops along the whole street. */
+  private buildStreetRows() {
+    const shops: Array<[string, string]> = [
+      ['صيدلية', '#2ecc71'], ['مخبز', '#f39c12'], ['كافيه', '#a0522d'], ['سوبر ماركت', '#e74c3c'],
+      ['مطعم', '#e67e22'], ['ملابس', '#9b59b6'], ['موبايلات', '#3498db'], ['حلويات', '#ff6fa8'], ['بنك', '#16a085'], ['مكتبة', '#c0a050']
+    ];
+    let n = 0;
+    for (const side of [-1, 1]) {
+      for (let z = -96; z <= 232; z += 9) {
+        const near = STREET_PLACES.reduce((a, p) => (Math.abs(p.z - z) < Math.abs(a.z - z) ? p : a));
+        const seed = Math.abs(Math.floor(z * 7 + side * 13));
+        const h = near.id === 'downtown' ? 9 + (seed % 12) : near.id === 'suburb' ? 4 + (seed % 3) : 5 + (seed % 7);
+        const w = 6 + (seed % 3);
+        const bg = new THREE.Group();
+        bg.position.set(side * (8.4 + w / 2), 0, z);
+        bg.add(this.box(w, h, 8.4, this.mat(0x8a94a0), 0, h / 2, 0));
+        const kinds = h > 10 ? TOWERS : LOW_BUILDINGS;
+        models.dress(bg, kinds[seed % kinds.length], { box: [w, h, 8.4], yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
+        this.group.add(bg);
+        if (near.id !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
+      }
+    }
+  }
+
+  private shopMats = new Map<string, THREE.Material>();
+  private addShop(side: number, z: number, [name, color]: [string, string]) {
+    const fx0 = side * 8.25;
+    const rot = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+    const g = new THREE.Group();
+    g.position.set(fx0, 0, z);
+    g.rotation.y = rot;
+    // lit shop window
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.2),
+      new THREE.MeshStandardMaterial({ color: 0xfff4dc, emissive: 0xffe2b0, emissiveIntensity: 0.9, roughness: 0.2 }));
+    glass.position.set(0, 1.35, 0.06);
+    g.add(glass);
+    // awning
+    let aw = this.shopMats.get(color);
+    if (!aw) { aw = this.mat(new THREE.Color(color).getHex(), { roughness: 0.6 }); this.shopMats.set(color, aw); }
+    const awning = new THREE.Mesh(new THREE.BoxGeometry(6, 0.12, 1.4), aw);
+    awning.position.set(0, 2.75, 0.7);
+    awning.rotation.x = 0.25;
+    g.add(awning);
+    // sign
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 64;
+    const x = c.getContext('2d')!;
+    x.fillStyle = color; x.fillRect(0, 0, 256, 64);
+    x.fillStyle = '#fff'; x.font = 'bold 40px Cairo, Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.direction = 'rtl'; x.fillText(name, 128, 34);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.05),
+      new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(c), emissive: 0xffffff, emissiveMap: null, emissiveIntensity: 0.25 }));
+    (sign.material as THREE.MeshStandardMaterial).emissiveMap = (sign.material as THREE.MeshStandardMaterial).map;
+    sign.position.set(0, 3.55, 0.1);
+    g.add(sign);
+    this.group.add(g);
   }
 
   private makeSign(text: string) {
@@ -313,9 +359,123 @@ export class StreetPlay {
     );
     head.position.set(x, 4.45, z);
     this.group.add(head);
-    const light = new THREE.PointLight(0xffc56a, 2.4, 16, 2);
-    light.position.set(x, 4.3, z);
-    this.group.add(light);
+    // No per-lamp PointLight (dozens of them break/slow mobile GPUs): glow halo + warm light pool on the ground.
+    const halo = new THREE.Object3D() as THREE.PointLight;
+    (halo as unknown as { intensity: number }).intensity = 2.5;
+    halo.position.set(x, 4.45, z);
+    this.group.add(halo);
+    fx.glow(halo, 0xffc56a, 1.8);
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20), this.poolMat());
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(x * 0.7, 0.12, z);
+    this.group.add(pool);
+  }
+
+  private _pool: THREE.MeshBasicMaterial | null = null;
+  private poolMat() {
+    if (this._pool) return this._pool;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,200,120,0.55)');
+    gr.addColorStop(1, 'rgba(255,200,120,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 64, 64);
+    this._pool = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    return this._pool;
+  }
+
+  /** Bright evening light rig for street mode (hemisphere + moon/sun key light with shadows that follow the player). */
+  private key: THREE.DirectionalLight | null = null;
+  private beacon = new THREE.Group();
+  private arrow: THREE.Mesh | null = null;
+  private buildBeacon() {
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 40, 20, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    beam.position.y = 20;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.4, 2.2, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.15;
+    this.beacon.add(beam, ring);
+    this.group.add(this.beacon);
+    // floating chevron above the target (suspect during chase)
+    this.arrow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 4),
+      new THREE.MeshBasicMaterial({ color: 0xff3355 }));
+    this.arrow.rotation.x = Math.PI;
+    this.group.add(this.arrow);
+  }
+
+  /** GTA-style objective list + target marker + on-screen direction arrow. */
+  private objective() {
+    const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
+    const pos = this.inCar ? this.car.position : this.player.position;
+    const dist = Math.abs(pos.z - place.z);
+    const steps = [
+      { t: 'اركب الدورية', done: this.inCar || this.chasing || this.phase === 'result' },
+      { t: `روح ${place.name} (${Math.round(dist)} م)`, done: this.chasing },
+      { t: 'الحق العربية الهاربة واقفل عليها', done: false }
+    ];
+    const cur = steps.findIndex((x) => !x.done);
+    if (this.objEl) {
+      const html = `<b>المستوى ${this.level.id}: ${this.level.title}</b>` + steps.map((x, i) =>
+        `<div class="obj ${x.done ? 'done' : i === cur ? 'cur' : ''}">${x.done ? '✔' : i === cur ? '➤' : '•'} ${x.t}</div>`).join('') +
+        (this.chasing ? `<div class="obj timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.chaseTime))} ث</div>` : '');
+      if (html !== this.objHtml) { this.objEl.innerHTML = html; this.objHtml = html; }
+    }
+    // target in world
+    const target = this.chasing && this.suspect ? this.suspect.position : new THREE.Vector3(0, 0, place.z);
+    this.beacon.visible = !this.chasing && !this.resultEl;
+    this.beacon.position.set(0, 0, place.z);
+    if (this.arrow) {
+      this.arrow.visible = !this.resultEl && (this.chasing || cur === 1);
+      this.arrow.position.set(target.x, (this.chasing ? 3 : 6) + Math.sin(performance.now() / 250) * 0.3, target.z);
+      this.arrow.rotation.y += 0.04;
+    }
+    // screen-edge direction arrow
+    if (this.dirEl) {
+      const v = target.clone().setY(1.5).project(this.camera);
+      const on = Math.abs(v.x) < 0.9 && Math.abs(v.y) < 0.85 && v.z < 1;
+      this.dirEl.style.display = this.resultEl || on ? 'none' : 'block';
+      if (!on) {
+        let ang = Math.atan2(v.y, v.x);
+        if (v.z > 1) ang += Math.PI;
+        this.dirEl.style.transform = `translate(-50%,-50%) rotate(${-ang}rad)`;
+      }
+    }
+  }
+  private objEl: HTMLElement | null = null;
+  private dirEl: HTMLElement | null = null;
+  private objHtml = '';
+
+  /** Mission start card; blocks input until "start". */
+  private briefing() {
+    const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
+    this.closeResultSilently();
+    const el = document.createElement('div');
+    el.id = 'street-result';
+    el.innerHTML = `<div class="street-result-card mission-card"><div class="mc-tag">مهمة جديدة</div><h2>المستوى ${this.level.id}: ${this.level.title}</h2>
+      <p>${this.level.brief}</p>
+      <ol><li>اركب الدورية</li><li>روح ${place.name} (اتبع العمود الأصفر والسهم)</li><li>الحق العربية الهاربة قبل ${this.level.limit} ثانية</li></ol>
+      <p class="mc-reward">المكافأة: $${this.level.reward.toLocaleString('en')} · ⭐ لو خلصت بسرعة</p>
+      <button type="button" data-ok>ابدأ المهمة</button></div>`;
+    document.getElementById('app')!.appendChild(el);
+    this.resultEl = el;
+    el.querySelector('[data-ok]')!.addEventListener('click', () => { audio.click(); this.closeResultSilently(); });
+  }
+
+  private buildLights() {
+    this.group.add(new THREE.HemisphereLight(0xcfe0ff, 0x56606c, 1.7));
+    this.group.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const key = new THREE.DirectionalLight(0xffe2c0, 1.6);
+    key.castShadow = Q.shadows;
+    key.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
+    const sc = key.shadow.camera;
+    sc.left = -25; sc.right = 25; sc.top = 25; sc.bottom = -25; sc.near = 1; sc.far = 90;
+    key.shadow.bias = -0.0004;
+    this.group.add(key, key.target);
+    this.key = key;
   }
 
   private addProps(z: number) {
@@ -539,6 +699,49 @@ export class StreetPlay {
     this.rain.visible = false;
   }
 
+  /** Start (or restart) a campaign level: resets positions and points the mission at the level's district. */
+  setLevel(id: number) {
+    this.level = levelById(id);
+    progress.current = this.level.id;
+    this.missionId = this.level.placeId;
+    this.chasing = false;
+    if (this.suspect) { this.group.remove(this.suspect); this.suspect = null; }
+    this.closeResultSilently();
+    const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
+    const startZ = place.z - 40 < -95 ? place.z + 40 : place.z - 40;
+    this.car.position.set(-1.4, 0, startZ);
+    this.car.rotation.y = startZ < place.z ? 0 : Math.PI;
+    this.player.position.set(0.9, 0, startZ);
+    if (this.inCar) this.toggleCar();
+    this.setStatus(`روح ${place.name} — ${this.level.brief}`);
+    this.briefing();
+  }
+
+  private closeResultSilently() {
+    this.resultEl?.remove();
+    this.resultEl = null;
+  }
+
+  disengage() {
+    this.active = false;
+    this.group.visible = false;
+    this.root.visible = true;
+    this.carRoot.visible = true;
+    this.markerRoot.visible = true;
+    if (this.rain) this.rain.visible = false;
+    delete document.body.dataset.play;
+    audio.engine(false);
+    audio.sirenLoop(false);
+    this.closeMap();
+    this.closeResultSilently();
+    this.ui?.remove();
+    this.ui = null;
+    this.mounted = false;
+    window.removeEventListener('keydown', this.boundKeyDown);
+    window.removeEventListener('keyup', this.boundKeyUp);
+    this.keys.clear();
+  }
+
   engage() {
     this.active = true;
     this.group.visible = true;
@@ -561,6 +764,8 @@ export class StreetPlay {
     ui.innerHTML = `
       <canvas id="street-mini" width="180" height="180"></canvas>
       <div id="street-status"></div>
+      <div id="street-obj"></div>
+      <div id="street-dir">➤</div>
       <div class="street-stick" dir="ltr"><div class="street-knob"></div></div>
       <div class="street-pad" dir="ltr">
         <button type="button" data-k="f">▲</button>
@@ -580,6 +785,9 @@ export class StreetPlay {
     this.ui = ui;
     this.mini = ui.querySelector('#street-mini');
     this.statusEl = ui.querySelector('#street-status');
+    this.objEl = ui.querySelector('#street-obj');
+    this.dirEl = ui.querySelector('#street-dir');
+    this.objHtml = '';
     const press = (k: keyof Hold, on: boolean) => {
       this.hold[k] = on;
     };
@@ -663,6 +871,7 @@ export class StreetPlay {
     if (this.chasing && this.inCar) return;
     if (this.inCar) {
       this.inCar = false;
+      if (this.driver) this.driver.visible = false;
       audio.sample('door');
       audio.engine(false);
       this.player.visible = true;
@@ -680,6 +889,7 @@ export class StreetPlay {
     this.inCar = true;
     audio.sample('door');
     this.player.visible = false;
+    if (this.driver) this.driver.visible = true;
     this.yaw = this.car.rotation.y;
     this.setStatus('داخل الدورية. امشِ بالأسهم أو الأزرار. صفارة المطاردة لما توصل المهمة.');
     const btn = this.ui?.querySelector('[data-act="car"]');
@@ -750,7 +960,8 @@ export class StreetPlay {
     this.suspect = this.makeSuspectCar();
     this.suspect.position.set(-1.6, 0, this.car.position.z + 16);
     this.group.add(this.suspect);
-    audio.sirenSting();
+    audio.sirenLoop(true);
+    audio.setTrack('music');
     this.setStatus(`مطاردة في ${place.name} — الحق السيارة السودا.`);
   }
 
@@ -777,11 +988,21 @@ export class StreetPlay {
           money: 0,
           rep: -3
         };
+    audio.sirenLoop(false);
     if (success) audio.success();
     else audio.fail();
-    const order = ['port', 'corniche', 'suburb', 'downtown'];
-    const i = order.indexOf(this.missionId);
-    this.missionId = order[(i + 1) % order.length];
+    const lv = this.level;
+    const stars = completeLevel(lv.id, success, this.chaseTime);
+    report.title = `المستوى ${lv.id}: ${lv.title}`;
+    report.durationSec = Math.round(this.chaseTime);
+    if (success) {
+      report.money = lv.reward;
+      report.rep = lv.rep;
+      report.summary += ` ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} — ${lv.id < LEVELS.length ? `اتفتح المستوى ${lv.id + 1}.` : 'خلصت كل المستويات!'}`;
+    } else {
+      report.summary += ' جرّب المستوى تاني.';
+    }
+    this.lastResult = { success, levelId: lv.id };
     this.onReport?.(report);
     this.showResult(report);
   }
@@ -793,11 +1014,12 @@ export class StreetPlay {
     el.id = 'street-result';
     el.innerHTML = `
       <div class="street-result-card ${r.success ? 'ok' : 'bad'}">
-        <h2>${r.success ? 'نجحت المطاردة' : 'المطاردة فشلت'}</h2>
+        <div class="mc-tag" style="background:${r.success ? '#7dff9a' : '#ff6b81'}">${r.success ? 'المهمة اكتملت' : 'المهمة فشلت'}</div>
+        <h2>${r.title ?? (r.success ? 'نجحت المطاردة' : 'المطاردة فشلت')}</h2>
         <p class="where">${r.placeName}</p>
         <p>${r.summary}</p>
         <p class="nums">${r.money ? `+$${r.money}` : 'بدون مكافأة'} · سمعة ${r.rep > 0 ? '+' : ''}${r.rep}</p>
-        <button type="button" data-ok>تمام</button>
+        <button type="button" data-ok>${r.success ? 'المهمة الجاية ▶' : 'حاول تاني'}</button>
       </div>
     `;
     document.getElementById('app')!.appendChild(el);
@@ -805,8 +1027,9 @@ export class StreetPlay {
     el.querySelector('[data-ok]')!.addEventListener('click', () => {
       el.remove();
       this.resultEl = null;
-      const next = STREET_PLACES.find((p) => p.id === this.missionId);
-      this.setStatus(next ? `المهمة الجاية على الخريطة: ${next.name}` : 'الوردية مستمرة');
+      const r = this.lastResult;
+      if (r) this.setLevel(r.success ? Math.min(LEVELS.length, r.levelId + 1) : r.levelId);
+      this.onResultClosed?.();
     });
   }
 
@@ -896,6 +1119,11 @@ export class StreetPlay {
     this.stepChase(dt);
     this.stepRain(dt);
     this.stepLights();
+    if (this.key) {
+      const a = this.inCar ? this.car.position : this.player.position;
+      this.key.position.set(a.x + 18, 30, a.z - 14);
+      this.key.target.position.set(a.x, 0, a.z);
+    }
     const sp = Math.abs(this.speed);
     audio.engine(this.inCar, Math.min(1, sp / 18));
     if (this.inCar && sp > 2 && Math.random() < dt * 30) {
@@ -903,6 +1131,7 @@ export class StreetPlay {
     }
     this.snapCamera(1 - Math.pow(0.0008, dt));
     this.drawMini();
+    this.objective();
     const here = this.currentPlace();
     if (here.id !== this.placeId && !this.travel && !this.chasing) {
       this.placeId = here.id;
@@ -997,13 +1226,13 @@ export class StreetPlay {
   private stepChase(dt: number) {
     if (!this.chasing || !this.suspect) return;
     this.chaseTime += dt;
-    const flee = 9.5 + Math.min(4, this.chaseTime * 0.15);
+    const flee = (9.5 + Math.min(4, this.chaseTime * 0.15)) * this.level.speed;
     this.suspect.position.z += flee * dt;
     this.suspect.position.x += Math.sin(this.chaseTime * 1.4) * dt * 0.8;
     this.suspect.position.x = THREE.MathUtils.clamp(this.suspect.position.x, -2.4, 2.4);
     const dist = this.suspect.position.distanceTo(this.car.position);
     if (this.inCar && dist < 3.4) this.finishChase(true);
-    else if (this.suspect.position.z > 235 || this.chaseTime > 28) this.finishChase(false);
+    else if (this.suspect.position.z > 235 || this.chaseTime > this.level.limit) this.finishChase(false);
     else if (Math.floor(this.chaseTime) % 4 === 0) {
       /* status stays until next set */
     }
@@ -1053,6 +1282,20 @@ export class StreetPlay {
       ctx.fill();
     }
     const pz = this.inCar ? this.car.position.z : this.player.position.z;
+    const tz = this.chasing && this.suspect ? this.suspect.position.z : (STREET_PLACES.find((p) => p.id === this.level.placeId)?.z ?? 0);
+    ctx.strokeStyle = '#ffd23d';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.moveTo(w / 2, zOf(pz));
+    ctx.lineTo(w / 2, zOf(tz));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#ffd23d';
+    ctx.beginPath();
+    ctx.moveTo(w / 2, zOf(tz) - 9); ctx.lineTo(w / 2 + 7, zOf(tz) + 3); ctx.lineTo(w / 2 - 7, zOf(tz) + 3);
+    ctx.fill();
     ctx.fillStyle = '#ffe08a';
     ctx.beginPath();
     ctx.arc(w / 2, zOf(pz), 5, 0, Math.PI * 2);

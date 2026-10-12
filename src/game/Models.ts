@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
  * Low-poly CC0 models (Kenney Car Kit, Mini Characters, City Kit Commercial).
@@ -85,7 +86,8 @@ class ModelLib {
       const [bx, by, bz] = swap ? [fit.box[2], fit.box[1], fit.box[0]] : fit.box;
       // uniform scale keeps facade proportions; mild vertical stretch only for towers
       const k = Math.min(bx / s.x, bz / s.z);
-      const ky = Math.min(Math.max(k, by / s.y), k * 1.6);
+      const vary = 0.85 + ((Math.abs(group.position.x * 3 + group.position.z * 5) % 10) / 10) * 0.6;
+      const ky = Math.min(Math.max(k, by / s.y), k * 1.6) * (kind.includes('skyscraper') ? vary : 1);
       model.scale.set(k, ky, k);
     } else if (fit.length) {
       const k = fit.length / Math.max(s.x, s.z);
@@ -102,6 +104,7 @@ class ModelLib {
     holder.rotation.y = fit.yaw ?? 0;
     holder.userData.keep = true;
     group.add(holder);
+    if (kind.startsWith('building')) this.decorate(group, holder, kind);
     if (l.clips.length) {
       const mixer = new THREE.AnimationMixer(model);
       const actions: Record<string, THREE.AnimationAction> = {};
@@ -111,6 +114,64 @@ class ModelLib {
       mixer.update(Math.random());
       this.actors.push(a);
       group.userData.actor = a;
+    }
+  }
+
+  /** Shared night-window material; CityScene drives its emissive by time of day. */
+  windowMat = new THREE.MeshStandardMaterial({ color: 0x55606a, emissive: 0xffc46b, emissiveIntensity: 0.05, roughness: 0.4 });
+  private roofMat = new THREE.MeshStandardMaterial({ color: 0x5b636b, roughness: 0.8, metalness: 0.3 });
+  private signMats = [0xff3d7f, 0x3dd9ff, 0xffd23d, 0x7dff6a].map((c) =>
+    new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.2, roughness: 0.3 }));
+  private seed = 1;
+  private rnd() { this.seed = (this.seed * 16807) % 2147483647; return this.seed / 2147483647; }
+
+  /** Lit windows (merged into one mesh), rooftop units and neon signs, fitted to the real model bounds. */
+  private decorate(group: THREE.Object3D, holder: THREE.Object3D, kind: ModelKind) {
+    group.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
+    const bb = new THREE.Box3().setFromObject(holder).applyMatrix4(inv);
+    const size = bb.getSize(new THREE.Vector3());
+    const c = bb.getCenter(new THREE.Vector3());
+    this.seed = Math.abs(Math.floor(group.position.x * 131 + group.position.z * 71)) + 7;
+    const geos: THREE.BufferGeometry[] = [];
+    const ww = 0.42, wh = 0.55, gapX = 1.1, gapY = 1.25;
+    const addFace = (len: number, axis: 'x' | 'z', side: number) => {
+      const cols = Math.max(1, Math.floor((len - 0.6) / gapX));
+      const rows = Math.max(1, Math.floor((size.y - 1.2) / gapY));
+      for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+        if (this.rnd() < 0.45) continue;
+        const g = new THREE.PlaneGeometry(ww, wh);
+        const off = -len / 2 + (len / cols) * (k + 0.5);
+        const y = bb.min.y + 1.0 + r * gapY;
+        if (axis === 'z') { if (side < 0) g.rotateY(Math.PI); g.translate(c.x + off, y, side > 0 ? bb.max.z + 0.04 : bb.min.z - 0.04); }
+        else { g.rotateY(side > 0 ? Math.PI / 2 : -Math.PI / 2); g.translate(side > 0 ? bb.max.x + 0.04 : bb.min.x - 0.04, y, c.z + off); }
+        geos.push(g);
+      }
+    };
+    addFace(size.x, 'z', 1); addFace(size.x, 'z', -1); addFace(size.z, 'x', 1); addFace(size.z, 'x', -1);
+    if (geos.length) {
+      const m = new THREE.Mesh(mergeGeometries(geos), this.windowMat);
+      geos.forEach((g) => g.dispose());
+      m.userData.keep = true;
+      group.add(m);
+    }
+    // rooftop: AC units / water tank
+    const n = 1 + Math.floor(this.rnd() * 3);
+    for (let i = 0; i < n; i++) {
+      const tank = this.rnd() < 0.3;
+      const geo = tank ? new THREE.CylinderGeometry(0.5, 0.5, 1.1, 10) : new THREE.BoxGeometry(0.9, 0.5, 0.7);
+      const u = new THREE.Mesh(geo, this.roofMat);
+      u.position.set(c.x + (this.rnd() - 0.5) * size.x * 0.6, bb.max.y + (tank ? 0.55 : 0.25), c.z + (this.rnd() - 0.5) * size.z * 0.6);
+      u.castShadow = this.shadows;
+      u.userData.keep = true;
+      group.add(u);
+    }
+    // neon sign on some low buildings
+    if (!kind.includes('skyscraper') && this.rnd() < 0.55) {
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.6, size.x * 0.7), 0.45, 0.08), this.signMats[Math.floor(this.rnd() * 4)]);
+      sign.position.set(c.x, bb.min.y + Math.min(size.y * 0.55, 3.2), bb.max.z + 0.12);
+      sign.userData.keep = true;
+      group.add(sign);
     }
   }
 
