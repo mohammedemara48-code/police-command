@@ -1,3 +1,4 @@
+import { accountHtml, bindAccount, onAccount, restore, account } from './Account';
 import { achHtml } from './Achievements';
 // @source-complete
 import { GameManager } from './GameManager';
@@ -79,11 +80,19 @@ export class UI {
   }
 
   renderStart() {
+    if (!this.accountHooked) {
+      this.accountHooked = true;
+      // refresh the menu (login label / unlocked levels) when the account syncs, but only if a menu is showing
+      onAccount(() => { if (!this.launched && (this.menuScreen === 'main' || this.menuScreen === 'account')) this.menu(this.menuScreen as 'main'); });
+      void restore();
+    }
     this.menu('main');
   }
 
   private launched = false;
-  private menu(screen: 'main' | 'levels' | 'settings' | 'credits' | 'ach') {
+  private menuScreen = '';
+  private accountHooked = false;
+  private menu(screen: 'main' | 'levels' | 'settings' | 'credits' | 'ach' | 'account') {
     const cur = levelById(progress.current);
     const body =
       screen === 'main'
@@ -93,6 +102,7 @@ export class UI {
             <button class="btn menu-big" data-m="play">▶ العب — المستوى ${cur.id}: ${cur.title}</button>
             <button class="btn ghost" data-m="levels">المستويات</button>
             <button class="btn ghost" data-m="ach">🏆 الإنجازات</button>
+            <button class="btn ghost" data-m="account">👤 ${account.user ? 'حسابي' : 'تسجيل الدخول'}</button>
             <button class="btn ghost" data-m="command">غرفة العمليات (استراتيجية)</button>
             <button class="btn ghost" data-m="settings">الإعدادات</button>
             <button class="btn ghost" data-m="credits">الحقوق</button>
@@ -107,6 +117,8 @@ export class UI {
                 <b>${l.id}</b><span>${l.title}</span><i>${locked ? '🔒' : '★'.repeat(st) + '☆'.repeat(3 - st)}</i></button>`;
             }).join('')}</div>
             <button class="btn ghost" data-m="main">رجوع</button>`
+          : screen === 'account'
+            ? accountHtml()
           : screen === 'ach'
             ? `${achHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
           : screen === 'settings'
@@ -121,6 +133,8 @@ export class UI {
               <button class="btn ghost" data-m="main">رجوع</button>`;
     this.overlay.innerHTML = `<div class="start-screen"><div class="start-card glass menu-card">${body}</div></div>`;
     if (screen === 'settings') bindSettings(this.overlay);
+    if (screen === 'account') bindAccount(this.overlay, () => this.menu('account'));
+    this.menuScreen = screen;
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-m]').forEach((b) =>
       b.addEventListener('click', () => {
         audio.resume();
