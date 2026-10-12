@@ -105,6 +105,7 @@ export class CityScene {
     this.scene.add(this.markerRoot);
     this.scene.add(this.carRoot);
 
+    this.windowMats.push(models.windowMat);
     this.buildLighting();
     this.buildCity();
     this.spawnFleetCars();
@@ -849,27 +850,27 @@ export class CityScene {
     (this.scene.background as THREE.Color).copy(sample.sky);
     if (this.scene.fog && this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.color.copy(sample.fog);
-      this.scene.fog.density = 0.0038 + this.nightFactor * 0.0055;
+      this.scene.fog.density = 0.003 + this.nightFactor * 0.003;
     }
 
     this.hemi.color.copy(sample.hemiSky);
     this.hemi.groundColor.copy(sample.hemiGround);
-    this.hemi.intensity = 0.55 + day * 0.55;
+    this.hemi.intensity = 1.1 + day * 0.7;
 
     this.sun.color.copy(sample.sun);
-    this.sun.intensity = 0.25 + day * 1.25 + (hour > 5 && hour < 8 ? 0.15 : 0);
+    this.sun.intensity = 0.7 + day * 1.5 + (hour > 5 && hour < 8 ? 0.15 : 0);
     const azim = ((hour - 6) / 24) * Math.PI * 2;
     const y = Math.max(6, 12 + elev * 62);
     this.sun.position.set(Math.cos(azim) * 55, y, Math.sin(azim) * 40);
     this.sun.castShadow = elev > -0.15;
 
-    this.ambient.color.set(day > 0.4 ? 0xc8d8e8 : 0x1a2840);
-    this.ambient.intensity = 0.22 + day * 0.35 + this.nightFactor * 0.12;
+    this.ambient.color.set(day > 0.4 ? 0xd8e4f0 : 0x5a6e90);
+    this.ambient.intensity = 0.6 + day * 0.35 + this.nightFactor * 0.35;
 
-    this.renderer.toneMappingExposure = 0.95 + day * 0.18 + this.nightFactor * 0.12;
+    this.renderer.toneMappingExposure = 1.15 + day * 0.15 + this.nightFactor * 0.3;
 
-    this.groundMat.color.lerpColors(new THREE.Color(0x3a4a42), new THREE.Color(0x141c26), this.nightFactor);
-    this.roadMat.color.lerpColors(new THREE.Color(0x4a4f58), new THREE.Color(0x1a1f28), this.nightFactor);
+    this.groundMat.color.lerpColors(new THREE.Color(0x3a4a42), new THREE.Color(0x2a3442), this.nightFactor);
+    this.roadMat.color.lerpColors(new THREE.Color(0x4a4f58), new THREE.Color(0x30353f), this.nightFactor);
 
     for (const lm of this.lineMats) {
       lm.emissiveIntensity = 0.08 + this.nightFactor * 0.45;
@@ -1063,7 +1064,7 @@ export class CityScene {
     models.update(dt);
     fx.update(dt);
     if (this.street?.active) {
-      this.renderer.toneMappingExposure = 1.18;
+      this.renderer.toneMappingExposure = 1.45;
       this.street.update(dt);
       this.renderer.render(this.scene, this.camera);
       return;

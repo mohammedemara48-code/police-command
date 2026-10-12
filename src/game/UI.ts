@@ -4,6 +4,8 @@ import { IncidentManager } from './IncidentManager';
 import { CityScene } from './CityScene';
 import { CCTVFeed } from './CCTVFeed';
 import { audio } from './AudioManager';
+import { LEVELS, levelById, progress } from './Levels';
+import { settingsHtml, bindSettings } from './Meta';
 import {
   UNIT_LABELS,
   RANK_LABELS,
@@ -75,35 +77,80 @@ export class UI {
   }
 
   renderStart() {
-    this.overlay.innerHTML = `
-      <div class="start-screen">
-        <div class="start-card glass">
-          <h1>POLICE COMMAND</h1>
-          <p class="sub">قيادة الشرطة — غرفة عمليات ثلاثية الأبعاد</p>
-          <ul>
-            <li>شارع ليلي ممطر: امشِ أو اركب دورية الشرطة (WASD أو الأزرار)</li>
-            <li>خريطة المهام: اختَر دبوس الحي وانتقل أو سوق إليه</li>
-            <li>نساء ورجال ماشيين في الشارع، والمطاردة تبدأ عند المهمة</li>
-            <li>النتيجة تفضل على الشاشة لحد ما تضغط تمام</li>
-          </ul>
-          <button class="btn" id="btn-start" style="padding:12px 28px;font-size:15px">بدء الوردية</button>
-        </div>
-      </div>`;
-    this.overlay.querySelector('#btn-start')!.addEventListener('click', () => {
-      audio.resume();
-      audio.startAmbient();
-      this.overlay.innerHTML = '';
+    this.menu('main');
+  }
+
+  private launched = false;
+  private menu(screen: 'main' | 'levels' | 'settings' | 'credits') {
+    const cur = levelById(progress.current);
+    const body =
+      screen === 'main'
+        ? `<h1>POLICE COMMAND</h1>
+          <p class="sub">قيادة الشرطة — دوريات ومطاردات في مدينة ثلاثية الأبعاد</p>
+          <div class="menu-col">
+            <button class="btn menu-big" data-m="play">▶ العب — المستوى ${cur.id}: ${cur.title}</button>
+            <button class="btn ghost" data-m="levels">المستويات</button>
+            <button class="btn ghost" data-m="command">غرفة العمليات (استراتيجية)</button>
+            <button class="btn ghost" data-m="settings">الإعدادات</button>
+            <button class="btn ghost" data-m="credits">الحقوق</button>
+          </div>
+          <p class="hint">كمبيوتر: WASD للحركة · Shift جري · E ركوب · M خريطة · Esc إيقاف — موبايل: الجويستيك والأزرار</p>`
+        : screen === 'levels'
+          ? `<h2>المستويات</h2>
+            <div class="level-grid">${LEVELS.map((l) => {
+              const locked = l.id > progress.unlocked;
+              const st = progress.stars[l.id] ?? 0;
+              return `<button class="level-tile ${locked ? 'locked' : ''}" data-l="${l.id}" ${locked ? 'disabled' : ''}>
+                <b>${l.id}</b><span>${l.title}</span><i>${locked ? '🔒' : '★'.repeat(st) + '☆'.repeat(3 - st)}</i></button>`;
+            }).join('')}</div>
+            <button class="btn ghost" data-m="main">رجوع</button>`
+          : screen === 'settings'
+            ? `<h2>الإعدادات</h2>${settingsHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
+            : `<h2>الحقوق</h2>
+              <p class="credits">مجسمات ثلاثية الأبعاد ومؤثرات صوتية: Kenney.nl (CC0)<br>
+              موسيقى المطاردة: Fast Fight Battle Music — OpenGameArt (CC0)<br>
+              موسيقى غرفة العمليات: Empty City — OpenGameArt (CC0)<br>
+              صفارة وطلقات: OpenGameArt (CC0)<br>محرك الرسوم: Three.js</p>
+              <button class="btn ghost" data-m="main">رجوع</button>`;
+    this.overlay.innerHTML = `<div class="start-screen"><div class="start-card glass menu-card">${body}</div></div>`;
+    if (screen === 'settings') bindSettings(this.overlay);
+    this.overlay.querySelectorAll<HTMLButtonElement>('[data-m]').forEach((b) =>
+      b.addEventListener('click', () => {
+        audio.resume();
+        audio.click();
+        const m = b.dataset.m!;
+        if (m === 'play') this.launch('street', progress.current);
+        else if (m === 'command') this.launch('command');
+        else this.menu(m as 'main');
+      }));
+    this.overlay.querySelectorAll<HTMLButtonElement>('[data-l]').forEach((b) =>
+      b.addEventListener('click', () => { audio.resume(); audio.click(); this.launch('street', Number(b.dataset.l)); }));
+  }
+
+  private launch(kind: 'street' | 'command', level = 1) {
+    audio.resume();
+    audio.setTrack(kind === 'street' ? 'music' : 'calm');
+    audio.startAmbient();
+    this.overlay.innerHTML = '';
+    if (!this.launched) {
+      this.launched = true;
       this.game.start();
-      this.city.setTimeOfDay(22.4);
-      this.city.street.engage();
       this.city.street.onReport = (r) => {
         this.game.AddRewards(r.money, r.rep);
         if (r.success) this.game.state.incidentsResolved += 1;
         else this.game.state.incidentsFailed += 1;
       };
-      this.mode = 'play';
-      this.render();
-    });
+    }
+    if (kind === 'street') {
+      this.city.setTimeOfDay(18.9);
+      this.city.street.engage();
+      this.city.street.setLevel(level);
+    } else {
+      this.city.street.disengage();
+      this.city.setTimeOfDay(9);
+    }
+    this.mode = 'play';
+    this.render();
   }
 
   render() {

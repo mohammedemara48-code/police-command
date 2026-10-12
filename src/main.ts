@@ -45,3 +45,13 @@ function frame(now: number) {
 }
 requestAnimationFrame(frame);
 
+
+// Reload once when a new service worker takes over, so a deploy applies on a single refresh.
+if ('serviceWorker' in navigator) {
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+}
