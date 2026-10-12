@@ -681,3 +681,30 @@ body[data-play="street"] .hint { display: none !important; }
 .mission-card ol{text-align:right;margin:8px 18px;line-height:1.9}
 .mission-card .mc-reward{color:#7dff9a}
 body[data-play="street"] #street-status{top:auto;bottom:calc(170px + env(safe-area-inset-bottom))}
+
+/* Touch controls: joystick on any touch device */
+html.touch .street-stick{display:block}
+html.touch .street-pad{display:none!important}
+.street-pad button.held,.street-actions button.held{background:rgba(58,160,255,.55)}
+#street-ui button,.street-stick{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+
+/* Menus: always flat, no GPU blur over WebGL on phones (caused smeared/garbled panels on some Android GPUs) */
+.start-screen,.start-card,.meta-overlay,.meta-card,#street-result,.street-result-card{transform:none!important;perspective:none!important}
+@media (pointer:coarse),(max-width:900px){
+  .glass,.meta-overlay{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  .glass{background:rgba(8,16,30,.95)}
+}
+.start-screen{overflow-y:auto;padding:12px 0}
+.start-card{max-height:calc(100dvh - 24px);overflow-y:auto}
+@media (orientation:landscape) and (max-height:540px){
+  .start-card{padding:14px 16px}
+  .start-card h1{font-size:22px;margin:0}
+  .menu-col{margin:8px auto;gap:6px}
+  .menu-col .btn{padding:8px 14px}
+  .level-grid{grid-template-columns:repeat(8,1fr);gap:6px;margin:8px 0}
+  .meta-card{max-height:92dvh;overflow-y:auto;padding:14px 18px}
+  #street-obj{top:44px;font-size:11px;max-width:40vw}
+  .street-stick{width:110px;height:110px;bottom:12px}
+}
+.meta-pause-btn[hidden]{display:none}
+.street-stick{pointer-events:auto}

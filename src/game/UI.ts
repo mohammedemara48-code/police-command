@@ -107,7 +107,9 @@ export class UI {
           : screen === 'settings'
             ? `<h2>الإعدادات</h2>${settingsHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
             : `<h2>الحقوق</h2>
-              <p class="credits">مجسمات ثلاثية الأبعاد ومؤثرات صوتية: Kenney.nl (CC0)<br>
+              <p class="credits">الضابط والمشاة وعربية الشرطة: Quaternius (CC0)<br>
+              عربية Dodge Challenger: Grzybek عبر Poly Pizza (CC-BY 3.0)<br>
+              مباني ومؤثرات صوتية: Kenney.nl (CC0)<br>
               موسيقى المطاردة: Fast Fight Battle Music — OpenGameArt (CC0)<br>
               موسيقى غرفة العمليات: Empty City — OpenGameArt (CC0)<br>
               صفارة وطلقات: OpenGameArt (CC0)<br>محرك الرسوم: Three.js</p>
@@ -142,6 +144,7 @@ export class UI {
       };
     }
     if (kind === 'street') {
+      this.game.state.cityHour = 18.9;
       this.city.setTimeOfDay(18.9);
       this.city.street.engage();
       this.city.street.setLevel(level);

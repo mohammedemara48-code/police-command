@@ -1,4 +1,7 @@
 import './style.css';
+
+// Touch devices (also when the browser reports a fine pointer, e.g. 'desktop site' mode) get the joystick UI.
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.documentElement.classList.add('touch');
 import { GameManager } from './game/GameManager';
 import { IncidentManager } from './game/IncidentManager';
 import { CityScene } from './game/CityScene';
@@ -39,6 +42,8 @@ function frame(now: number) {
     }
   }
 
+  // Street patrol is always played at golden-hour/dusk; keep the HUD clock in sync with what is on screen.
+  if (city.street.active) game.state.cityHour = 18.9;
   city.setTimeOfDay(game.state.cityHour);
   city.update(dt);
   requestAnimationFrame(frame);

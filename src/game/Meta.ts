@@ -30,6 +30,7 @@ export class Meta {
     this.btn.setAttribute('aria-label', 'إيقاف مؤقت');
     this.btn.textContent = '⏸';
     this.btn.addEventListener('click', () => this.togglePause());
+    this.btn.hidden = true;
     document.body.appendChild(this.btn);
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') this.togglePause();
@@ -56,6 +57,7 @@ export class Meta {
 
   check() {
     const s = this.game.state;
+    this.btn.hidden = !s.running;
     if (!s.running || this.over) return;
     if (s.reputation <= 0 || s.budget < -50000) {
       this.over = true;
