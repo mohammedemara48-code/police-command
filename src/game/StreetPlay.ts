@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { models, CARS, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
+import { models, CARS, LOW_CARS, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
 import { Q } from './Quality';
 import { LEVELS, levelById, completeLevel, progress, type LevelDef } from './Levels';
@@ -508,7 +508,7 @@ export class StreetPlay {
     const legR = this.box(0.14, 0.7, 0.16, navy, 0.12, 0.35, 0);
     g.add(legL, legR);
     g.userData.legs = [legL, legR];
-    models.dress(g, 'character-male-c', { height: 1.8 });
+    models.dress(g, 'officer', { height: 1.8 });
     return g;
   }
 
@@ -568,7 +568,9 @@ export class StreetPlay {
       cap.position.set(0, 1.7, 0);
       g.add(cap);
     }
-    models.dress(g, PEOPLE[(female ? 1 : 0) + ((hair >> 4) % 2) * 2], { height: female ? 1.68 : 1.78 });
+    const pool = Q.lowDetailPeople ? PEOPLE : REAL_PEOPLE;
+    const pick = Q.lowDetailPeople ? PEOPLE[(female ? 1 : 0) + ((hair >> 4) % 2) * 2] : female ? pool[1 + ((hair >> 4) % 2)] : pool[0];
+    models.dress(g, pick, { height: female ? 1.68 : 1.8 });
     return { g, legL, legR, armL, armR };
   }
 
@@ -647,7 +649,7 @@ export class StreetPlay {
       fx.glow(lr, 0xff2244);
       fx.glow(lb, 0x2266ff);
     }
-    models.dress(g, 'police', { length: 4.2 });
+    models.dress(g, 'police-real', { length: 4.6 });
     return g;
   }
 
@@ -659,7 +661,7 @@ export class StreetPlay {
     const tail = new THREE.PointLight(0xff2200, 1.4, 6, 2);
     tail.position.set(0, 0.55, -1.9);
     g.add(tail);
-    models.dress(g, 'sedan-sports', { length: 4.0 });
+    models.dress(g, 'challenger', { length: 4.7 });
     return g;
   }
 
@@ -673,7 +675,7 @@ export class StreetPlay {
       const laneX = i % 2 === 0 ? -1.7 : 1.7;
       mesh.position.set(laneX, 0, -60 + i * 38);
       mesh.rotation.y = i % 2 === 0 ? 0 : Math.PI;
-      models.dress(mesh, CARS[i % CARS.length], { length: 3.8 });
+      models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[i % CARS.length], { length: 4.5 });
       this.group.add(mesh);
       this.traffic.push({ mesh, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
     }
@@ -791,29 +793,33 @@ export class StreetPlay {
     const press = (k: keyof Hold, on: boolean) => {
       this.hold[k] = on;
     };
-    ui.querySelectorAll('[data-k]').forEach((btn) => {
-      const k = (btn as HTMLElement).dataset.k as keyof Hold;
-      const down = (e: Event) => {
+    // Multi-touch safe hold buttons: each pointer is captured by its button and released on up/cancel anywhere.
+    const holdBtn = (btn: HTMLElement, on: (v: boolean) => void) => {
+      const active = new Set<number>();
+      btn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        press(k, true);
+        active.add(e.pointerId);
+        try { btn.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+        btn.classList.add('held');
+        on(true);
+      });
+      const up = (e: PointerEvent) => {
+        if (!active.delete(e.pointerId)) return;
+        if (!active.size) { btn.classList.remove('held'); on(false); }
       };
-      const up = (e: Event) => {
-        e.preventDefault();
-        press(k, false);
-      };
-      btn.addEventListener('pointerdown', down);
       btn.addEventListener('pointerup', up);
-      btn.addEventListener('pointerleave', up);
       btn.addEventListener('pointercancel', up);
+      btn.addEventListener('lostpointercapture', up);
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    };
+    ui.querySelectorAll<HTMLElement>('[data-k]').forEach((btn) => {
+      const k = btn.dataset.k as keyof Hold;
+      holdBtn(btn, (v) => press(k, v));
     });
     this.mountStick(ui.querySelector('.street-stick') as HTMLElement);
-    const runBtn = ui.querySelector('[data-act="run"]')!;
-    runBtn.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      this.hold.run = true;
-    });
-    runBtn.addEventListener('pointerup', () => (this.hold.run = false));
-    runBtn.addEventListener('pointerleave', () => (this.hold.run = false));
+    holdBtn(ui.querySelector('[data-act="run"]') as HTMLElement, (v) => (this.hold.run = v));
+    // Stop the browser from turning touches on the controls into scroll/zoom/long-press.
+    ui.addEventListener('touchstart', (e) => { if ((e.target as HTMLElement).closest('[data-k], [data-act="run"], .street-stick')) e.preventDefault(); }, { passive: false });
     ui.querySelector('[data-act="car"]')!.addEventListener('click', () => this.toggleCar());
     ui.querySelector('[data-act="map"]')!.addEventListener('click', () => this.openMap());
     this.mini!.addEventListener('click', () => this.openMap());
@@ -836,7 +842,7 @@ export class StreetPlay {
       this.hold.run = m * k / R > 0.92 && !this.inCar;
     };
     el.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); id = e.pointerId; el.setPointerCapture(e.pointerId);
+      e.preventDefault(); if (id !== null) return; id = e.pointerId; try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       const r = el.getBoundingClientRect();
       set(e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
     });
@@ -848,6 +854,7 @@ export class StreetPlay {
     const end = (e: PointerEvent) => { if (e.pointerId !== id) return; id = null; set(0, 0); this.hold.run = false; };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
   }
 
   private onKey(e: KeyboardEvent, down: boolean) {

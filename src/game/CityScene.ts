@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
 import { StreetPlay } from './StreetPlay';
 import { Q } from './Quality';
-import { models, fx, PEOPLE, LOW_BUILDINGS, TOWERS } from './Models';
+import { models, fx, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS } from './Models';
 
 type CarMesh = THREE.Group & { userData: { unitId?: string; flashing?: boolean; lights?: THREE.PointLight[] } };
 
@@ -387,7 +387,7 @@ export class CityScene {
       wh.position.set(wx, 0.28, wz);
       g.add(wh);
     }
-    models.dress(g, 'police', { length: 3.4 });
+    models.dress(g, 'police-real', { length: 3.6 });
     return g;
   }
 
@@ -600,7 +600,7 @@ export class CityScene {
       stripe.position.set(0, 1.2, 0.3);
       g.add(cap, stripe);
     }
-    models.dress(g, kind === 'cop' ? 'character-male-c' : PEOPLE[shirt % PEOPLE.length], { height: 2.0 });
+    models.dress(g, kind === 'cop' ? 'officer' : (Q.lowDetailPeople ? PEOPLE : REAL_PEOPLE)[shirt % 4], { height: 2.0 });
     return g;
   }
 

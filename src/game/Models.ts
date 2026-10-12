@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
@@ -11,9 +12,12 @@ export type ModelKind =
   | 'police' | 'sedan' | 'taxi' | 'suv' | 'van' | 'sedan-sports'
   | 'character-male-a' | 'character-female-a' | 'character-male-c' | 'character-female-c'
   | 'building-a' | 'building-c' | 'building-e' | 'building-g'
-  | 'building-skyscraper-a' | 'building-skyscraper-c' | 'building-skyscraper-e';
+  | 'building-skyscraper-a' | 'building-skyscraper-c' | 'building-skyscraper-e'
+  | 'officer' | 'man-suit' | 'woman-a' | 'woman-b' | 'police-real' | 'challenger';
 
-export const CARS: ModelKind[] = ['sedan', 'taxi', 'suv', 'van', 'sedan-sports'];
+export const CARS: ModelKind[] = ['challenger', 'challenger', 'challenger', 'challenger', 'challenger'];
+export const LOW_CARS: ModelKind[] = ['sedan', 'taxi', 'suv', 'van', 'sedan-sports'];
+export const REAL_PEOPLE: ModelKind[] = ['man-suit', 'woman-a', 'woman-b', 'man-suit'];
 export const PEOPLE: ModelKind[] = ['character-male-a', 'character-female-a', 'character-male-c', 'character-female-c'];
 export const LOW_BUILDINGS: ModelKind[] = ['building-a', 'building-c', 'building-e', 'building-g'];
 export const TOWERS: ModelKind[] = ['building-skyscraper-a', 'building-skyscraper-c', 'building-skyscraper-e'];
@@ -31,7 +35,7 @@ class ModelLib {
   private loading = new Map<ModelKind, Promise<Loaded | null>>();
   private pending: Pending[] = [];
   private actors: Actor[] = [];
-  private loader = new GLTFLoader();
+  private loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   shadows = true;
   enabled = true;
 
@@ -39,7 +43,11 @@ class ModelLib {
     let p = this.loading.get(kind);
     if (!p) {
       p = this.loader.loadAsync(`/models/${kind}.gltf`).then((g) => {
+        const lights: THREE.Object3D[] = [];
+        g.scene.traverse((o) => { if ((o as THREE.Light).isLight) lights.push(o); });
+        lights.forEach((o) => o.removeFromParent());
         g.scene.traverse((o) => {
+          (o as THREE.Mesh).frustumCulled = false;
           const m = o as THREE.Mesh;
           if (m.isMesh) { m.castShadow = this.shadows; m.receiveShadow = true; }
         });
@@ -109,6 +117,15 @@ class ModelLib {
       const mixer = new THREE.AnimationMixer(model);
       const actions: Record<string, THREE.AnimationAction> = {};
       for (const c of l.clips) actions[c.name] = mixer.clipAction(c);
+      // normalise clip names across packs (Kenney: idle/walk/sprint/drive; Quaternius: Armature|Idle, Walk, Run, Sitting...)
+      const find = (re: RegExp, not?: RegExp) => l.clips.find((c) => re.test(c.name) && !(not && not.test(c.name)));
+      const alias: Record<string, THREE.AnimationClip | undefined> = {
+        idle: find(/(^|\|)(female_)?idle(_neutral)?$/i) ?? find(/idle/i, /gun|sword|sit/i),
+        walk: find(/walk(ing)?$/i),
+        sprint: find(/(^|\||_)run(ning)?$/i) ?? find(/sprint/i),
+        drive: find(/^drive$/i) ?? find(/sit(ting|idle)?$/i) ?? find(/idle/i, /gun|sword/i)
+      };
+      for (const [k, c] of Object.entries(alias)) if (c && !actions[k]) actions[k] = mixer.clipAction(c);
       const a: Actor = { obj: group, mixer, actions, cur: 'idle', last: group.getWorldPosition(new THREE.Vector3()), speed: 0 };
       actions.idle?.play();
       mixer.update(Math.random());
