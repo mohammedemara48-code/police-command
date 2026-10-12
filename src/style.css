@@ -652,5 +652,32 @@ body[data-play="street"] .hint { display: none !important; }
 /* Analog joystick (touch) */
 .street-stick{display:none;position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:24px;width:130px;height:130px;border-radius:50%;background:rgba(10,22,40,.45);border:2px solid rgba(126,200,255,.35);touch-action:none;z-index:60}
 .street-knob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(126,200,255,.75);box-shadow:0 0 18px rgba(126,200,255,.5);pointer-events:none}
-@media (pointer:coarse){.street-stick{display:block}.street-pad{display:none!important}.meta-pause-btn{left:auto;right:14px;top:calc(70px + env(safe-area-inset-top));bottom:auto}}
+@media (pointer:coarse){.street-stick{display:block}.street-pad{display:none!important}.meta-pause-btn{left:14px;right:auto;top:calc(250px + env(safe-area-inset-top));bottom:auto}}
 .street-actions button{touch-action:manipulation}
+
+/* Main menu & levels */
+.menu-card{max-width:560px;text-align:center}
+.menu-col{display:flex;flex-direction:column;gap:10px;margin:18px auto 8px;max-width:360px}
+.menu-col .btn{padding:12px 18px;font-size:15px}
+.menu-big{font-size:17px!important;padding:16px 18px!important;box-shadow:0 0 24px rgba(126,200,255,.35)}
+.menu-card .hint{opacity:.7;font-size:12px;margin-top:10px}
+.menu-card .credits{line-height:2;font-size:14px;opacity:.9}
+.level-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}
+.level-tile{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:12px;border:1px solid rgba(126,200,255,.35);background:rgba(14,28,48,.8);color:#eaf2ff;font-family:Cairo,sans-serif;cursor:pointer;transition:transform .15s}
+.level-tile:hover:not(.locked){transform:translateY(-2px);border-color:#7ec8ff}
+.level-tile b{font-size:22px}.level-tile span{font-size:12px}.level-tile i{font-style:normal;color:#ffd166}
+.level-tile.locked{opacity:.45;cursor:not-allowed}
+@media (max-width:520px){.level-grid{grid-template-columns:repeat(2,1fr)}}
+.menu-card .btn.ghost{background:transparent;border:1px solid rgba(126,200,255,.4)}
+
+/* GTA-style objectives */
+#street-obj{position:fixed;top:calc(64px + env(safe-area-inset-top));right:12px;z-index:55;max-width:min(320px,70vw);background:rgba(6,14,26,.78);border:1px solid rgba(255,210,61,.45);border-radius:12px;padding:10px 12px;color:#eaf2ff;font:13px/1.6 Cairo,sans-serif;pointer-events:none}
+#street-obj b{display:block;color:#ffd23d;margin-bottom:4px;font-size:14px}
+#street-obj .obj{opacity:.6}#street-obj .obj.cur{opacity:1;font-weight:700;color:#fff}#street-obj .obj.done{opacity:.5;text-decoration:line-through}
+#street-obj .timer{opacity:1;color:#ff6b81;font-weight:800}
+#street-dir{position:fixed;left:50%;top:42%;z-index:54;font-size:46px;color:#ffd23d;text-shadow:0 0 12px #000;pointer-events:none;display:none;transform-origin:50% 50%}
+.mission-card{text-align:center}
+.mission-card .mc-tag{display:inline-block;background:#ffd23d;color:#1a1300;font-weight:800;padding:2px 12px;border-radius:999px;margin-bottom:6px}
+.mission-card ol{text-align:right;margin:8px 18px;line-height:1.9}
+.mission-card .mc-reward{color:#7dff9a}
+body[data-play="street"] #street-status{top:auto;bottom:calc(170px + env(safe-area-inset-bottom))}

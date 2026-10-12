@@ -48,16 +48,9 @@ export class Meta {
     if (p) {
       this.show(`<h2>إيقاف مؤقت</h2>
         <p>أفضل نتيجة: <b>${this.save.best}</b> · مستوى المسيرة: <b>${this.save.level}</b></p>
-        <div class="meta-settings">
-          <label>الصوت العام <input type="range" min="0" max="1" step="0.05" data-v="master" value="${audio.vol.master}"></label>
-          <label>الموسيقى <input type="range" min="0" max="1" step="0.05" data-v="music" value="${audio.vol.music}"></label>
-          <label>المؤثرات <input type="range" min="0" max="1" step="0.05" data-v="sfx" value="${audio.vol.sfx}"></label>
-          <label>جودة الرسوم <select data-q>
-            ${(['low', 'medium', 'high'] as Quality[]).map((q) => `<option value="${q}" ${q === quality ? 'selected' : ''}>${{ low: 'منخفضة (موبايل ضعيف)', medium: 'متوسطة', high: 'عالية' }[q]}</option>`).join('')}
-          </select></label>
-        </div>
+        ${settingsHtml()}
         <button class="btn" data-a="resume">استكمال</button>
-        <button class="btn ghost" data-a="restart">وردية جديدة</button>`);
+        <button class="btn ghost" data-a="restart">القائمة الرئيسية</button>`);
     } else this.hide();
   }
 
@@ -99,11 +92,30 @@ export class Meta {
       })
     );
   }
-  private bindSettings() {
+  private bindSettings() { bindSettings(this.el, () => this.persist()); }
+  private bindSettingsOld() {
     this.el.querySelectorAll<HTMLInputElement>('[data-v]').forEach((r) =>
       r.addEventListener('input', () => audio.setVolume(r.dataset.v as 'master' | 'music' | 'sfx', Number(r.value))));
     const q = this.el.querySelector<HTMLSelectElement>('[data-q]');
     q?.addEventListener('change', () => { this.persist(); setQuality(q.value as Quality); });
   }
   private hide() { this.el.hidden = true; this.el.innerHTML = ''; }
+}
+
+export function settingsHtml() {
+  return `<div class="meta-settings">
+          <label>الصوت العام <input type="range" min="0" max="1" step="0.05" data-v="master" value="${audio.vol.master}"></label>
+          <label>الموسيقى <input type="range" min="0" max="1" step="0.05" data-v="music" value="${audio.vol.music}"></label>
+          <label>المؤثرات <input type="range" min="0" max="1" step="0.05" data-v="sfx" value="${audio.vol.sfx}"></label>
+          <label>جودة الرسوم <select data-q>
+            ${(['low', 'medium', 'high'] as Quality[]).map((q) => `<option value="${q}" ${q === quality ? 'selected' : ''}>${{ low: 'منخفضة (موبايل ضعيف)', medium: 'متوسطة', high: 'عالية' }[q]}</option>`).join('')}
+          </select></label>
+        </div>`;
+}
+
+export function bindSettings(root: HTMLElement, beforeReload: () => void = () => undefined) {
+  root.querySelectorAll<HTMLInputElement>('[data-v]').forEach((r) =>
+    r.addEventListener('input', () => audio.setVolume(r.dataset.v as 'master' | 'music' | 'sfx', Number(r.value))));
+  const q = root.querySelector<HTMLSelectElement>('[data-q]');
+  q?.addEventListener('change', () => { beforeReload(); setQuality(q.value as Quality); });
 }

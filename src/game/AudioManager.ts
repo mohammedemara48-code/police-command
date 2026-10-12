@@ -37,8 +37,8 @@ export class AudioManager {
   private loadSamples() {
     if (this.loading || !this.ctx) return this.loading;
     const ctx = this.ctx;
-    this.loading = fetch('/audio/sounds.json')
-      .then((r) => r.json() as Promise<Record<string, string>>)
+    this.loading = Promise.all(['/audio/sounds.json', '/audio/calm.json'].map((u) => fetch(u).then((r) => r.json() as Promise<Record<string, string>>).catch(() => ({}))))
+      .then((maps) => Object.assign({}, ...maps) as Record<string, string>)
       .then((map) => Promise.all(Object.entries(map).map(async ([k, uri]) => {
         const bin = atob(uri.slice(uri.indexOf(',') + 1));
         const u8 = new Uint8Array(bin.length);
@@ -67,11 +67,35 @@ export class AudioManager {
   }
 
   private wantMusic = false;
+  private track: 'music' | 'calm' = 'calm';
+  /** 'calm' for the command center, 'music' (action loop) for street patrol. */
+  setTrack(t: 'music' | 'calm') {
+    if (t === this.track && this.musicSrc) return;
+    this.track = t;
+    if (this.musicSrc) { try { this.musicSrc.stop(); } catch { /* ignore */ } this.musicSrc = null; this.startMusic(); }
+  }
+
+  private sirenSrc: AudioBufferSourceNode | null = null;
+  sirenLoop(on: boolean) {
+    if (!on || !this.enabled) { try { this.sirenSrc?.stop(); } catch { /* ignore */ } this.sirenSrc = null; return; }
+    this.ensure();
+    const buf = this.buffers.get('siren');
+    if (!buf || !this.ctx || !this.sfxGain) { this.sirenSting(); return; }
+    if (this.sirenSrc) return;
+    const g = this.ctx.createGain();
+    g.gain.value = 0.45;
+    this.sirenSrc = this.ctx.createBufferSource();
+    this.sirenSrc.buffer = buf;
+    this.sirenSrc.loop = true;
+    this.sirenSrc.connect(g).connect(this.sfxGain);
+    this.sirenSrc.start();
+  }
+
   startMusic() {
     this.wantMusic = true;
     if (!this.enabled || this.musicSrc) return;
     this.ensure();
-    const buf = this.buffers.get('music');
+    const buf = this.buffers.get(this.track);
     if (!buf || !this.ctx || !this.musicGain) return;
     this.musicSrc = this.ctx.createBufferSource();
     this.musicSrc.buffer = buf;
@@ -159,6 +183,17 @@ export class AudioManager {
   sirenSting() {
     if (!this.enabled) return;
     this.resume();
+    if (this.buffers.has('siren') && !this.sirenSrc) {
+      const src = this.ctx!.createBufferSource();
+      const g = this.ctx!.createGain();
+      src.buffer = this.buffers.get('siren')!;
+      g.gain.setValueAtTime(0.4, this.ctx!.currentTime);
+      g.gain.linearRampToValueAtTime(0, this.ctx!.currentTime + 2.6);
+      src.connect(g).connect(this.sfxGain!);
+      src.start();
+      src.stop(this.ctx!.currentTime + 2.7);
+      return;
+    }
     this.tone(880, 0.18, 'sawtooth', 0.14, 0);
     this.tone(620, 0.18, 'sawtooth', 0.14, 0.16);
     this.tone(920, 0.22, 'sawtooth', 0.16, 0.32);
@@ -244,6 +279,7 @@ export class AudioManager {
   gunshot() {
     if (!this.enabled) return;
     this.ensure();
+    if (this.sample('gunshot', 0.8, 0.95 + Math.random() * 0.1)) return;
     if (!this.ctx || !this.master) return;
     const ctx = this.ctx;
     const dur = 0.07;
