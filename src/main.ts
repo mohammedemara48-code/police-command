@@ -8,9 +8,12 @@ import { CityScene } from './game/CityScene';
 import { UI } from './game/UI';
 import { audio } from './game/AudioManager';
 import { Meta } from './game/Meta';
+import { restoreCommand, startAutosave } from './game/Save';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const game = new GameManager();
+restoreCommand(game);
+startAutosave(game);
 const city = new CityScene(canvas);
 const incidents = new IncidentManager(game, city.pois);
 const ui = new UI(game, incidents, city);
@@ -60,8 +63,10 @@ requestAnimationFrame(frame);
 // Reload once when a new service worker takes over, so a deploy applies on a single refresh.
 if ('serviceWorker' in navigator) {
   let reloaded = false;
+  // first visit: the service worker installs and claims the page; that is not an update, so don't reload mid-game
+  const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloaded) return;
+    if (reloaded || !hadController) return;
     reloaded = true;
     location.reload();
   });

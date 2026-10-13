@@ -110,3 +110,32 @@ describe('first-call tutorial', () => {
     expect(tutorialHint({ ...t, touch: false, step: 'car' })?.text).toContain('E');
   });
 });
+
+import { buildSaveFile, parseSaveFile, mergePersisted, pickPersisted } from '../src/game/logic/save';
+describe('save files', () => {
+  it('round-trips only pc.* keys', () => {
+    const f = buildSaveFile([
+      ['pc.levels.v1', '{"unlocked":3}'],
+      ['other', 'x']
+    ]);
+    const r = parseSaveFile(JSON.stringify(f));
+    expect(r.ok && r.data).toEqual({ 'pc.levels.v1': '{"unlocked":3}' });
+  });
+  it('rejects junk', () => {
+    expect(parseSaveFile('nope').ok).toBe(false);
+    expect(parseSaveFile('{"format":"x","data":{}}').ok).toBe(false);
+  });
+  it('merges saved command state with type checks', () => {
+    const fresh = { budget: 100, reputation: 50, techs: { cctv: false, heli: false }, running: false } as Record<
+      string,
+      unknown
+    >;
+    const m = mergePersisted(fresh, { budget: 999, reputation: 'bad', techs: { cctv: true }, running: true });
+    expect(m).toEqual({ budget: 999, reputation: 50, techs: { cctv: true, heli: false }, running: false });
+  });
+  it('picks only persisted fields', () => {
+    const s = { budget: 1, running: true } as never;
+    expect(Object.keys(pickPersisted(s))).toContain('budget');
+    expect(Object.keys(pickPersisted(s))).not.toContain('running');
+  });
+});
