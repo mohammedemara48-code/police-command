@@ -15,7 +15,8 @@ Process: spec first (docs/GAME_DESIGN.md), small vertical slices, each one PR �
 
 ### CI status (Oct 13)
 - Done: `npm run check` = typecheck + ESLint + Prettier (logic + tests) + Vitest (11 tests on `src/game/logic/`) + build. Workflow file ready at `docs/ci/ci.yml`; it must be copied to `.github/workflows/ci.yml` by the owner (the automation token lacks the GitHub `workflow` permission).
-- Next strict-TS step: turn on `noUnusedLocals` (22 dead fields/methods to remove), then `noUncheckedIndexedAccess`.
+- ✅ (PR #21) Strict TS: `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns` and `noImplicitOverride` are on (24 dead fields and methods removed); ESLint now reports 0 warnings, with `no-explicit-any` and `no-unused-vars` set as errors.
+- Next: `noUncheckedIndexedAccess` (158 sites), then `exactOptionalPropertyTypes` (5), and Prettier on the older files.
 
 ## P0: gameplay core (must ship)
 1. ✅ (Oct 13) Procedural dispatch generator (Dispatch.ts): endless radio calls for free patrol, of 5 kinds (robbery, chase, gang, hostage, runner), placed on real roads, scaled by rank. "Free patrol" in the menu, and the story continues into patrol after mission 12.
