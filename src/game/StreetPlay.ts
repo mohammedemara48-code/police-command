@@ -1,5 +1,6 @@
 import { reducedMotion } from './Motion';
-import { stepLoco, followCamYaw } from './logic/locomotion';
+import { stepLoco, followCamYaw, wrapAngle } from './logic/locomotion';
+import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from './logic/chase';
 import { character, onCharacter } from './Character';
 import { modelFor, recolorFor, WEAPONS } from './logic/character';
 import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z, findPath, farNode, followPath } from './City';
@@ -160,6 +161,12 @@ export class StreetPlay {
   private activeMission: MissionDef | null = null;
   private chasing = false;
   private chaseTime = 0;
+  /** chase clock: only runs once you're in the car (or after a short grace on foot) */
+  private chaseClock = 0;
+  private chaseTurn = 0;
+  private chaseLock = 0;
+  private chaseText = '';
+  private camB = 7;
   private eventGroup = new THREE.Group();
   private travel: { z: number; fast: boolean } | null = null;
   private hold: Hold = { f: false, b: false, l: false, r: false, run: false };
@@ -624,7 +631,7 @@ export class StreetPlay {
       case 'radio': this.msText = 'اسمع اللاسلكي'; this.radio(st.lines, () => this.nextStep()); break;
       case 'car': this.msText = st.text ?? 'اركب الدورية'; if (this.inCar) this.nextStep(); break;
       case 'goto': this.msText = st.text; this.msTarget.set(st.x, 0, st.z); this.msHasTarget = true; break;
-      case 'chase': this.msText = st.text ?? 'الحق العربية'; this.chaseThen = st.then ?? null; this.chaseLimit = st.limit; this.chaseSpeed = st.speed; this.beginChase(); break;
+      case 'chase': this.chaseText = this.msText = st.text ?? 'الحق العربية'; this.chaseThen = st.then ?? null; this.chaseLimit = st.limit; this.chaseSpeed = st.speed; this.beginChase(); break;
       case 'suspects': {
         this.msText = st.text;
         const prev = [...this.level.steps].slice(0, this.msIdx).reverse().find((x) => x.t === 'goto');
@@ -658,7 +665,13 @@ export class StreetPlay {
           if (t) { this.msTarget.copy(t.g.position); this.msHasTarget = true; }
           this.msText = this.inCar ? 'انزل واقبض على السواق' : 'اقبض على السواق';
           if (this.squad.done()) { this.chaseArrest = false; this.nextStep(); }
-        } else if (this.suspect) { this.msTarget.copy(this.suspect.position); this.msHasTarget = true; }
+        } else if (this.suspect) {
+          this.msTarget.copy(this.suspect.position); this.msHasTarget = true;
+          const left = Math.max(0, Math.ceil(this.chaseLimit - this.chaseClock));
+          const far = this.suspect.position.distanceTo(this.car.position) > WARN_R;
+          const lock = Math.round((this.chaseLock / LOCK_T) * 100);
+          this.msText = !this.inCar ? 'اركب الدورية والحقه!' : lock > 0 ? `🔒 حاصره! ${lock}% · ⏳ ${left}ث` : `${this.chaseText} · ⏳ ${left}ث${far ? ' · ⚠ بيبعد!' : ''}`;
+        }
         break;
       case 'suspects': {
         const left = this.squad.remaining();
@@ -1397,16 +1410,19 @@ export class StreetPlay {
   private beginChase() {
     this.chasing = true;
     this.chaseTime = 0;
+    this.chaseClock = 0;
+    this.chaseTurn = 0;
+    this.chaseLock = 0;
     this.chaseArrest = false;
     this.travel = null;
     if (this.suspect) this.group.remove(this.suspect);
     this.suspect = this.makeSuspectCar();
     this.chaseDir = this.car.position.z < 120 ? 1 : -1;
     const ax = Math.round(this.car.position.x / 60) * 60;
-    this.suspect.position.set(ax - 1.6, 0, this.car.position.z + this.chaseDir * 18);
+    this.suspect.position.set(ax - 1.6, 0, this.car.position.z + this.chaseDir * START_GAP);
     this.suspect.rotation.y = this.chaseDir > 0 ? 0 : Math.PI;
     const far = farNode(this.suspect.position.x, this.suspect.position.z);
-    this.chasePath = findPath(this.suspect.position.x, this.suspect.position.z, far.x, far.z);
+    this.chasePath = trimBehind(findPath(this.suspect.position.x, this.suspect.position.z, far.x, far.z), this.suspect.position.x, this.suspect.position.z, this.suspect.rotation.y);
     this.group.add(this.suspect);
     audio.sirenLoop(true);
     audio.setTrack('music');
@@ -1548,19 +1564,29 @@ export class StreetPlay {
   private snapCamera(k: number) {
     if (k >= 1 && !this.inCar) this.camYaw = this.yaw;
     const target = this.inCar ? this.car : this.player;
-    const back = this.inCar ? 8.2 : 5.2;
-    const up = this.inCar ? 3.1 : 2.25;
+    // phones in portrait have a narrow horizontal view: pull the boom back so the officer isn't screen-filling
+    const portrait = this.camera.aspect < 0.8 ? 1.35 : 1;
+    const back = (this.inCar ? (this.chasing ? 9.4 : 8.2) : 5.2) * portrait;
+    const up = (this.inCar ? (this.chasing ? 3.6 : 3.1) : 2.25) * (portrait > 1 ? 1.15 : 1);
     const yaw = this.inCar ? this.car.rotation.y : this.camYaw;
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
     let b = back;
     // pull the camera in when the spot behind the player is inside a building block
-    while (b > 1.6 && !onRoad(target.position.x - sin * b, target.position.z - cos * b, 4.5)) b -= 1.2;
-    const dest = this.camDest.set(
-      target.position.x - sin * b,
-      b < back ? up + 1.6 : up,
-      target.position.z - cos * b
-    );
+    const pad = this.inCar ? 4.5 : 6.5; // on foot the sidewalk is walkable space for the camera too
+    while (b > 2.8 && !onRoad(target.position.x - sin * b, target.position.z - cos * b, pad)) b -= 0.8;
+    // ease the boom length (no pops), and rise smoothly as it shortens
+    this.camB = k >= 1 ? b : this.camB + (b - this.camB) * Math.min(1, k * 1.5);
+    const cb = this.camB;
+    let h = up + Math.max(0, (back - cb) / back) * 2.2;
+    const cx = target.position.x - sin * cb, cz = target.position.z - cos * cb;
+    // on foot next to the patrol car: lift over it instead of clipping into the body
+    if (!this.inCar) {
+      const C = this.car.position;
+      const dCam = Math.hypot(cx - C.x, cz - C.z);
+      if (dCam < 3.2) h = Math.max(h, up + (3.2 - dCam) * 0.7);
+    }
+    const dest = this.camDest.set(cx, h, cz);
     if (!Number.isFinite(this.camPos.x + this.camPos.y + this.camPos.z)) this.camPos.copy(dest);
     this.camPos.lerp(dest, k);
     this.camera.position.copy(this.camPos);
@@ -1648,8 +1674,14 @@ export class StreetPlay {
       const target = throttle * max;
       this.speed += (target - this.speed) * Math.min(1, dt * 2.2);
       this.car.rotation.y = this.yaw;
-      this.car.position.x += Math.sin(this.yaw) * this.speed * dt;
-      this.car.position.z += Math.cos(this.yaw) * this.speed * dt;
+      const cmx = Math.sin(this.yaw) * this.speed * dt, cmz = Math.cos(this.yaw) * this.speed * dt;
+      const C0 = this.car.position;
+      // slide along kerbs/buildings instead of bouncing and getting stuck
+      if (!onRoad(C0.x + cmx, C0.z + cmz, 0.4)) {
+        if (onRoad(C0.x + cmx, C0.z, 0.4)) { C0.x += cmx; this.speed *= 1 - Math.min(0.9, dt * 2.5); }
+        else if (onRoad(C0.x, C0.z + cmz, 0.4)) { C0.z += cmz; this.speed *= 1 - Math.min(0.9, dt * 2.5); }
+        else this.speed *= -0.2;
+      } else { C0.x += cmx; C0.z += cmz; }
       this.distAcc += Math.abs(this.speed) * dt;
       if (this.distAcc > 25) { addStat('distance', this.distAcc); this.distAcc = 0; }
       if (!onRoad(this.car.position.x, this.car.position.z, 0.4)) {
@@ -1763,19 +1795,36 @@ export class StreetPlay {
   private stepChase(dt: number) {
     if (!this.chasing || !this.suspect) return;
     this.chaseTime += dt;
-    const flee = (9.5 + Math.min(4, this.chaseTime * 0.15)) * this.chaseSpeed;
-    // suspect AI drives the road graph (A*) toward a far intersection, then picks another
+    if (this.inCar || this.chaseTime > GRACE) this.chaseClock += dt;
     const sp = this.suspect.position;
-    let head = followPath(sp, this.chasePath, flee * dt);
+    const dist = sp.distanceTo(this.car.position);
+    // fair suspect speed: below the patrol car's top speed, brakes for corners, eases off when far
+    const flee = fleeSpeed({ t: this.chaseClock, k: this.chaseSpeed, playerMax: 18 + rank().car, dist, turn: this.chaseTurn });
+    // waits for the player to get in the car (no escape while they're running to it)
+    const step = this.inCar || this.chaseTime > GRACE ? flee * dt : flee * dt * 0.35;
+    let head = followPath(sp, this.chasePath, step);
     if (head === null) {
       const far = farNode(sp.x, sp.z);
-      this.chasePath = findPath(sp.x, sp.z, far.x, far.z);
-      head = followPath(sp, this.chasePath, flee * dt);
+      this.chasePath = trimBehind(findPath(sp.x, sp.z, far.x, far.z), sp.x, sp.z, this.suspect.rotation.y);
+      head = followPath(sp, this.chasePath, step);
     }
-    if (head !== null) this.suspect.rotation.y = approachAngle(this.suspect.rotation.y, head, dt * 5);
-    const dist = sp.distanceTo(this.car.position);
-    if (this.inCar && dist < 3.8) this.caught();
-    else if (dist > 140 || this.chaseTime > this.chaseLimit) this.finishMission(false, 'العربية هربت.');
+    if (head !== null) {
+      this.chaseTurn = wrapAngle(head - this.suspect.rotation.y);
+      this.suspect.rotation.y = approachAngle(this.suspect.rotation.y, head, dt * 5);
+    }
+    // solid cars: you can't drive through the suspect, you bump and stay on its bumper
+    if (this.inCar && dist < 4.2) {
+      const C = this.car.position;
+      const dx = C.x - sp.x, dz = C.z - sp.z, L = Math.hypot(dx, dz) || 1;
+      C.x = sp.x + (dx / L) * 4.2; C.z = sp.z + (dz / L) * 4.2;
+      this.speed = Math.min(this.speed, flee * 0.95);
+      if (this.chaseLock < 0.05) audio.click();
+    }
+    this.chaseLock = stepLock(this.chaseLock, dist, this.inCar, dt);
+    const r = chaseOutcome({ dist, inCar: this.inCar, clock: this.chaseClock, limit: this.chaseLimit, lock: this.chaseLock });
+    if (r === 'caught') this.caught();
+    else if (r === 'escaped') this.finishMission(false, 'العربية بعدت أوي وهربت.');
+    else if (r === 'timeout') this.finishMission(false, 'الوقت خلص والعربية هربت.');
   }
 
   /** chase won: the car stops, the driver steps out with the scripted behaviour */

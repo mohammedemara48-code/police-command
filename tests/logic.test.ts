@@ -227,3 +227,35 @@ describe('character profile', () => {
     for (const w of [r, s]) expect(Math.abs(w.dmg / w.cool / (p.dmg / p.cool) - 1)).toBeLessThan(0.3);
   });
 });
+
+import { fleeSpeed, trimBehind, chaseOutcome, stepLock, LOCK_T } from '../src/game/logic/chase';
+describe('chase fairness', () => {
+  it('suspect is always slower than the player car, even on the hardest chase', () => {
+    for (const k of [0.85, 1, 1.3]) for (const t of [0, 20, 60]) for (const dist of [5, 30, 100])
+      expect(fleeSpeed({ t, k, playerMax: 18, dist, turn: 0 })).toBeLessThan(18 * 0.9);
+  });
+  it('brakes for corners and eases off when far', () => {
+    const s = fleeSpeed({ t: 10, k: 1, playerMax: 18, dist: 30, turn: 0 });
+    expect(fleeSpeed({ t: 10, k: 1, playerMax: 18, dist: 30, turn: Math.PI / 2 })).toBeLessThan(s * 0.6);
+    expect(fleeSpeed({ t: 10, k: 1, playerMax: 18, dist: 100, turn: 0 })).toBeLessThan(s);
+  });
+  it('drops waypoints behind the car at start', () => {
+    const p = trimBehind([{ x: 0, z: -10 }, { x: 0, z: 0 }, { x: 0, z: 60 }], 0, 5, 0);
+    expect(p).toEqual([{ x: 0, z: 60 }]);
+  });
+  it('catch only counts in the car', () => {
+    expect(chaseOutcome({ dist: 3, inCar: false, clock: 1, limit: 40, lock: LOCK_T })).toBe(null);
+    expect(chaseOutcome({ dist: 3, inCar: true, clock: 1, limit: 40, lock: 0.5 })).toBe(null);
+    expect(chaseOutcome({ dist: 3, inCar: true, clock: 1, limit: 40, lock: LOCK_T })).toBe('caught');
+    expect(chaseOutcome({ dist: 200, inCar: true, clock: 1, limit: 40, lock: 0 })).toBe('escaped');
+    expect(chaseOutcome({ dist: 50, inCar: true, clock: 41, limit: 40, lock: 0 })).toBe('timeout');
+  });
+  it('box-in meter fills close, drains slowly', () => {
+    let l = 0;
+    for (let i = 0; i < 6; i++) l = stepLock(l, 4, true, 0.1);
+    expect(l).toBeCloseTo(0.6);
+    l = stepLock(l, 20, true, 0.4);
+    expect(l).toBeCloseTo(0.4);
+    expect(stepLock(0.5, 4, false, 0.1)).toBeCloseTo(0.45);
+  });
+});
