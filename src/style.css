@@ -798,3 +798,13 @@ html.onfoot.can-order .street-actions button[data-act="order"]{display:block}
 html.onfoot.can-cuff .street-actions button[data-act="cuff"]{display:block}
 #street-hp .threat{display:inline-block;background:#0009;border-radius:8px;padding:2px 8px;color:#ffd23d;font-size:12px}
 .mission-card .mc-help{font-size:12px;opacity:.85}
+
+/* first-call tutorial */
+#street-tut{position:fixed;left:12px;right:12px;bottom:calc(318px + env(safe-area-inset-bottom));z-index:57;display:none;align-items:center;gap:10px;max-width:520px;margin:0 auto;background:rgba(255,210,61,.96);color:#1a1300;border-radius:14px;padding:10px 12px;font:600 15px/1.5 Cairo,sans-serif;box-shadow:0 6px 22px rgba(0,0,0,.45);pointer-events:auto}
+#street-tut.show{display:flex}
+#street-tut b{flex:none;background:#1a1300;color:#ffd23d;border-radius:8px;padding:2px 8px;font-size:12px}
+#street-tut span{flex:1}
+#street-tut button{flex:none;border:0;border-radius:10px;background:rgba(0,0,0,.18);color:#1a1300;font:600 13px Cairo,sans-serif;padding:6px 10px;min-height:36px}
+#street-ui .tut-glow{outline:3px solid #ffd23d;outline-offset:3px;animation:tutpulse 1s ease-in-out infinite}
+@keyframes tutpulse{50%{outline-color:rgba(255,210,61,.25)}}
+@media (prefers-reduced-motion: reduce){#street-ui .tut-glow{animation:none}}
