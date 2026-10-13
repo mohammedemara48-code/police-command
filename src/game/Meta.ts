@@ -1,3 +1,5 @@
+import { reducedMotion, setReducedMotion } from './Motion';
+import { exportSave, importSave } from './Save';
 import type { GameManager } from './GameManager';
 import { audio } from './AudioManager';
 import { quality, setQuality, type Quality } from './Quality';
@@ -109,9 +111,18 @@ export function settingsHtml() {
           <label>الصوت العام <input type="range" min="0" max="1" step="0.05" data-v="master" value="${audio.vol.master}"></label>
           <label>الموسيقى <input type="range" min="0" max="1" step="0.05" data-v="music" value="${audio.vol.music}"></label>
           <label>المؤثرات <input type="range" min="0" max="1" step="0.05" data-v="sfx" value="${audio.vol.sfx}"></label>
+          <label>تقليل الحركة <select data-motion>
+            <option value="full" ${reducedMotion ? '' : 'selected'}>عادي</option>
+            <option value="reduce" ${reducedMotion ? 'selected' : ''}>أقل حركة (بدون اهتزاز الكاميرا)</option>
+          </select></label>
           <label>جودة الرسوم <select data-q>
             ${(['low', 'medium', 'high'] as Quality[]).map((q) => `<option value="${q}" ${q === quality ? 'selected' : ''}>${{ low: 'منخفضة (موبايل ضعيف)', medium: 'متوسطة', high: 'عالية' }[q]}</option>`).join('')}
           </select></label>
+          <div class="save-row">
+            <button type="button" class="btn ghost" data-save="export">⬇️ تصدير الحفظ</button>
+            <button type="button" class="btn ghost" data-save="import">⬆️ استيراد حفظ</button>
+          </div>
+          <p class="save-msg" aria-live="polite">التقدم بيتحفظ تلقائياً على الجهاز ده.</p>
         </div>`;
 }
 
@@ -120,4 +131,12 @@ export function bindSettings(root: HTMLElement, beforeReload: () => void = () =>
     r.addEventListener('input', () => audio.setVolume(r.dataset.v as 'master' | 'music' | 'sfx', Number(r.value))));
   const q = root.querySelector<HTMLSelectElement>('[data-q]');
   q?.addEventListener('change', () => { beforeReload(); setQuality(q.value as Quality); });
+  const m = root.querySelector<HTMLSelectElement>('[data-motion]');
+  m?.addEventListener('change', () => setReducedMotion(m.value === 'reduce'));
+  const msg = root.querySelector<HTMLElement>('.save-msg');
+  root.querySelector('[data-save="export"]')?.addEventListener('click', () => { exportSave(); if (msg) msg.textContent = 'اتحفظ ملف الحفظ في التنزيلات.'; });
+  root.querySelector('[data-save="import"]')?.addEventListener('click', async () => {
+    const err = await importSave();
+    if (err && msg) msg.textContent = err;
+  });
 }
