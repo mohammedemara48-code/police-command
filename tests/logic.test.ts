@@ -139,3 +139,25 @@ describe('save files', () => {
     expect(Object.keys(pickPersisted(s))).not.toContain('running');
   });
 });
+
+import { weekStart, addWeekly, boardName } from '../src/game/logic/weekly';
+describe('weekly leaderboard', () => {
+  it('weeks start on Monday UTC', () => {
+    expect(weekStart(new Date('2026-10-13T22:00:00Z'))).toBe('2026-10-12');
+    expect(weekStart(new Date('2026-10-18T23:59:00Z'))).toBe('2026-10-12');
+    expect(weekStart(new Date('2026-10-19T00:00:00Z'))).toBe('2026-10-19');
+  });
+  it('resets the tally on a new week', () => {
+    const a = addWeekly(null, 250, new Date('2026-10-13T10:00:00Z'));
+    expect(addWeekly(a, 100, new Date('2026-10-14T10:00:00Z'))).toEqual({
+      week: '2026-10-12',
+      points: 350,
+      missions: 2
+    });
+    expect(addWeekly(a, 100, new Date('2026-10-20T10:00:00Z')).points).toBe(100);
+  });
+  it('never shows the e-mail', () => {
+    expect(boardName('', 'rose@example.com')).toBe('rose');
+    expect(boardName('<b>Yasser</b>', 'x@y.z')).toBe('bYasser/b');
+  });
+});

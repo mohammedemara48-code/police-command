@@ -1,4 +1,7 @@
 import './style.css';
+import { inject } from '@vercel/analytics';
+// Vercel Web Analytics: free, cookie-less, no secret. Starts counting once it is enabled in the Vercel project (Analytics tab).
+if (!location.search.includes('autotest')) inject({ mode: 'production' });
 
 // Touch devices (also when the browser reports a fine pointer, e.g. 'desktop site' mode) get the joystick UI.
 if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.documentElement.classList.add('touch');

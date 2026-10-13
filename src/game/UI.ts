@@ -1,3 +1,4 @@
+import { boardHtml, recordWeekly } from './Leaderboard';
 import { models } from './Models';
 import { accountHtml, bindAccount, onAccount, restore, account } from './Account';
 import { achHtml } from './Achievements';
@@ -7,7 +8,8 @@ import { IncidentManager } from './IncidentManager';
 import { CityScene } from './CityScene';
 import { CCTVFeed } from './CCTVFeed';
 import { audio } from './AudioManager';
-import { LEVELS, levelById, progress } from './Levels';
+import { LEVELS, levelById, progress, setMissionXpHook } from './Levels';
+setMissionXpHook(recordWeekly);
 import { settingsHtml, bindSettings } from './Meta';
 import {
   UNIT_LABELS,
@@ -93,7 +95,7 @@ export class UI {
   private launched = false;
   private menuScreen = '';
   private accountHooked = false;
-  private menu(screen: 'main' | 'levels' | 'settings' | 'credits' | 'ach' | 'account') {
+  private menu(screen: 'main' | 'levels' | 'settings' | 'credits' | 'ach' | 'account' | 'board') {
     const cur = levelById(progress.current);
     const body =
       screen === 'main'
@@ -103,6 +105,7 @@ export class UI {
             <button class="btn menu-big" data-m="play">▶ العب — المستوى ${cur.id}: ${cur.title}</button>
             <button class="btn ghost" data-m="levels">المستويات</button>
             <button class="btn ghost" data-m="patrol">🚨 دورية حرة (بلاغات عشوائية)</button>
+            <button class="btn ghost" data-m="board">📊 ترتيب الأسبوع</button>
             <button class="btn ghost" data-m="ach">🏆 الإنجازات</button>
             <button class="btn ghost" data-m="account">👤 ${account.user ? 'حسابي' : 'تسجيل الدخول'}</button>
             <button class="btn ghost" data-m="command">غرفة العمليات (استراتيجية)</button>
@@ -121,6 +124,8 @@ export class UI {
             <button class="btn ghost" data-m="main">رجوع</button>`
           : screen === 'account'
             ? accountHtml()
+          : screen === 'board'
+            ? '<h2>🏆 ترتيب الأسبوع</h2><p class="hint">جاري التحميل…</p><button class="btn ghost" data-m="main">رجوع</button>'
           : screen === 'ach'
             ? `${achHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
           : screen === 'settings'
@@ -136,6 +141,14 @@ export class UI {
     this.overlay.innerHTML = `<div class="start-screen"><div class="start-card glass menu-card">${body}</div></div>`;
     if (screen === 'settings') bindSettings(this.overlay);
     if (screen === 'account') bindAccount(this.overlay, () => this.menu('account'));
+    if (screen === 'board') {
+      void boardHtml().then((html) => {
+        if (this.menuScreen !== 'board' || this.launched) return;
+        const card = this.overlay.querySelector('.menu-card, .meta-card') ?? this.overlay.firstElementChild;
+        if (card) card.innerHTML = `${html}<button class="btn ghost" data-m="main">رجوع</button></div>`;
+        this.overlay.querySelectorAll<HTMLButtonElement>('[data-m]').forEach((b) => b.addEventListener('click', () => { audio.click(); this.menu(b.dataset.m as 'main'); }));
+      });
+    }
     this.menuScreen = screen;
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-m]').forEach((b) =>
       b.addEventListener('click', () => {
