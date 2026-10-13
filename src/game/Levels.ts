@@ -121,6 +121,9 @@ function load(): Progress {
 }
 
 export const progress = load();
+/** hook for the weekly leaderboard (set by UI to avoid an import cycle) */
+let onMissionXp: (xp: number) => void = () => undefined;
+export function setMissionXpHook(f: (xp: number) => void) { onMissionXp = f; }
 export function saveProgress() { try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch { /* ignore */ } }
 
 /** procedurally generated patrol calls (ids ≥ 100), see Dispatch.ts */
@@ -136,9 +139,10 @@ export function completeLevel(id: number, success: boolean, seconds: number) {
   if (!success) return 0;
   const l = levelById(id);
   const stars = starsFor(seconds, l.stars);
-  if (isPatrol(id)) { progress.xp = (progress.xp ?? 0) + xpFor(stars, true); saveProgress(); return stars; }
+  if (isPatrol(id)) { progress.xp = (progress.xp ?? 0) + xpFor(stars, true); saveProgress(); onMissionXp(xpFor(stars, true)); return stars; }
   progress.stars[id] = Math.max(progress.stars[id] ?? 0, stars);
   progress.xp = (progress.xp ?? 0) + xpFor(stars, false);
+  onMissionXp(xpFor(stars, false));
   if (id < LEVELS.length) progress.unlocked = Math.max(progress.unlocked, id + 1);
   progress.current = Math.min(LEVELS.length, id + 1);
   saveProgress();
