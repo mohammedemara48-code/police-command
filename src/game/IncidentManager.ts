@@ -25,6 +25,8 @@ import {
   clamp
 } from './types';
 import { audio } from './AudioManager';
+import { previewOdds, resolveOdds } from './logic/odds';
+import { dispatchReward, reputationDelta, injureChance as injureChanceFor } from './logic/rewards';
 
 interface IncidentTemplate {
   crimeType: CrimeType;
@@ -324,12 +326,8 @@ export class IncidentManager {
   }
 
   previewChance(inc: Incident, choice: DecisionChoice): number {
-    let base = 0.48 + choice.successBonus + this.game.state.equipment / 5000;
-    if (this.game.state.techs.cctv) base += 0.08;
-    if (this.game.state.techs.heli) base += 0.05;
-    if (this.game.state.techs.lab) base += 0.04;
-    base += this.game.state.swatBonus * 0.5;
-    inc.successChancePreview = clamp(base, 0.15, 0.92);
+    const st = this.game.state;
+    inc.successChancePreview = previewOdds({ successBonus: choice.successBonus, equipment: st.equipment, techs: st.techs, swatBonus: st.swatBonus });
     return inc.successChancePreview;
   }
 
@@ -460,33 +458,21 @@ export class IncidentManager {
     const powerSum = units.reduce((s, u) => s + (u?.power || 0), 0);
     const choice = inc.decisions.find((d) => d.id === inc.selectedDecision);
 
-    let chance = clamp(
-      0.4 +
-        preferredHits * 0.16 +
-        powerSum * 0.07 +
-        this.game.state.equipment / 4500 +
-        (choice?.successBonus ?? 0) +
-        (this.game.state.techs.cctv ? 0.08 : 0) +
-        (this.game.state.techs.heli ? 0.05 : 0),
-      0.15,
-      0.96
-    );
-    if (inc.selectedDecision === 'breach' || units.some((u) => u?.type === UnitType.SWAT)) {
-      chance = clamp(chance + this.game.state.swatBonus, 0.15, 0.97);
-    }
-    if (this.game.state.techs.lab && units.some((u) => u?.type === UnitType.Investigations)) {
-      chance = clamp(chance + 0.1, 0.15, 0.97);
-    }
-
+    const chance = resolveOdds({
+      preferredHits, powerSum, equipment: this.game.state.equipment, successBonus: choice?.successBonus ?? 0,
+      techs: this.game.state.techs, swatBonus: this.game.state.swatBonus,
+      breachOrSwat: inc.selectedDecision === 'breach' || units.some((u) => u?.type === UnitType.SWAT),
+      labWithInvestigations: !!this.game.state.techs.lab && units.some((u) => u?.type === UnitType.Investigations)
+    });
     const success = Math.random() < chance;
     const officers = this.matchingOfficers(inc);
-    const reward = success ? Math.round(inc.reward * (choice?.rewardMul ?? 1)) : 0;
-    const injureChance = success ? (choice?.riskToOfficers ?? 0) * 0.35 : (choice?.riskToOfficers ?? 0.2);
+    const reward = dispatchReward(success, inc.reward, choice?.rewardMul);
+    const injureChance = injureChanceFor(success, choice?.riskToOfficers, 0.35);
 
     this.game.applyMissionResult({
       success,
       reward,
-      reputationDelta: success ? inc.reputationDelta : Math.max(2, Math.floor(inc.severity * 1.5)),
+      reputationDelta: reputationDelta(success, inc.reputationDelta, inc.severity),
       officerIds: officers.map((o) => o.id),
       severity: inc.severity,
       injureChance
@@ -616,29 +602,21 @@ export class IncidentManager {
     const preferredHits = units.filter((u) => inc.preferredUnits.includes(u.type)).length;
     const powerSum = units.reduce((s, u) => s + u.power, 0);
     const choice = inc.decisions.find((d) => d.id === inc.selectedDecision);
-    let chance = clamp(
-      0.42 +
-        preferredHits * 0.16 +
-        powerSum * 0.07 +
-        this.game.state.equipment / 4500 +
-        (choice?.successBonus ?? 0) +
-        (this.game.state.techs.cctv ? 0.08 : 0) +
-        (this.game.state.techs.heli ? 0.05 : 0) +
-        (units.length ? 0.08 : -0.12),
-      0.18,
-      0.94
-    );
-    if (inc.selectedDecision === 'breach' || units.some((u) => u.type === UnitType.SWAT)) {
-      chance = clamp(chance + this.game.state.swatBonus, 0.18, 0.96);
-    }
+    const chance = resolveOdds({
+      quick: true, unitCount: units.length,
+      preferredHits, powerSum, equipment: this.game.state.equipment, successBonus: choice?.successBonus ?? 0,
+      techs: this.game.state.techs, swatBonus: this.game.state.swatBonus,
+      breachOrSwat: inc.selectedDecision === 'breach' || units.some((u) => u.type === UnitType.SWAT),
+      labWithInvestigations: false
+    });
     const success = Math.random() < chance;
     const officers = this.matchingOfficers(inc);
-    const reward = success ? Math.round(inc.reward * (choice?.rewardMul ?? 1)) : 0;
-    const injureChance = success ? (choice?.riskToOfficers ?? 0) * 0.45 : choice?.riskToOfficers ?? 0.2;
+    const reward = dispatchReward(success, inc.reward, choice?.rewardMul);
+    const injureChance = injureChanceFor(success, choice?.riskToOfficers, 0.45);
     const outcome = this.game.applyMissionResult({
       success,
       reward,
-      reputationDelta: success ? inc.reputationDelta : Math.max(2, Math.floor(inc.severity * 1.5)),
+      reputationDelta: reputationDelta(success, inc.reputationDelta, inc.severity),
       officerIds: officers.map((o) => o.id),
       severity: inc.severity,
       injureChance
