@@ -1,10 +1,10 @@
 # POLICE COMMAND — قيادة الشرطة
 
 <p align="center">
-  <img src="docs/media/demo.gif" width="200" alt="gameplay">
-  <img src="docs/media/radio.jpg" width="160" alt="radio call">
-  <img src="docs/media/chase.jpg" width="160" alt="car chase">
-  <img src="docs/media/boss.jpg" width="160" alt="shootout">
+  <img src="docs/media/demo.svg" width="200" alt="gameplay (animated)">
+  <img src="docs/media/radio.svg" width="160" alt="radio call">
+  <img src="docs/media/chase.svg" width="160" alt="car chase">
+  <img src="docs/media/boss.svg" width="160" alt="shootout">
 </p>
 
 لعبة شرطة ثلاثية الأبعاد في المتصفح (Three.js + Vite + PWA) بواجهة عربية RTL: حملة قصة من 12 مهمة، ودورية حرة ببلاغات عشوائية، ومطاردات، واعتقالات.
