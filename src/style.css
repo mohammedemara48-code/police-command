@@ -820,3 +820,10 @@ html.onfoot.can-cuff .street-actions button[data-act="cuff"]{display:block}
 html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important;scroll-behavior:auto!important}
 .meta-settings .save-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .meta-settings .save-msg{font-size:12px;opacity:.75;margin:4px 0 0}
+
+/* PWA update prompt */
+#pwa-update{position:fixed;top:calc(10px + env(safe-area-inset-top));left:10px;right:10px;max-width:460px;margin:0 auto;z-index:9500;display:flex;align-items:center;gap:8px;background:#0d1d33;border:1px solid #3aa0ff;border-radius:14px;padding:10px 12px;color:#eaf2ff;font:600 14px Cairo,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+#pwa-update span{flex:1}
+#pwa-update button{border:0;border-radius:10px;padding:8px 12px;font:700 13px Cairo,sans-serif;min-height:40px}
+#pwa-update [data-u="go"]{background:#3aa0ff;color:#fff}
+#pwa-update [data-u="later"]{background:rgba(255,255,255,.1);color:#eaf2ff}

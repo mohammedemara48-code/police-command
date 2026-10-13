@@ -8,7 +8,10 @@ import { CityScene } from './game/CityScene';
 import { UI } from './game/UI';
 import { audio } from './game/AudioManager';
 import { Meta } from './game/Meta';
-import { restoreCommand, startAutosave } from './game/Save';
+import { restoreCommand, startAutosave, saveCommand } from './game/Save';
+import { registerSW as register } from 'virtual:pwa-register';
+const registerSW = (o: Parameters<typeof register>[0]) => { updateSW = register(o); };
+let updateSW: (reload?: boolean) => Promise<void> = async () => undefined;
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const game = new GameManager();
@@ -60,14 +63,21 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 
 
-// Reload once when a new service worker takes over, so a deploy applies on a single refresh.
-if ('serviceWorker' in navigator) {
-  let reloaded = false;
-  // first visit: the service worker installs and claims the page; that is not an update, so don't reload mid-game
-  const hadController = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloaded || !hadController) return;
-    reloaded = true;
-    location.reload();
-  });
-}
+// PWA: offline cache + "new version available" prompt (the new service worker waits until the player taps Update).
+registerSW({
+  onNeedRefresh() {
+    if (document.getElementById('pwa-update')) return;
+    const bar = document.createElement('div');
+    bar.id = 'pwa-update';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = '<span>🚨 فيه نسخة جديدة من اللعبة.</span><button type="button" data-u="go">تحديث</button><button type="button" data-u="later">بعدين</button>';
+    bar.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest('[data-u]') as HTMLElement | null;
+      if (!b) return;
+      if (b.dataset.u === 'go') { saveCommand(game); void updateSW(true); }
+      bar.remove();
+    });
+    document.body.appendChild(bar);
+  },
+  onOfflineReady() { /* cached for offline play */ }
+});
