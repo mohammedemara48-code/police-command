@@ -161,3 +161,42 @@ describe('weekly leaderboard', () => {
     expect(boardName('<b>Yasser</b>', 'x@y.z')).toBe('bYasser/b');
   });
 });
+
+import { stepLoco, followCamYaw, RUN, WALK } from '../src/game/logic/locomotion';
+describe('on-foot locomotion', () => {
+  const s0 = { vx: 0, vz: 0, yaw: 0 };
+  it('accelerates smoothly instead of jumping to full speed', () => {
+    const a = stepLoco(s0, 0, 1, 0, false, 0.05);
+    expect(Math.hypot(a.vx, a.vz)).toBeCloseTo(0.8);
+    let s = s0;
+    for (let i = 0; i < 40; i++) s = stepLoco(s, 0, 1, 0, false, 0.05);
+    expect(s.vz).toBeCloseTo(RUN, 1);
+    let w = s0;
+    for (let i = 0; i < 40; i++) w = stepLoco(w, 0, 0.6, 0, false, 0.05);
+    expect(w.vz).toBeCloseTo(WALK * (0.6 / 0.92), 1);
+  });
+  it('is camera-relative: stick forward moves along the camera heading', () => {
+    let s = s0;
+    for (let i = 0; i < 40; i++) s = stepLoco(s, 0, 1, Math.PI / 2, true, 0.05);
+    expect(s.vx).toBeCloseTo(RUN, 1);
+    expect(Math.abs(s.vz)).toBeLessThan(0.01);
+    expect(s.yaw).toBeCloseTo(Math.PI / 2, 2);
+  });
+  it('decelerates to a stop when the stick is released', () => {
+    let s = { vx: 0, vz: RUN, yaw: 0 };
+    s = stepLoco(s, 0, 0, 0, false, 0.1);
+    expect(s.vz).toBeCloseTo(RUN - 2.2);
+    for (let i = 0; i < 10; i++) s = stepLoco(s, 0, 0, 0, false, 0.1);
+    expect(s.vz).toBe(0);
+  });
+  it('turns at a limited rate', () => {
+    const s = stepLoco(s0, 1, 0, 0, false, 0.05);
+    expect(Math.abs(s.yaw)).toBeCloseTo(0.55, 2);
+  });
+  it('camera follows only when moving away from it', () => {
+    expect(followCamYaw(0, 0.5, 5, 0.1)).toBeGreaterThan(0);
+    expect(followCamYaw(0, 1.6, 5, 0.1)).toBe(0);
+    expect(followCamYaw(0, 3, 5, 0.1)).toBe(0);
+    expect(followCamYaw(0, 1, 0.2, 0.1)).toBe(0);
+  });
+});

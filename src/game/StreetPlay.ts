@@ -1,4 +1,5 @@
 import { reducedMotion } from './Motion';
+import { stepLoco, followCamYaw } from './logic/locomotion';
 import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z, findPath, farNode, followPath } from './City';
 import { newCall } from './Dispatch';
 import { Squad } from './Npc';
@@ -160,6 +161,11 @@ export class StreetPlay {
   private eventGroup = new THREE.Group();
   private travel: { z: number; fast: boolean } | null = null;
   private hold: Hold = { f: false, b: false, l: false, r: false, run: false };
+  /** analog joystick (x right, y forward, 0..1) for camera-relative on-foot movement */
+  private stick = { x: 0, y: 0 };
+  private camYaw = 0;
+  private legPhase = 0;
+  private vel = { x: 0, z: 0 };
   private keys = new Set<string>();
   private ui: HTMLElement | null = null;
   private mapEl: HTMLElement | null = null;
@@ -1242,9 +1248,10 @@ export class StreetPlay {
       dx *= k; dy *= k;
       knob.style.transform = `translate(${dx}px, ${dy}px)`;
       const nx = dx / R, ny = dy / R;
+      this.stick.x = nx; this.stick.y = -ny;
       this.hold.f = ny < -0.3; this.hold.b = ny > 0.3;
       this.hold.l = nx < -0.35; this.hold.r = nx > 0.35;
-      this.hold.run = m * k / R > 0.92 && !this.inCar;
+      this.hold.run = false; // full deflection runs (see stepLoco)
     };
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault(); if (id !== null) return; id = e.pointerId; try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
@@ -1298,6 +1305,8 @@ export class StreetPlay {
       if (onRoad(ex, ez, 3.6)) this.player.position.set(ex, 0, ez);
       else this.player.position.set(this.car.position.x, 0, this.car.position.z);
       this.yaw = cy;
+      this.camYaw = cy;
+      this.vel.x = 0; this.vel.z = 0;
       document.documentElement.classList.add('onfoot');
       this.setStatus('نزلت من الدورية.');
       const btn = this.ui?.querySelector('[data-act="car"]');
@@ -1528,10 +1537,11 @@ export class StreetPlay {
   }
 
   private snapCamera(k: number) {
+    if (k >= 1 && !this.inCar) this.camYaw = this.yaw;
     const target = this.inCar ? this.car : this.player;
     const back = this.inCar ? 8.2 : 5.2;
     const up = this.inCar ? 3.1 : 2.25;
-    const yaw = this.inCar ? this.car.rotation.y : this.yaw;
+    const yaw = this.inCar ? this.car.rotation.y : this.camYaw;
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
     let b = back;
@@ -1640,23 +1650,29 @@ export class StreetPlay {
         this.speed *= -0.25;
       }
     } else {
-      const moving = throttle !== 0 || turn !== 0;
-      if (turn !== 0 && throttle === 0) this.yaw += turn * dt * 2.2;
-      if (throttle !== 0) {
-        const aim = Math.atan2(turn, throttle);
-        this.yaw = approachAngle(this.yaw, aim, dt * 6);
-      }
-      const spd = (input.run ? 5.2 : 2.6) * (throttle || (turn ? 0.8 : 0));
-      const nx = this.player.position.x + Math.sin(this.yaw) * spd * dt;
-      const nz = this.player.position.z + Math.cos(this.yaw) * spd * dt;
-      if (onRoad(nx, nz, 3.6)) this.player.position.set(nx, this.player.position.y, nz);
+      // camera-relative third-person movement with acceleration, turning and wall sliding
+      let ix = this.stick.x, iy = this.stick.y;
+      if (!ix && !iy) { ix = -turn; iy = throttle; }
+      const lo = stepLoco({ vx: this.vel.x, vz: this.vel.z, yaw: this.yaw }, ix, iy, this.camYaw, input.run, dt);
+      this.vel.x = lo.vx; this.vel.z = lo.vz;
+      if (!this.firing) this.yaw = lo.yaw;
+      const P = this.player.position;
+      const mx = lo.vx * dt, mz = lo.vz * dt;
+      if (onRoad(P.x + mx, P.z + mz, 3.6)) { P.x += mx; P.z += mz; }
+      else if (onRoad(P.x + mx, P.z, 3.6)) { P.x += mx; this.vel.z *= 0.5; }
+      else if (onRoad(P.x, P.z + mz, 3.6)) { P.z += mz; this.vel.x *= 0.5; }
+      else { this.vel.x = 0; this.vel.z = 0; }
       this.player.rotation.y = this.yaw;
-      if (spd !== 0) {
-        this.stepT -= dt * Math.abs(spd);
+      const spd = Math.hypot(this.vel.x, this.vel.z);
+      this.camYaw = followCamYaw(this.camYaw, this.yaw, spd, dt);
+      if (spd > 0.3) {
+        this.stepT -= dt * spd;
         if (this.stepT <= 0) { this.stepT = 1.5; audio.sample(Math.random() < 0.5 ? 'step1' : 'step2', 0.5, 0.9 + Math.random() * 0.2); }
       }
+      // fallback primitive legs (before the rigged model loads): swing in step with speed
       const legs = (this.player.userData.legs || []) as THREE.Object3D[];
-      const swing = moving ? Math.sin(performance.now() / 140) * 0.6 : 0;
+      this.legPhase += dt * spd * 3.2;
+      const swing = spd > 0.3 ? Math.sin(this.legPhase) * Math.min(0.7, spd * 0.18) : 0;
       if (legs[0]) legs[0].rotation.x = swing;
       if (legs[1]) legs[1].rotation.x = -swing;
       if (this.missionId) {
