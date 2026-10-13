@@ -32,5 +32,7 @@ export const Q = {
   particles: quality === 'low' ? 0.3 : quality === 'medium' ? 0.7 : 1,
   /** LOD: on low quality, crowds/traffic use the light Kenney models; the player officer and patrol car stay realistic. */
   lowDetailPeople: quality === 'low',
+  /** real street-lamp PointLights in the command-center city */
+  lampLights: quality === 'low' ? 0 : quality === 'medium' ? 3 : 6,
   rain: quality === 'low' ? 120 : quality === 'medium' ? 450 : 700
 };

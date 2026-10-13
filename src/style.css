@@ -808,3 +808,10 @@ html.onfoot.can-cuff .street-actions button[data-act="cuff"]{display:block}
 #street-ui .tut-glow{outline:3px solid #ffd23d;outline-offset:3px;animation:tutpulse 1s ease-in-out infinite}
 @keyframes tutpulse{50%{outline-color:rgba(255,210,61,.25)}}
 @media (prefers-reduced-motion: reduce){#street-ui .tut-glow{animation:none}}
+
+/* street-mode loading screen (code-split chunk + progressive models) */
+.loading-screen{position:fixed;inset:0;z-index:9000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(circle at 50% 40%,#10233f,#050b14 70%);color:#eaf2ff;font:600 16px/1.6 Cairo,sans-serif;padding:24px;text-align:center;pointer-events:auto}
+.loading-screen .ls-title{font-size:20px;font-weight:800}
+.loading-screen .ls-bar{width:min(320px,80vw);height:10px;border-radius:6px;background:rgba(126,200,255,.18);overflow:hidden}
+.loading-screen .ls-bar i{display:block;height:100%;width:10%;background:linear-gradient(90deg,#3aa0ff,#ffd23d);transition:width .2s}
+.loading-screen .ls-tip{font-size:13px;opacity:.75;max-width:320px}
