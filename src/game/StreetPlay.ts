@@ -1,3 +1,4 @@
+import { reducedMotion } from './Motion';
 import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z, findPath, farNode, followPath } from './City';
 import { newCall } from './Dispatch';
 import { Squad } from './Npc';
@@ -1615,7 +1616,7 @@ export class StreetPlay {
       fx.smoke(this.group, this.car.position.x - Math.sin(this.yaw) * 2.1, 0.35, this.car.position.z - Math.cos(this.yaw) * 2.1);
     }
     this.snapCamera(1 - Math.pow(0.0008, dt));
-    if (this.recoil > 0) { this.camera.position.y += this.recoil * 0.05; this.camera.rotation.x += this.recoil * 0.012; }
+    if (this.recoil > 0 && !reducedMotion) { this.camera.position.y += this.recoil * 0.05; this.camera.rotation.x += this.recoil * 0.012; }
     this.uiT += dt;
     if (this.uiT > 0.12) { this.uiT = 0; this.drawMini(); this.objective(); }
     else this.objectiveWorld();

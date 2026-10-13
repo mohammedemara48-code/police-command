@@ -815,3 +815,8 @@ html.onfoot.can-cuff .street-actions button[data-act="cuff"]{display:block}
 .loading-screen .ls-bar{width:min(320px,80vw);height:10px;border-radius:6px;background:rgba(126,200,255,.18);overflow:hidden}
 .loading-screen .ls-bar i{display:block;height:100%;width:10%;background:linear-gradient(90deg,#3aa0ff,#ffd23d);transition:width .2s}
 .loading-screen .ls-tip{font-size:13px;opacity:.75;max-width:320px}
+
+/* reduced motion (setting or OS preference) */
+html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important;scroll-behavior:auto!important}
+.meta-settings .save-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.meta-settings .save-msg{font-size:12px;opacity:.75;margin:4px 0 0}

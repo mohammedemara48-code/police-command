@@ -1,3 +1,4 @@
+import { reducedMotion } from './Motion';
 // @source-complete
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -597,7 +598,7 @@ export class CityScene {
       return;
     }
     this.fly.active = true;
-    this.fly.dur = close ? 1000 : 1300;
+    this.fly.dur = reducedMotion ? 1 : close ? 1000 : 1300;
     this.fly.fromPos.copy(this.camera.position);
     this.fly.fromTarget.copy(this.controls.target);
     const dist = close ? 18 : 32;
