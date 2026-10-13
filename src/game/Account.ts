@@ -28,6 +28,7 @@ async function auth(path: string, body?: unknown) {
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error((j as { message?: string }).message || `HTTP ${r.status}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped auth server JSON
   return j as Record<string, any>;
 }
 
@@ -66,7 +67,7 @@ function merge(a: Snap, b: Partial<Snap>): Snap {
   }
   const A = b.ach;
   if (A) {
-    for (const [k, v] of Object.entries(A.stats || {})) (out.ach.stats as any)[k] = Math.max((a.ach.stats as any)[k] ?? 0, v as number);
+    for (const [k, v] of Object.entries(A.stats || {})) (out.ach.stats as Record<string, number>)[k] = Math.max((a.ach.stats as Record<string, number>)[k] ?? 0, v as number);
     for (const [k, v] of Object.entries(A.unlocked || {})) out.ach.unlocked[k] = Math.min(a.ach.unlocked[k] ?? Infinity, v as number);
   }
   const M = b.meta || {};

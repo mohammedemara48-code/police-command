@@ -9,7 +9,6 @@ export class AudioManager {
   private ambientNodes: AudioNode[] = [];
   private sirenTimer: number | null = null;
   private sirenOsc: OscillatorNode | null = null;
-  private sirenGain: GainNode | null = null;
   enabled = true;
   private sfxGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
@@ -215,7 +214,6 @@ export class AudioManager {
     g.connect(this.master);
     osc.start();
     this.sirenOsc = osc;
-    this.sirenGain = g;
     let hi = true;
     this.sirenTimer = window.setInterval(() => {
       if (!this.ctx || !this.sirenOsc) return;
@@ -236,7 +234,6 @@ export class AudioManager {
       /* ignore */
     }
     this.sirenOsc = null;
-    this.sirenGain = null;
   }
 
   success() {

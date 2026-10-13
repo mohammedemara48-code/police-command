@@ -10,9 +10,8 @@ export default tseslint.config(
     files: ['**/*.{ts,js,mjs}'],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
     rules: {
-      // Legacy code is being migrated; tighten these step by step (see tasks/plan.md).
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-non-null-assertion': 'off',
       'no-empty': ['error', { allowEmptyCatch: true }]
     }

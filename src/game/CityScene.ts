@@ -278,7 +278,6 @@ export class CityScene {
 
     // Main block
     const concrete = this.mat(0x2a3548, { roughness: 0.55, metalness: 0.3 });
-    const accent = this.mat(0x1e90ff, { emissive: 0x0a3a80, emissiveIntensity: 0.45, metalness: 0.5 });
     hq.add(this.box(18, 7, 14, concrete, 0, 3.5, 0));
     hq.add(this.box(10, 4.5, 10, concrete, 0, 9.25, 0));
     // glass facade strip

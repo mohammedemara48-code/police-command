@@ -4,7 +4,7 @@ import { newCall } from './Dispatch';
 import { Squad } from './Npc';
 import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
-import { models, CARS, LOW_CARS, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
+import { models, CARS, LOW_CARS, REAL_PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
 import { Q } from './Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -62,14 +62,6 @@ const MISSION_POOL: MissionDef[] = [
   { id: 'm-sub-drugs', placeId: 'suburb', kind: 'drugs', title: 'مداهمة بيت', blurb: 'بلاغ مخدرات في الضاحية' }
 ];
 
-const KIND_LABEL: Record<MissionKind, string> = {
-  chase: 'مطاردة',
-  robbery: 'سطو',
-  drugs: 'مخدرات',
-  assault: 'اعتداء',
-  traffic: 'حادث'
-};
-
 type Ped = {
   mesh: THREE.Group;
   female: boolean;
@@ -110,7 +102,6 @@ export class StreetPlay {
   private flash: THREE.PointLight[] = [];
   private inCar = false;
   private squad!: Squad;
-  private gangOn = false;
   // ---- mission runner (docs/GAME_DESIGN.md §2)
   private msIdx = -1;
   private msTime = 0;
@@ -163,18 +154,10 @@ export class StreetPlay {
   private placeId = 'downtown';
   private missionId = 'port';
   private missions: MissionDef[] = [];
-  private missionIndex = 0;
   private activeMission: MissionDef | null = null;
-  private phase: 'idle' | 'travel' | 'on_scene' | 'acting' | 'chasing' | 'result' = 'idle';
   private chasing = false;
   private chaseTime = 0;
-  private actTime = 0;
-  private actNeed = 4;
-  private sceneCenter = new THREE.Vector3();
   private eventGroup = new THREE.Group();
-  private neonMats: THREE.MeshStandardMaterial[] = [];
-  private promptEl: HTMLElement | null = null;
-  private opStartedAt = 0;
   private travel: { z: number; fast: boolean } | null = null;
   private hold: Hold = { f: false, b: false, l: false, r: false, run: false };
   private keys = new Set<string>();
@@ -222,14 +205,10 @@ export class StreetPlay {
       [copy[i], copy[j]] = [copy[j], copy[i]];
     }
     this.missions = copy.slice(0, 4);
-    this.missionIndex = 0;
     this.activeMission = this.missions[0] || null;
     this.missionId = this.activeMission?.placeId || 'port';
   }
 
-  private currentMission() {
-    return this.missions[this.missionIndex] || this.activeMission;
-  }
 
   private mat(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
     return new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.12, ...opts });
@@ -1365,7 +1344,7 @@ export class StreetPlay {
   }
 
   /** Fast travel or drive toward a world point on the avenue. */
-  goToWorld(x: number, z: number, fast: boolean) {
+  goToWorld(_x: number, z: number, fast: boolean) {
     const place = STREET_PLACES.reduce((a, b) => (Math.abs(b.z - z) < Math.abs(a.z - z) ? b : a));
     this.travelTo(place.id, fast);
   }
@@ -1417,11 +1396,9 @@ export class StreetPlay {
   }
 
 
-  private beginGang() { /* replaced by 'suspects' steps */ }
 
 
   private endGang() {
-    this.gangOn = false;
     this.firing = false;
     this.squad?.clear();
     document.documentElement.classList.remove('armed', 'can-order', 'can-cuff');
@@ -1429,7 +1406,6 @@ export class StreetPlay {
   }
 
 
-  private finishChase(success: boolean) { this.finishMission(success); }
 
   private finishMission(success: boolean, reason = '') {
     if (this.msIdx < 0 || this.resultEl) return;
@@ -1820,7 +1796,6 @@ export class StreetPlay {
     const ctx = c.getContext('2d');
     if (!ctx) return;
     const pos = this.inCar ? this.car.position : this.player.position;
-    const target = STREET_PLACES.find((p) => p.id === this.level.placeId);
     const dots: { x: number; z: number; c: string; r: number }[] = STREET_PLACES.map((p) => ({ x: 0, z: p.z, c: p.id === this.missionId ? '#ff4d6d' : '#3aa0ff', r: p.id === this.missionId ? 5 : 3 }));
     for (const m of this.squad.list) if (m.state !== 'down' && m.state !== 'cuffed') dots.push({ x: m.g.position.x, z: m.g.position.z, c: m.state === 'hands' ? '#7dff9a' : '#ff3b3b', r: 2.5 });
     if (this.msHasTarget) dots.push({ x: this.msTarget.x, z: this.msTarget.z, c: '#ffd23d', r: 4 });
