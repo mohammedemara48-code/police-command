@@ -4,12 +4,12 @@
 1. Repo/deploy cleanup: Vercel is the only host (Cloudflare Pages `wrangler.toml` and the unused multiplayer `worker/` removed); delete leftover `scripts/` (encoded/game-parts/patches/restore/street-b64 and the decode/assemble scripts); MIT LICENSE (third-party assets keep their own licences, see CREDITS.md); README with screenshots and a short GIF at the top.
 2. CI: GitHub Actions on every push running typecheck, lint, format check, unit tests and build; ESLint + Prettier; move toward stricter TS (noUnused*, then noUncheckedIndexedAccess); unit tests (Vitest) for pure game logic (success odds, rewards, economy), with that logic split out of rendering code into `src/game/logic/`.
 3. Mobile performance: code splitting (lazy-load street mode / three.js chunks), a loading screen with progressive model loading, Draco/Meshopt geometry plus KTX2 textures, InstancedMesh for lamps and buildings, fewer real lights at night (emissive + baked glow).
-4. UX: interactive tutorial for the first call; autosave plus save export/import (JSON file); remove `user-scalable=no`; a reduced-motion option (respects `prefers-reduced-motion`).
+4. UX: ✅ (Oct 13) interactive tutorial for the first call (5 contextual hints that highlight the right button, skip button, no time-out while learning) and ✅ `user-scalable=no` removed; still to do: autosave plus save export/import (JSON file); a reduced-motion option (respects `prefers-reduced-motion`).
 5. PWA: maskable icons, offline asset cache, "new version available" prompt, og:image / social preview.
 6. Hide unfinished multiplayer from the UI (no client UI exists; the worker backend is removed in item 1).
 7. Lightweight analytics (Plausible or PostHog free tier), Sentry free tier for errors, and a weekly leaderboard on the existing Neon database (RLS).
 
-Started Oct 13: items 1, 2 and the tutorial from item 4, one PR each.
+Oct 13: item 1 ✅ (PR #14), item 2 ✅ except the workflow file, which the owner has to add (PR #15), tutorial ✅ (PR #16).
 
 Process: spec first (docs/GAME_DESIGN.md), small vertical slices, each one PR → squash-merge → live check, headless 412×915 play-test, perf budget (phones on low quality: ≤ ~60 draw calls in street mode, no per-frame allocations in hot loops).
 
