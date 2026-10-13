@@ -28,7 +28,7 @@ function frame(now: number) {
 
   if (meta.active || !game.state.running) {
     game.tick(dt);
-    if (!city.street.active) incidents.tick(dt);
+    if (!city.street?.active) incidents.tick(dt);
   }
   meta.check();
   if (meta.paused || meta.over) { requestAnimationFrame(frame); return; }
@@ -45,10 +45,10 @@ function frame(now: number) {
   }
 
   // Street patrol is always played at golden-hour/dusk; keep the HUD clock in sync with what is on screen.
-  if (city.street.active) game.state.cityHour = 18.9;
-  if (Math.abs(game.state.cityHour - lastHour) > 0.02 || city.street.active !== lastStreet) {
+  if (city.street?.active) game.state.cityHour = 18.9;
+  if (Math.abs(game.state.cityHour - lastHour) > 0.02 || !!city.street?.active !== lastStreet) {
     lastHour = game.state.cityHour;
-    lastStreet = city.street.active;
+    lastStreet = !!city.street?.active;
     city.setTimeOfDay(game.state.cityHour);
   }
   city.update(dt);
