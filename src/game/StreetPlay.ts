@@ -7,6 +7,7 @@ import { models, CARS, LOW_CARS, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS, fx 
 import { audio } from './AudioManager';
 import { Q } from './Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { tutorialHint, TUT_KEY, TUT_STEPS, type TutAct } from './logic/tutorial';
 import { LEVELS, levelById, completeLevel, progress, rank, isPatrol, type LevelDef, type Line, type Behaviour } from './Levels';
 
 export interface StreetPlace {
@@ -124,6 +125,12 @@ export class StreetPlay {
   private radioDone: (() => void) | null = null;
   private radioT = 0;
   private radioEl: HTMLElement | null = null;
+  // first-call interactive tutorial (mission 1, until finished or skipped)
+  private tutOn = false;
+  private tutEl: HTMLElement | null = null;
+  private tutT = 0;
+  private tutHtml = '';
+  private tutAct: TutAct = null;
   private retEl: HTMLElement | null = null;
   private hudEl: HTMLElement | null = null;
   private hudHtml = '';
@@ -565,7 +572,54 @@ export class StreetPlay {
     this.msIdx = 0;
     this.msTime = 0;
     this.squad.resetPlayer();
+    let seen = false;
+    try { seen = !!localStorage.getItem(TUT_KEY); } catch { /* private mode */ }
+    this.tutOn = this.level.id === 1 && !seen;
+    this.tutHtml = '';
     this.enterStep();
+  }
+
+  private endTutorial(save: boolean) {
+    if (save) { try { localStorage.setItem(TUT_KEY, '1'); } catch { /* ignore */ } }
+    this.tutOn = false;
+    this.setTutGlow(null);
+    if (this.tutEl) { this.tutEl.classList.remove('show'); this.tutEl.innerHTML = ''; }
+    this.tutHtml = '';
+  }
+
+  private setTutGlow(act: TutAct) {
+    if (act === this.tutAct) return;
+    this.ui?.querySelectorAll('.tut-glow').forEach((e) => e.classList.remove('tut-glow'));
+    this.tutAct = act;
+    if (!act || !this.ui) return;
+    const sel = act === 'move' ? '.street-stick, .street-pad' : `[data-act="${act}"]`;
+    this.ui.querySelectorAll(sel).forEach((e) => e.classList.add('tut-glow'));
+  }
+
+  private stepTutorial(dt: number) {
+    if (!this.tutOn || !this.tutEl) return;
+    this.tutT -= dt;
+    if (this.tutT > 0) return;
+    this.tutT = 0.25;
+    const st = this.msIdx >= 0 ? this.level.steps[this.msIdx] : undefined;
+    const me = this.player.position;
+    let best: { state: string; d: number } | undefined;
+    for (const x of this.squad.list) {
+      if (x.state === 'cuffed' || x.state === 'down') continue;
+      const d = Math.hypot(x.g.position.x - me.x, x.g.position.z - me.z);
+      if (!best || d < best.d) best = { state: x.state, d };
+    }
+    const hint = this.resultEl ? null : tutorialHint({
+      step: st ? st.t : 'done', inCar: this.inCar, radioShowing: !!this.radioEl?.classList.contains('show'),
+      targetState: best?.state, targetDist: best?.d, touch: matchMedia('(pointer:coarse)').matches
+    });
+    this.setTutGlow(hint?.act ?? null);
+    const html = hint ? `<b>تعليم ${hint.n}/${TUT_STEPS}</b><span>${hint.text}</span><button type="button" data-tut="skip">تخطي</button>` : '';
+    if (html !== this.tutHtml) {
+      this.tutHtml = html;
+      this.tutEl.innerHTML = html;
+      this.tutEl.classList.toggle('show', !!html);
+    }
   }
 
   private nextStep() {
@@ -630,7 +684,7 @@ export class StreetPlay {
       case 'radio': break;
     }
     if (this.squad.failed) this.finishMission(false, this.squad.failed);
-    else if (this.msTime > this.level.limit) this.finishMission(false, 'الوقت خلص.');
+    else if (!this.tutOn && this.msTime > this.level.limit) this.finishMission(false, 'الوقت خلص.');
   }
 
   // ---- radio dialogue
@@ -1121,6 +1175,7 @@ export class StreetPlay {
       <canvas id="street-mini" width="180" height="180"></canvas>
       <div id="street-status"></div>
       <div id="street-obj"></div>
+      <div id="street-tut" role="status" aria-live="polite"></div>
       <div id="street-dir"><i>➤</i></div>
       <div class="street-stick" dir="ltr"><div class="street-knob"></div></div>
       <div class="street-pad" dir="ltr">
@@ -1148,6 +1203,8 @@ export class StreetPlay {
     this.mini = ui.querySelector('#street-mini');
     this.statusEl = ui.querySelector('#street-status');
     this.objEl = ui.querySelector('#street-obj');
+    this.tutEl = ui.querySelector('#street-tut');
+    this.tutEl?.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-tut="skip"]')) this.endTutorial(true); });
     this.dirEl = ui.querySelector('#street-dir');
     this.objHtml = '';
     const press = (k: keyof Hold, on: boolean) => {
@@ -1375,6 +1432,7 @@ export class StreetPlay {
 
   private finishMission(success: boolean, reason = '') {
     if (this.msIdx < 0 || this.resultEl) return;
+    if (this.tutOn) this.endTutorial(success);
     this.msIdx = -1;
     this.chasing = false;
     this.chaseArrest = false;
@@ -1529,6 +1587,7 @@ export class StreetPlay {
     this.stepPeds(dt);
     this.stepTraffic(dt);
     this.stepChase(dt);
+    this.stepTutorial(dt);
     if (this.firing && !this.inCar && !this.resultEl) this.squad.shoot(this.player.position, this.yaw);
     this.squad.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
     this.tickMission(dt);

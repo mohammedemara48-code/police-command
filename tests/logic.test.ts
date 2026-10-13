@@ -91,3 +91,22 @@ describe('economy', () => {
     expect(promoteCost(3)).toBe(850);
   });
 });
+
+import { tutorialHint } from '../src/game/logic/tutorial';
+describe('first-call tutorial', () => {
+  const t = { inCar: false, radioShowing: false, touch: true } as const;
+  it('stays quiet while the radio talks', () => {
+    expect(tutorialHint({ ...t, step: 'car', radioShowing: true })).toBeNull();
+  });
+  it('walks through car → drive → exit → order → cuff', () => {
+    expect(tutorialHint({ ...t, step: 'car' })?.act).toBe('car');
+    expect(tutorialHint({ ...t, step: 'goto', inCar: true })?.n).toBe(2);
+    expect(tutorialHint({ ...t, step: 'suspects', inCar: true })?.n).toBe(3);
+    expect(tutorialHint({ ...t, step: 'suspects', targetState: 'idle', targetDist: 8 })?.act).toBe('order');
+    expect(tutorialHint({ ...t, step: 'suspects', targetState: 'hands', targetDist: 6 })?.act).toBe('move');
+    expect(tutorialHint({ ...t, step: 'suspects', targetState: 'hands', targetDist: 1.5 })?.act).toBe('cuff');
+  });
+  it('uses keyboard wording on desktop', () => {
+    expect(tutorialHint({ ...t, touch: false, step: 'car' })?.text).toContain('E');
+  });
+});
