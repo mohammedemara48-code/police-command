@@ -13,7 +13,7 @@ export type ModelKind =
   | 'character-male-a' | 'character-female-a' | 'character-male-c' | 'character-female-c'
   | 'building-a' | 'building-c' | 'building-e' | 'building-g'
   | 'building-skyscraper-a' | 'building-skyscraper-c' | 'building-skyscraper-e'
-  | 'officer' | 'man-suit' | 'woman-a' | 'woman-b' | 'police-real' | 'challenger';
+  | 'officer' | 'officer-female' | 'man-suit' | 'woman-a' | 'woman-b' | 'police-real' | 'challenger';
 
 export const CARS: ModelKind[] = ['challenger', 'challenger', 'challenger', 'challenger', 'challenger'];
 export const LOW_CARS: ModelKind[] = ['sedan', 'taxi', 'suv', 'van', 'sedan-sports'];
@@ -24,7 +24,7 @@ export const TOWERS: ModelKind[] = ['building-skyscraper-a', 'building-skyscrape
 
 interface Loaded { scene: THREE.Group; clips: THREE.AnimationClip[]; size: THREE.Vector3 }
 interface Pending { group: THREE.Object3D; kind: ModelKind; fit: Fit }
-export interface Fit { length?: number; height?: number; box?: [number, number, number]; yaw?: number; tint?: number; noShadow?: boolean }
+export interface Fit { length?: number; height?: number; box?: [number, number, number]; yaw?: number; tint?: number; noShadow?: boolean; recolor?: Record<string, number> }
 interface Actor {
   obj: THREE.Object3D; mixer: THREE.AnimationMixer; actions: Record<string, THREE.AnimationAction>;
   cur: string; last: THREE.Vector3; speed: number;
@@ -118,6 +118,21 @@ class ModelLib {
     model.position.set(-c.x, -bb.min.y, -c.z);
     holder.rotation.y = fit.yaw ?? 0;
     holder.userData.keep = true;
+    holder.userData.model = true;
+    if (fit.recolor) {
+      const rc = fit.recolor;
+      model.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const src = m.material as THREE.MeshStandardMaterial;
+        const c = rc[src.name];
+        if (c === undefined) return;
+        const mm = src.clone();
+        mm.color.setHex(c);
+        if (mm.map) mm.color.multiplyScalar(1.2);
+        m.material = mm;
+      });
+    }
     if (fit.tint !== undefined || fit.noShadow || !this.shadows) {
       model.traverse((o) => {
         const m = o as THREE.Mesh;
@@ -224,6 +239,16 @@ class ModelLib {
       sign.userData.keep = true;
       group.add(sign);
     }
+  }
+
+  /** Swap a dressed group's model (e.g. after the player edits their character). */
+  redress(group: THREE.Object3D, kind: ModelKind, fit: Fit) {
+    const old = group.children.filter((c) => c.userData.keep && c.userData.model);
+    old.forEach((c) => c.removeFromParent());
+    this.actors = this.actors.filter((a) => a.obj !== group);
+    this.pending = this.pending.filter((p) => p.group !== group);
+    group.userData.dressed = undefined;
+    this.dress(group, kind, fit);
   }
 
   /** Force a clip (e.g. 'drive' when seated). */
