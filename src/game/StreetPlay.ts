@@ -1,4 +1,5 @@
-import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z } from './City';
+import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z, findPath, farNode, followPath } from './City';
+import { newCall } from './Dispatch';
 import { Squad } from './Npc';
 import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
@@ -6,7 +7,7 @@ import { models, CARS, LOW_CARS, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS, fx 
 import { audio } from './AudioManager';
 import { Q } from './Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { LEVELS, levelById, completeLevel, progress, rank, type LevelDef, type Line, type Behaviour } from './Levels';
+import { LEVELS, levelById, completeLevel, progress, rank, isPatrol, type LevelDef, type Line, type Behaviour } from './Levels';
 
 export interface StreetPlace {
   id: string;
@@ -135,6 +136,9 @@ export class StreetPlay {
   private lightT = 0;
   private avenueGreen = true;
   private tmpV = new THREE.Vector3();
+  private chasePath: { x: number; z: number }[] = [];
+  private route: { x: number; z: number }[] = [];
+  private routeT = 0;
   private firing = false;
   private aimRay = new THREE.Raycaster();
   private aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -528,7 +532,7 @@ export class StreetPlay {
     const dist = has ? Math.hypot(this.msTarget.x - pos.x, this.msTarget.z - pos.z) : 0;
     if (this.objEl) {
       const timer = this.msIdx >= 0 ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.msTime))}ث</span>` : '';
-      const html = `<small>مهمة ${this.level.id}/${LEVELS.length} · ${this.level.title} ${timer}</small><div class="now">➤ ${this.msText || '...'}${has ? ` <em>${Math.round(dist)} م</em>` : ''}</div>`;
+      const html = `<small>${isPatrol(this.level.id) ? '🚨' : `مهمة ${this.level.id}/${LEVELS.length}`} · ${this.level.title} ${timer}</small><div class="now">➤ ${this.msText || '...'}${has ? ` <em>${Math.round(dist)} م</em>` : ''}</div>`;
       if (html !== this.objHtml) { this.objEl.innerHTML = html; this.objHtml = html; }
     }
     const step = this.level.steps[this.msIdx];
@@ -765,7 +769,7 @@ export class StreetPlay {
       x.t === 'car' ? 'اركب الدورية' : x.t === 'goto' ? x.text + ' (اتبع الـGPS الأصفر)' : x.t === 'chase' ? x.text ?? 'الحق العربية' : x.text);
     const el = document.createElement('div');
     el.id = 'street-result';
-    el.innerHTML = `<div class="street-result-card mission-card"><div class="mc-tag">مهمة ${this.level.id} من ${LEVELS.length} · رتبتك: ${rank().name}</div><h2>${this.level.title}</h2>
+    el.innerHTML = `<div class="street-result-card mission-card"><div class="mc-tag">${isPatrol(this.level.id) ? '🚨 بلاغ دورية' : `مهمة ${this.level.id} من ${LEVELS.length}`} · رتبتك: ${rank().name}</div><h2>${this.level.title}</h2>
       <p>${this.level.brief}</p>
       <ol class="mc-steps">${steps.map((t, i) => `<li><span>${i + 1}</span>${t}</li>`).join('')}</ol>
       <p class="mc-help">🔫 اضرب · 📢 «استسلم!» لما توجّه على مشتبه به · 🔗 «كلبش» لما يرفع إيده</p>
@@ -1033,8 +1037,12 @@ export class StreetPlay {
 
   /** Start (or restart) a campaign level: resets positions and points the mission at the level's district. */
   setLevel(id: number) {
+    const here = this.inCar ? this.car.position : this.player.position;
+    if (id < 0) id = newCall(here.x, here.z).id;
+    const patrol = isPatrol(id);
+    const keep = patrol && this.mounted && this.level && isPatrol(this.level.id);
     this.level = levelById(id);
-    progress.current = this.level.id;
+    if (!patrol) progress.current = this.level.id;
     this.missionId = this.level.placeId;
     this.chasing = false;
     this.chaseArrest = false;
@@ -1047,6 +1055,7 @@ export class StreetPlay {
     this.closeResultSilently();
     const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
     const startZ = place.z - 48 < -95 ? place.z + 48 : place.z - 48;
+    if (keep) { this.setStatus(this.level.brief); this.briefing(); return; }
     this.car.position.set(-1.4, 0, startZ);
     this.car.rotation.y = startZ < place.z ? 0 : Math.PI;
     this.player.position.set(0.9, 0, startZ);
@@ -1335,8 +1344,11 @@ export class StreetPlay {
     if (this.suspect) this.group.remove(this.suspect);
     this.suspect = this.makeSuspectCar();
     this.chaseDir = this.car.position.z < 120 ? 1 : -1;
-    this.suspect.position.set(-1.6, 0, this.car.position.z + this.chaseDir * 18);
+    const ax = Math.round(this.car.position.x / 60) * 60;
+    this.suspect.position.set(ax - 1.6, 0, this.car.position.z + this.chaseDir * 18);
     this.suspect.rotation.y = this.chaseDir > 0 ? 0 : Math.PI;
+    const far = farNode(this.suspect.position.x, this.suspect.position.z);
+    this.chasePath = findPath(this.suspect.position.x, this.suspect.position.z, far.x, far.z);
     this.group.add(this.suspect);
     audio.sirenLoop(true);
     audio.setTrack('music');
@@ -1375,7 +1387,7 @@ export class StreetPlay {
     const report: ChaseReport = {
       success,
       placeName: place.name,
-      title: `مهمة ${lv.id}: ${lv.title}`,
+      title: isPatrol(lv.id) ? lv.title : `مهمة ${lv.id}: ${lv.title}`,
       durationSec: Math.round(this.msTime),
       money: success ? lv.reward : 0,
       rep: success ? lv.rep : -3,
@@ -1413,7 +1425,7 @@ export class StreetPlay {
       el.remove();
       this.resultEl = null;
       const r = this.lastResult;
-      if (r) this.setLevel(r.success ? Math.min(LEVELS.length, r.levelId + 1) : r.levelId);
+      if (r) this.setLevel(isPatrol(r.levelId) || (r.success && r.levelId >= LEVELS.length) ? -1 : r.success ? r.levelId + 1 : r.levelId);
       this.onResultClosed?.();
     });
   }
@@ -1517,6 +1529,12 @@ export class StreetPlay {
     if (this.firing && !this.inCar && !this.resultEl) this.squad.shoot(this.player.position, this.yaw);
     this.squad.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
     this.tickMission(dt);
+    this.routeT -= dt;
+    if (this.routeT <= 0) {
+      this.routeT = 0.5;
+      const me = this.inCar ? this.car.position : this.player.position;
+      this.route = this.msHasTarget ? findPath(me.x, me.z, this.msTarget.x, this.msTarget.z) : [];
+    }
     this.tickRadio(dt);
     this.tickGun(dt);
     this.tickReticle();
@@ -1682,11 +1700,18 @@ export class StreetPlay {
     if (!this.chasing || !this.suspect) return;
     this.chaseTime += dt;
     const flee = (9.5 + Math.min(4, this.chaseTime * 0.15)) * this.chaseSpeed;
-    this.suspect.position.z += flee * dt * this.chaseDir;
-    this.suspect.position.x = THREE.MathUtils.clamp(-1.6 + Math.sin(this.chaseTime * 1.4) * 0.9, -2.6, 2.6);
-    const dist = this.suspect.position.distanceTo(this.car.position);
-    if (this.inCar && dist < 3.6) this.caught();
-    else if (this.suspect.position.z > 236 || this.suspect.position.z < -96 || this.chaseTime > this.chaseLimit) this.finishMission(false, 'العربية هربت.');
+    // suspect AI drives the road graph (A*) toward a far intersection, then picks another
+    const sp = this.suspect.position;
+    let head = followPath(sp, this.chasePath, flee * dt);
+    if (head === null) {
+      const far = farNode(sp.x, sp.z);
+      this.chasePath = findPath(sp.x, sp.z, far.x, far.z);
+      head = followPath(sp, this.chasePath, flee * dt);
+    }
+    if (head !== null) this.suspect.rotation.y = approachAngle(this.suspect.rotation.y, head, dt * 5);
+    const dist = sp.distanceTo(this.car.position);
+    if (this.inCar && dist < 3.8) this.caught();
+    else if (dist > 140 || this.chaseTime > this.chaseLimit) this.finishMission(false, 'العربية هربت.');
   }
 
   /** chase won: the car stops, the driver steps out with the scripted behaviour */
@@ -1739,7 +1764,13 @@ export class StreetPlay {
     if (this.chasing && this.suspect) dots.push({ x: this.suspect.position.x, z: this.suspect.position.z, c: '#ffd23d', r: 4 });
 
     dots.push({ x: pos.x, z: pos.z, c: '#ffffff', r: 4 });
-    drawCityMap(ctx, c.width, c.height, dots);
+    const m = drawCityMap(ctx, c.width, c.height, dots);
+    if (this.route.length > 1) {
+      ctx.strokeStyle = '#ffd23d'; ctx.lineWidth = 2.5; ctx.setLineDash([5, 3]);
+      ctx.beginPath(); ctx.moveTo(m.sx(pos.x), m.sz(pos.z));
+      for (const w of this.route) ctx.lineTo(m.sx(w.x), m.sz(w.z));
+      ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+    }
   }
 
 }

@@ -101,6 +101,7 @@ export class UI {
           <div class="menu-col">
             <button class="btn menu-big" data-m="play">▶ العب — المستوى ${cur.id}: ${cur.title}</button>
             <button class="btn ghost" data-m="levels">المستويات</button>
+            <button class="btn ghost" data-m="patrol">🚨 دورية حرة (بلاغات عشوائية)</button>
             <button class="btn ghost" data-m="ach">🏆 الإنجازات</button>
             <button class="btn ghost" data-m="account">👤 ${account.user ? 'حسابي' : 'تسجيل الدخول'}</button>
             <button class="btn ghost" data-m="command">غرفة العمليات (استراتيجية)</button>
@@ -141,6 +142,7 @@ export class UI {
         audio.click();
         const m = b.dataset.m!;
         if (m === 'play') this.launch('street', progress.current);
+        else if (m === 'patrol') this.launch('street', -1);
         else if (m === 'command') this.launch('command');
         else this.menu(m as 'main');
       }));
