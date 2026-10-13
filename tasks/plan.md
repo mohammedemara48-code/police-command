@@ -13,6 +13,10 @@ Started Oct 13: items 1, 2 and the tutorial from item 4, one PR each.
 
 Process: spec first (docs/GAME_DESIGN.md), small vertical slices, each one PR → squash-merge → live check, headless 412×915 play-test, perf budget (phones on low quality: ≤ ~60 draw calls in street mode, no per-frame allocations in hot loops).
 
+### CI status (Oct 13)
+- Done: `npm run check` = typecheck + ESLint + Prettier (logic + tests) + Vitest (11 tests on `src/game/logic/`) + build. Workflow file ready at `docs/ci/ci.yml`; it must be copied to `.github/workflows/ci.yml` by the owner (the automation token lacks the GitHub `workflow` permission).
+- Next strict-TS step: turn on `noUnusedLocals` (22 dead fields/methods to remove), then `noUncheckedIndexedAccess`.
+
 ## P0: gameplay core (must ship)
 1. ✅ (Oct 13) Procedural dispatch generator (Dispatch.ts): endless radio calls for free patrol, of 5 kinds (robbery, chase, gang, hostage, runner), placed on real roads, scaled by rank. "Free patrol" in the menu, and the story continues into patrol after mission 12.
 2. ✅ (Oct 13) Road graph plus A* (City.ts): 25 intersections. The suspect car flees along the graph, fleeing suspects on foot path along it too, and the minimap draws the GPS route.

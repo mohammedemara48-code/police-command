@@ -1232,7 +1232,10 @@ export class StreetPlay {
     if (e.code === 'KeyF' || e.code === 'Space') this.firing = down;
     if (down && e.code === 'KeyQ') this.orderSurrender();
     if (down && e.code === 'KeyC') this.cuffNow();
-    if (down && e.code === 'KeyM') this.mapEl ? this.closeMap() : this.openMap();
+    if (down && e.code === 'KeyM') {
+      if (this.mapEl) this.closeMap();
+      else this.openMap();
+    }
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   }
 

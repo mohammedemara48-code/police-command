@@ -1,3 +1,4 @@
+import { addRewards, promoteCost } from './logic/economy';
 /**
  * Port of Unity PoliceCommand.Core.GameManager
  * Starting resources match concept HUD: $125400 / 82★ / fuel 750 / supplies 900 / research 400
@@ -305,9 +306,7 @@ export class GameManager {
   }
 
   AddRewards(money: number, reputation = 0) {
-    this.state.budget += money;
-    this.state.reputation = clamp(this.state.reputation + reputation, 0, 100);
-    this.state.score += money + reputation * 50;
+    Object.assign(this.state, addRewards(this.state, money, reputation));
     this.emit();
   }
 
@@ -404,7 +403,7 @@ export class GameManager {
   promoteOfficer(officerId: string): boolean {
     const o = this.officers.find((x) => x.id === officerId);
     if (!o) return false;
-    const cost = 400 + o.level * 150;
+    const cost = promoteCost(o.level);
     if (!this.SpendBudget(cost)) return false;
     this.AddOfficerXP(officerId, o.xpToNext);
     return true;

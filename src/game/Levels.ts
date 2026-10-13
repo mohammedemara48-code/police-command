@@ -1,4 +1,5 @@
 /** Story campaign: 12 scripted missions (see docs/GAME_DESIGN.md). Unlocks, stars, XP/rank saved locally (and synced when signed in). */
+import { rankForXp, starsFor, xpFor } from './logic/rewards';
 export type Who = 'mona' | 'hamed' | 'yasser' | 'suspect' | 'informant' | 'boss';
 export interface Line { who: Who; text: string }
 export type Behaviour = 'surrender' | 'flee' | 'fight';
@@ -127,29 +128,17 @@ export const patrolCalls = new Map<number, LevelDef>();
 export const isPatrol = (id: number) => id >= 100;
 export function levelById(id: number) { return patrolCalls.get(id) ?? LEVELS.find((l) => l.id === id) ?? LEVELS[0]; }
 
-export const RANKS = [
-  { name: 'مستجد', xp: 0, mag: 12, dmg: 1, car: 0 },
-  { name: 'شرطي', xp: 300, mag: 13, dmg: 1, car: 1 },
-  { name: 'رقيب', xp: 800, mag: 15, dmg: 1.5, car: 2 },
-  { name: 'ملازم', xp: 1600, mag: 15, dmg: 1.5, car: 3 },
-  { name: 'نقيب', xp: 2800, mag: 17, dmg: 2, car: 4 },
-  { name: 'رائد', xp: 4200, mag: 17, dmg: 2, car: 5 }
-];
-export function rank() {
-  const xp = progress.xp ?? 0;
-  let r = RANKS[0];
-  for (const k of RANKS) if (xp >= k.xp) r = k;
-  return r;
-}
+export { RANKS } from './logic/rewards';
+export function rank() { return rankForXp(progress.xp ?? 0); }
 
 /** Record a result; returns earned stars (0 on fail). */
 export function completeLevel(id: number, success: boolean, seconds: number) {
   if (!success) return 0;
   const l = levelById(id);
-  const stars = seconds <= l.stars[0] ? 3 : seconds <= l.stars[1] ? 2 : 1;
-  if (isPatrol(id)) { progress.xp = (progress.xp ?? 0) + 60 + 30 * stars; saveProgress(); return stars; }
+  const stars = starsFor(seconds, l.stars);
+  if (isPatrol(id)) { progress.xp = (progress.xp ?? 0) + xpFor(stars, true); saveProgress(); return stars; }
   progress.stars[id] = Math.max(progress.stars[id] ?? 0, stars);
-  progress.xp = (progress.xp ?? 0) + 100 + 50 * stars;
+  progress.xp = (progress.xp ?? 0) + xpFor(stars, false);
   if (id < LEVELS.length) progress.unlocked = Math.max(progress.unlocked, id + 1);
   progress.current = Math.min(LEVELS.length, id + 1);
   saveProgress();
