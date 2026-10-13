@@ -97,12 +97,6 @@ export class Meta {
     );
   }
   private bindSettings() { bindSettings(this.el, () => this.persist()); }
-  private bindSettingsOld() {
-    this.el.querySelectorAll<HTMLInputElement>('[data-v]').forEach((r) =>
-      r.addEventListener('input', () => audio.setVolume(r.dataset.v as 'master' | 'music' | 'sfx', Number(r.value))));
-    const q = this.el.querySelector<HTMLSelectElement>('[data-q]');
-    q?.addEventListener('change', () => { this.persist(); setQuality(q.value as Quality); });
-  }
   private hide() { this.el.hidden = true; this.el.innerHTML = ''; }
 }
 

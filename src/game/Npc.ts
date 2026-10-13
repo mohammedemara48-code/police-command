@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { audio } from './AudioManager';
 import { addStat } from './Achievements';
 import { rank, type Behaviour, type SuspectSpec } from './Levels';
-import { onRoad, findPath, farNode, followPath } from './City';
+import { findPath, farNode, followPath } from './City';
 
 export type SState = 'idle' | 'flee' | 'fight' | 'hands' | 'cuffed' | 'down' | 'hostage' | 'free';
 export interface Suspect {
