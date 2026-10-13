@@ -827,3 +827,11 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after{
 #pwa-update button{border:0;border-radius:10px;padding:8px 12px;font:700 13px Cairo,sans-serif;min-height:40px}
 #pwa-update [data-u="go"]{background:#3aa0ff;color:#fff}
 #pwa-update [data-u="later"]{background:rgba(255,255,255,.1);color:#eaf2ff}
+
+/* weekly leaderboard */
+.board{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow:auto}
+.board li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(126,200,255,.08)}
+.board li b{width:26px;text-align:center;color:#ffd23d}
+.board li span{flex:1}
+.board li i{font-style:normal;font-weight:800;color:#7dff9a}
+.board li.me{outline:2px solid #3aa0ff}

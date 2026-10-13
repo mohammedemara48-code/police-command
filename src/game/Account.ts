@@ -39,6 +39,14 @@ async function token() {
   return jwt;
 }
 
+/** fetch against the Data API with the signed-in user's JWT */
+export async function authedFetch(path: string, init: RequestInit = {}) {
+  const t = await token();
+  const r = await fetch(API + path, { ...init, headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${t}` } });
+  if (!r.ok) throw new Error(`api ${r.status}`);
+  return r;
+}
+
 function readMeta() { try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); } catch { return {}; } }
 
 function snapshot() {
