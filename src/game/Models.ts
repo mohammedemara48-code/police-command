@@ -39,6 +39,12 @@ class ModelLib {
   shadows = true;
   enabled = true;
 
+  /** Loading progress of every model requested so far (for the loading screen). */
+  progress() {
+    return { done: this.cache.size + this.failed, total: this.loading.size };
+  }
+  private failed = 0;
+
   private load(kind: ModelKind) {
     let p = this.loading.get(kind);
     if (!p) {
@@ -56,7 +62,7 @@ class ModelLib {
         const l = { scene: g.scene, clips: g.animations, size };
         this.cache.set(kind, l);
         return l;
-      }).catch(() => null);
+      }).catch(() => { this.failed++; return null; });
       this.loading.set(kind, p);
     }
     return p;

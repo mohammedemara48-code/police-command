@@ -1,3 +1,4 @@
+import { models } from './Models';
 import { accountHtml, bindAccount, onAccount, restore, account } from './Account';
 import { achHtml } from './Achievements';
 // @source-complete
@@ -150,7 +151,24 @@ export class UI {
       b.addEventListener('click', () => { audio.resume(); audio.click(); this.launch('street', Number(b.dataset.l)); }));
   }
 
-  private launch(kind: 'street' | 'command', level = 1) {
+  private async launch(kind: 'street' | 'command', level = 1) {
+    if (kind === 'street' && !this.city.street) {
+      this.overlay.innerHTML = `<div class="loading-screen" role="progressbar" aria-label="تحميل"><div class="ls-title">🚓 جاري تجهيز الدورية…</div><div class="ls-bar"><i></i></div><div class="ls-tip">نصيحة: «استسلم!» الأول، ومتضربش حد رافع إيده.</div></div>`;
+      const bar = this.overlay.querySelector('.ls-bar i') as HTMLElement | null;
+      const t0 = performance.now();
+      const poll = setInterval(() => {
+        const p = models.progress();
+        const frac = p.total ? p.done / p.total : 0.1;
+        if (bar) bar.style.width = `${Math.round(10 + frac * 90)}%`;
+      }, 120);
+      try { await this.city.loadStreet(); } catch { clearInterval(poll); this.overlay.innerHTML = '<div class="loading-screen"><div class="ls-title">تعذّر التحميل. تأكد من الإنترنت وجرّب تاني.</div></div>'; return; }
+      // progressive: the street shows placeholder meshes right away; wait briefly (max 6 s) for the main models
+      await new Promise<void>((res) => {
+        const chk = () => { const p = models.progress(); if ((p.total && p.done >= p.total) || performance.now() - t0 > 6000) res(); else setTimeout(chk, 150); };
+        chk();
+      });
+      clearInterval(poll);
+    }
     audio.resume();
     audio.setTrack(kind === 'street' ? 'music' : 'calm');
     audio.startAmbient();
@@ -158,19 +176,20 @@ export class UI {
     if (!this.launched) {
       this.launched = true;
       this.game.start();
-      this.city.street.onReport = (r) => {
+
+    }
+    if (kind === 'street') {
+      if (this.city.street && !this.city.street.onReport) this.city.street.onReport = (r) => {
         this.game.AddRewards(r.money, r.rep);
         if (r.success) this.game.state.incidentsResolved += 1;
         else this.game.state.incidentsFailed += 1;
       };
-    }
-    if (kind === 'street') {
       this.game.state.cityHour = 18.9;
       this.city.setTimeOfDay(18.9);
-      this.city.street.engage();
-      this.city.street.setLevel(level);
+      this.city.street?.engage();
+      this.city.street?.setLevel(level);
     } else {
-      this.city.street.disengage();
+      this.city.street?.disengage();
       this.city.setTimeOfDay(9);
     }
     this.mode = 'play';

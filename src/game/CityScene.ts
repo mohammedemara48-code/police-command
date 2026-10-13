@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
-import { StreetPlay } from './StreetPlay';
+import type { StreetPlay } from './StreetPlay';
 import { Q } from './Quality';
 import { models, fx, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS } from './Models';
 
@@ -32,11 +32,11 @@ export class CityScene {
   private sun!: THREE.DirectionalLight;
   private ambient!: THREE.AmbientLight;
   private gridHelper: THREE.GridHelper | null = null;
-  private streetLamps: Array<{
-    lamp: THREE.Mesh;
-    light: THREE.PointLight;
-    mat: THREE.MeshStandardMaterial;
-  }> = [];
+  /** street lamps: 3 InstancedMeshes (pole, arm, bulb) + a small pool of real lights that follow the camera */
+  private lampPos: THREE.Vector3[] = [];
+  private lampMat: THREE.MeshStandardMaterial | null = null;
+  private lampLights: THREE.PointLight[] = [];
+  private lampPoolT = 0;
   private accentLights: Array<{ light: THREE.PointLight; dayI: number; nightI: number }> = [];
   private cityHour = 8;
   private nightFactor = 0;
@@ -67,7 +67,9 @@ export class CityScene {
   private muzzleGeo = new THREE.SphereGeometry(0.22, 8, 8);
   private muzzleMat = new THREE.MeshBasicMaterial({ color: 0xfff1c4 });
 
-  street: StreetPlay;
+  /** street mode is code-split: loaded on first use (see loadStreet) */
+  street: StreetPlay | null = null;
+  private streetP: Promise<StreetPlay> | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -112,10 +114,21 @@ export class CityScene {
     this.buildLighting();
     this.buildCity();
     this.spawnFleetCars();
-    this.street = new StreetPlay(this.scene, this.camera, this.root, this.carRoot, this.markerRoot);
     this.setTimeOfDay(8);
 
     window.addEventListener('resize', () => this.onResize());
+  }
+
+  /** Lazy-load the street-mode chunk (StreetPlay, city/road graph, NPC AI) and build it once. */
+  loadStreet(): Promise<StreetPlay> {
+    if (!this.streetP) {
+      this.streetP = import('./StreetPlay').then(({ StreetPlay }) => {
+        this.street = new StreetPlay(this.scene, this.camera, this.root, this.carRoot, this.markerRoot);
+        return this.street;
+      });
+      this.streetP.catch(() => { this.streetP = null; });
+    }
+    return this.streetP;
   }
 
   private buildLighting() {
@@ -465,23 +478,37 @@ export class CityScene {
       positions.push([i, 5], [i, -5], [5, i], [-5, i]);
       positions.push([i, 33], [i, -33], [33, i], [-33, i]);
     }
-    for (const [x, z] of positions) {
-      if (Math.hypot(x, z) < 12) continue;
-      const pole = this.box(0.18, 4.5, 0.18, this.mat(0x333333), x, 2.25, z);
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0x556066,
-        emissive: 0xffc067,
-        emissiveIntensity: 0.02
-      });
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 10), mat);
-      lamp.position.set(x, 4.6, z);
-      // Arm / hood
-      const arm = this.box(0.9, 0.08, 0.18, this.mat(0x2a2a2a), x + 0.35, 4.45, z);
-      const light = new THREE.PointLight(0xffc067, 0, 20, 2);
-      light.position.set(x, 4.35, z);
-      this.root.add(pole, arm, lamp, light);
-      this.streetLamps.push({ lamp, light, mat });
+    const pts = positions.filter(([x, z]) => Math.hypot(x, z) >= 12);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x556066, emissive: 0xffc067, emissiveIntensity: 0.02 });
+    this.lampMat = mat;
+    const pole = new THREE.InstancedMesh(new THREE.BoxGeometry(0.18, 4.5, 0.18), this.mat(0x333333), pts.length);
+    const arm = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.08, 0.18), this.mat(0x2a2a2a), pts.length);
+    const bulb = new THREE.InstancedMesh(new THREE.SphereGeometry(0.28, 8, 8), mat, pts.length);
+    const m4 = new THREE.Matrix4();
+    pts.forEach(([x, z], i) => {
+      pole.setMatrixAt(i, m4.makeTranslation(x, 2.25, z));
+      arm.setMatrixAt(i, m4.makeTranslation(x + 0.35, 4.45, z));
+      bulb.setMatrixAt(i, m4.makeTranslation(x, 4.6, z));
+      this.lampPos.push(new THREE.Vector3(x, 4.35, z));
+    });
+    for (const im of [pole, arm, bulb]) { im.computeBoundingSphere(); im.castShadow = false; this.root.add(im); }
+    // Real lights are expensive on phones (every PointLight is in every shader): low 0, medium 3, high 6.
+    const n = Q.lampLights;
+    for (let i = 0; i < n; i++) {
+      const l = new THREE.PointLight(0xffc067, 0, 20, 2);
+      this.lampLights.push(l);
+      this.root.add(l);
     }
+  }
+
+  /** move the light pool to the lamps nearest the camera target */
+  private placeLampLights() {
+    if (!this.lampLights.length) return;
+    const t = this.controls.target;
+    const near = this.lampPos
+      .map((p) => ({ p, d: (p.x - t.x) ** 2 + (p.z - t.z) ** 2 }))
+      .sort((a, b) => a.d - b.d);
+    this.lampLights.forEach((l, i) => { const q = near[i]?.p; if (q) l.position.copy(q); });
   }
 
   private buildLandmarks() {
@@ -886,10 +913,10 @@ export class CityScene {
     }
 
     const lampOn = THREE.MathUtils.smoothstep(this.nightFactor, 0.25, 0.7);
-    for (const sl of this.streetLamps) {
-      sl.light.intensity = lampOn * 1.55;
-      sl.mat.emissiveIntensity = lampOn * 1.65;
-      sl.mat.color.set(lampOn > 0.3 ? 0xffe0a0 : 0x556066);
+    for (const l of this.lampLights) l.intensity = lampOn * 1.55;
+    if (this.lampMat) {
+      this.lampMat.emissiveIntensity = lampOn * 1.65;
+      this.lampMat.color.set(lampOn > 0.3 ? 0xffe0a0 : 0x556066);
     }
 
     for (const m of this.windowMats) {
@@ -1063,9 +1090,28 @@ export class CityScene {
     return false;
   }
 
+  // adaptive resolution: if the frame rate stays low, lower the render scale step by step (never below 0.6)
+  private perfT = 0;
+  private perfFrames = 0;
+  private adaptPerf(dt: number) {
+    this.perfT += dt; this.perfFrames++;
+    if (this.perfT < 4) return;
+    const fps = this.perfFrames / this.perfT;
+    this.perfT = 0; this.perfFrames = 0;
+    if (document.hidden) return;
+    const pr = this.renderer.getPixelRatio();
+    if (fps < 26 && pr > 0.6) {
+      this.renderer.setPixelRatio(Math.max(0.6, pr - 0.15));
+      this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    }
+  }
+
   update(dt: number) {
     models.update(dt);
     fx.update(dt);
+    this.adaptPerf(dt);
+    this.lampPoolT -= dt;
+    if (this.lampPoolT <= 0) { this.lampPoolT = 0.5; if (!this.street?.active) this.placeLampLights(); }
     if (this.street?.active) {
       this.renderer.toneMappingExposure = 1.45;
       this.street.update(dt);
