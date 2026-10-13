@@ -3,6 +3,8 @@
  * idle → (alerted) → surrender | flee | fight(cover) ; ordered → hands ; cuffed ; down. Non-gory: suspects tip over.
  */
 import * as THREE from 'three';
+import { character } from './Character';
+import { weaponStats } from './logic/character';
 import { audio } from './AudioManager';
 import { addStat } from './Achievements';
 import { rank, type Behaviour, type SuspectSpec } from './Levels';
@@ -35,6 +37,7 @@ export class Squad {
   threat = 0;
   private cool = 0;
   private reloadT = 0;
+  private fireCool = 0.3;
   private hurtT = 0;
   private covers: THREE.Object3D[] = [];
   private tracers: { line: THREE.Line; t: number }[] = [];
@@ -51,7 +54,8 @@ export class Squad {
 
   resetPlayer() {
     const r = rank();
-    this.mag = r.mag; this.dmg = r.dmg; this.ammo = this.mag; this.hp = 100; this.armor = 50; this.reloadT = 0; this.failed = null;
+    const w = weaponStats(character(), r.mag, r.dmg);
+    this.mag = w.mag; this.dmg = w.dmg; this.fireCool = w.cool; this.ammo = this.mag; this.hp = 100; this.armor = 50; this.reloadT = 0; this.failed = null;
   }
 
   private make(spec: { b: Behaviour; boss?: boolean }, x: number, z: number, hostage = false): Suspect {
@@ -121,7 +125,7 @@ export class Squad {
   shoot(from: THREE.Vector3, yaw: number) {
     if (this.cool > 0 || this.reloadT > 0) return;
     if (this.ammo <= 0) { this.reloadT = 1.3; return; }
-    this.cool = 0.3; this.ammo--; if (this.ammo <= 0) this.reloadT = 1.3;
+    this.cool = this.fireCool; this.ammo--; if (this.ammo <= 0) this.reloadT = 1.3;
     audio.gunshot(); addStat('shots'); this.onShot?.();
     this.onGunfire?.(from.x, from.z);
     // auto-aim never locks onto someone with hands up (the officer lowers the gun instead)

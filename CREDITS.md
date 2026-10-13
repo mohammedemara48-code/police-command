@@ -14,3 +14,4 @@
 - Patrol car: "Police Car" by Quaternius — CC0 (https://poly.pizza/m/BwwnUrWGmV)
 - Traffic / suspect car: "2015 Dodge Challenger" by Grzybek — CC-BY 3.0 (https://poly.pizza/m/1jB8I4t5w4). Attribution required: model by Grzybek via Poly Pizza.
 - All compressed with glTF-Transform (meshopt geometry, WebP textures ≤512px).
+- `officer-female.gltf`: "Animated Woman" (Casual) by Quaternius, CC0 — https://poly.pizza/m/qJ2gsTUBHL (re-encoded with meshopt, recoloured at runtime)

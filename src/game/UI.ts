@@ -1,4 +1,6 @@
 import { boardHtml, recordWeekly } from './Leaderboard';
+import { openCreator } from './CharacterCreator';
+import { needsCharacter } from './Character';
 import { models } from './Models';
 import { accountHtml, bindAccount, onAccount, restore, account } from './Account';
 import { achHtml } from './Achievements';
@@ -102,6 +104,7 @@ export class UI {
           <div class="menu-col">
             <button class="btn menu-big" data-m="play">▶ العب — المستوى ${cur.id}: ${cur.title}</button>
             <button class="btn ghost" data-m="levels">المستويات</button>
+            <button class="btn ghost" data-m="character">👮 شخصيتي</button>
             <button class="btn ghost" data-m="patrol">🚨 دورية حرة (بلاغات عشوائية)</button>
             <button class="btn ghost" data-m="board">📊 ترتيب الأسبوع</button>
             <button class="btn ghost" data-m="ach">🏆 الإنجازات</button>
@@ -153,13 +156,20 @@ export class UI {
         audio.resume();
         audio.click();
         const m = b.dataset.m!;
-        if (m === 'play') this.launch('street', progress.current);
+        if ((m === 'play' || m === 'patrol') && needsCharacter()) this.creator(true, () => this.launch('street', m === 'play' ? progress.current : -1));
+        else if (m === 'character') this.creator(false, () => this.menu('main'));
+        else if (m === 'play') this.launch('street', progress.current);
         else if (m === 'patrol') this.launch('street', -1);
         else if (m === 'command') this.launch('command');
         else this.menu(m as 'main');
       }));
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-l]').forEach((b) =>
-      b.addEventListener('click', () => { audio.resume(); audio.click(); this.launch('street', Number(b.dataset.l)); }));
+      b.addEventListener('click', () => { audio.resume(); audio.click(); const l = Number(b.dataset.l); if (needsCharacter()) this.creator(true, () => this.launch('street', l)); else this.launch('street', l); }));
+  }
+
+  private creator(first: boolean, done: () => void) {
+    this.menuScreen = 'character';
+    openCreator(this.overlay, { first, done });
   }
 
   private async launch(kind: 'street' | 'command', level = 1) {

@@ -835,3 +835,18 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after{
 .board li span{flex:1}
 .board li i{font-style:normal;font-weight:800;color:#7dff9a}
 .board li.me{outline:2px solid #3aa0ff}
+
+/* Character creator */
+.creator{max-width:520px;padding-top:14px}
+.creator h2{margin:4px 0 8px}
+.cc-stage{position:relative;height:min(30vh,280px);border-radius:16px;background:radial-gradient(circle at 50% 70%,rgba(126,200,255,.18),rgba(10,16,26,.4));overflow:hidden}
+.cc-canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.cc-hint{position:absolute;bottom:6px;left:0;right:0;font-size:11px;opacity:.6;pointer-events:none}
+.cc-opts{text-align:right;margin-top:10px;max-height:38vh;overflow:auto}
+.cc-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}
+.cc-row>b{flex-basis:100%;font-size:13px;opacity:.85}
+.cc-chip{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:12px;border:1px solid rgba(126,200,255,.35);background:rgba(255,255,255,.04);color:inherit;font:inherit;font-size:13px;cursor:pointer}
+.cc-chip i{width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,.4)}
+.cc-chip small{display:block;font-size:10px;opacity:.65;margin-inline-start:4px}
+.cc-chip.on{border-color:#7ec8ff;background:rgba(126,200,255,.22);box-shadow:0 0 0 2px rgba(126,200,255,.35)}
+.creator .menu-col{margin-top:10px}

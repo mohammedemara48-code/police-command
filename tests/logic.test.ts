@@ -200,3 +200,30 @@ describe('on-foot locomotion', () => {
     expect(followCamYaw(0, 1, 0.2, 0.1)).toBe(0);
   });
 });
+
+import { sanitizeChar, newerChar, recolorFor, weaponStats, DEFAULT_CHAR } from '../src/game/logic/character';
+describe('character profile', () => {
+  it('sanitizes bad data to defaults', () => {
+    expect(sanitizeChar(null)).toEqual(DEFAULT_CHAR);
+    const c = sanitizeChar({ body: 'female', skin: 99, uniform: 2, weapon: 'rocket', hair: 3, t: 5 });
+    expect(c).toEqual({ body: 'female', skin: 1, hair: 3, uniform: 2, weapon: 'pistol', t: 5 });
+  });
+  it('newer edit wins when syncing', () => {
+    const a = { ...DEFAULT_CHAR, t: 10 }, b = { ...DEFAULT_CHAR, body: 'female' as const, t: 20 };
+    expect(newerChar(a, b)).toBe(b);
+    expect(newerChar(b, a)).toBe(b);
+    expect(newerChar(null, a)).toBe(a);
+  });
+  it('recolors the right materials per body', () => {
+    expect(Object.keys(recolorFor(DEFAULT_CHAR))).toContain('Swat');
+    expect(Object.keys(recolorFor({ ...DEFAULT_CHAR, body: 'female' }))).toContain('Hair_Brown');
+  });
+  it('weapons trade magazine size for damage fairly', () => {
+    const p = weaponStats(DEFAULT_CHAR, 12, 1), r = weaponStats({ ...DEFAULT_CHAR, weapon: 'revolver' }, 12, 1), s = weaponStats({ ...DEFAULT_CHAR, weapon: 'smg' }, 12, 1);
+    expect(p).toEqual({ mag: 12, dmg: 1, cool: 0.3 });
+    expect(r.mag).toBe(6);
+    expect(s.mag).toBe(24);
+    // damage per second stays within ±25% of the pistol
+    for (const w of [r, s]) expect(Math.abs(w.dmg / w.cool / (p.dmg / p.cool) - 1)).toBeLessThan(0.3);
+  });
+});

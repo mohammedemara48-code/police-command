@@ -1,5 +1,7 @@
 import { reducedMotion } from './Motion';
 import { stepLoco, followCamYaw } from './logic/locomotion';
+import { character, onCharacter } from './Character';
+import { modelFor, recolorFor, WEAPONS } from './logic/character';
 import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z, findPath, farNode, followPath } from './City';
 import { newCall } from './Dispatch';
 import { Squad } from './Npc';
@@ -756,7 +758,13 @@ export class StreetPlay {
     slide.position.z = 0.06;
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.06), m);
     grip.position.set(0, -0.07, -0.02); grip.rotation.x = 0.25;
+    const len = WEAPONS[character().weapon].len;
+    slide.scale.z = len / 0.22; slide.position.z = len / 2 - 0.05;
     this.gun.add(slide, grip);
+    onCharacter((c) => {
+      const l = WEAPONS[c.weapon].len; slide.scale.z = l / 0.22; slide.position.z = l / 2 - 0.05;
+      for (const g of [this.player, this.driver]) if (g) models.redress(g, modelFor(c), { height: 1.8, recolor: recolorFor(c) });
+    });
     this.gun.userData.dynamic = true;
     this.player.add(this.gun);
   }
@@ -864,7 +872,8 @@ export class StreetPlay {
     const legR = this.box(0.14, 0.7, 0.16, navy, 0.12, 0.35, 0);
     g.add(legL, legR);
     g.userData.legs = [legL, legR];
-    models.dress(g, 'officer', { height: 1.8 });
+    const c = character();
+    models.dress(g, modelFor(c), { height: 1.8, recolor: recolorFor(c) });
     return g;
   }
 
