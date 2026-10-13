@@ -19,7 +19,6 @@ import {
   DAY_PHASE_ICONS,
   UnitType,
   CrimeType,
-  DecisionId,
   type DayPhase,
   type Incident,
   type DecisionChoice,
@@ -37,7 +36,6 @@ export class UI {
   mobileAlertsOpen = true;
   private toastEl: HTMLElement;
   private cctvFeed: CCTVFeed | null = null;
-  private decisionModalId: string | null = null;
   private lastAlertLevel = '';
   private mode: 'play' | 'action' | 'result' = 'play';
   private actionText = '';
@@ -416,36 +414,6 @@ export class UI {
     }
   }
 
-  private renderMobile(open: Incident[], selected: Incident | null) {
-    // floating toggle for alerts
-    const toggle = document.createElement('button');
-    toggle.className = 'mobile-alerts-toggle btn';
-    toggle.textContent = this.mobileAlertsOpen ? 'إخفاء التنبيهات' : `تنبيهات نشطة (${open.length})`;
-    toggle.addEventListener('click', () => {
-      this.mobileAlertsOpen = !this.mobileAlertsOpen;
-      this.render();
-    });
-    this.hud.appendChild(toggle);
-
-    if (this.mobileAlertsOpen && !this.sheetTab) {
-      const sheet = document.createElement('div');
-      sheet.className = 'mobile-alerts glass';
-      sheet.innerHTML = `<div class="panel-h">تنبيهات نشطة <span class="chip hot">${open.length}</span></div>`;
-      if (!open.length) {
-        sheet.innerHTML += `<div class="card"><p>لا بلاغات حالياً.</p></div>`;
-      }
-      for (const inc of open) {
-        sheet.appendChild(this.incidentCard(inc, selected?.id === inc.id, true));
-      }
-      this.hud.appendChild(sheet);
-    }
-
-    // compact banner
-    const ban = document.createElement('div');
-    ban.className = `mobile-alert-banner ${this.game.state.alertLevel}`;
-    ban.textContent = `التأهب: ${this.game.state.alertLevel}`;
-    this.hud.appendChild(ban);
-  }
 
   private bindTechTree(host: HTMLElement) {
     for (const t of this.game.techDefs) {
@@ -587,7 +555,6 @@ export class UI {
     if (this.mode !== 'play') return;
     this.mode = 'action';
     this.sheetTab = null;
-    this.decisionModalId = null;
     this.mobileAlertsOpen = false;
     this.actionText = 'الوحدات بتتحرك…';
     const armed = this.incidents.arm(inc.id, d.id);
@@ -646,51 +613,7 @@ export class UI {
     this.render();
   }
 
-  private decisionPanel(inc: Incident) {
-    const box = document.createElement('div');
-    box.className = 'decision-modal glass';
-    box.innerHTML = `
-      <h3>قرار مطلوب — ${inc.title}</h3>
-      <p class="dec-desc">${inc.description}</p>
-      <div class="dec-grid"></div>
-      <button class="btn ghost" data-skip style="margin-top:8px;width:100%">لاحقاً</button>
-    `;
-    const grid = box.querySelector('.dec-grid')!;
-    for (const d of inc.decisions) {
-      grid.appendChild(this.decisionButton(inc, d));
-    }
-    box.querySelector('[data-skip]')!.addEventListener('click', () => {
-      this.decisionModalId = null;
-      this.render();
-    });
-    return box;
-  }
 
-  private decisionButton(inc: Incident, d: DecisionChoice) {
-    const chance = Math.round(this.incidents.previewChance(inc, d) * 100);
-    const risk = Math.round(d.riskToOfficers * 100);
-    const reward = Math.round(inc.reward * d.rewardMul);
-    const btn = document.createElement('button');
-    btn.className = `dec-card ${d.id}`;
-    btn.innerHTML = `
-      <div class="dec-title">${d.label}</div>
-      <div class="dec-blurb">${d.blurb}</div>
-      <div class="dec-stats">
-        <span class="chip ok">نجاح ~${chance}%</span>
-        <span class="chip hot">خطر ضباط ${risk}%</span>
-        <span class="chip warn">مكافأة $${reward}</span>
-        <span class="chip blue">وقت ×${d.timeMul.toFixed(2)}</span>
-      </div>
-    `;
-    btn.addEventListener('click', () => {
-      const res = this.incidents.selectDecision(inc.id, d.id);
-      this.toast(res.message, res.ok ? 'success' : 'fail');
-      this.decisionModalId = null;
-      this.city.focusOn(inc.x, inc.z);
-      this.render();
-    });
-    return btn;
-  }
 
   private incidentCard(inc: Incident, active: boolean, mobile: boolean) {
     const el = document.createElement('div');
@@ -717,7 +640,6 @@ export class UI {
       this.city.flyTo(inc.x, inc.z, true);
       this.city.setSelectedIncident(inc.id);
       this.cctvOpen = inc.severity >= 4 || this.game.state.cctvUnlocked;
-      if (needsDecision) this.decisionModalId = inc.id;
       this.render();
     });
 
