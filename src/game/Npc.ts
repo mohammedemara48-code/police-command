@@ -6,13 +6,13 @@ import * as THREE from 'three';
 import { audio } from './AudioManager';
 import { addStat } from './Achievements';
 import { rank, type Behaviour, type SuspectSpec } from './Levels';
-import { onRoad } from './City';
+import { onRoad, findPath, farNode, followPath } from './City';
 
 export type SState = 'idle' | 'flee' | 'fight' | 'hands' | 'cuffed' | 'down' | 'hostage' | 'free';
 export interface Suspect {
   g: THREE.Group; b: Behaviour; state: SState; hp: number; boss: boolean;
   cd: number; hide: number; hidden: boolean; cover: THREE.Vector3 | null; flash: number; down: number;
-  mats: THREE.MeshStandardMaterial[]; icon: THREE.Sprite; flinch: number; cuffT: number;
+  mats: THREE.MeshStandardMaterial[]; icon: THREE.Sprite; flinch: number; cuffT: number; path: { x: number; z: number }[];
 }
 
 const tA = new THREE.Vector3();
@@ -64,7 +64,7 @@ export class Squad {
     const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.icons.alert, depthTest: false, transparent: true }));
     icon.scale.setScalar(0.55); icon.position.y = 2.25; icon.visible = false; icon.renderOrder = 10;
     g.add(icon);
-    return { g, b: spec.b, state: hostage ? 'hostage' : 'idle', hp: spec.boss ? 8 : 3, boss: !!spec.boss, cd: 1 + Math.random() * 1.5, hide: 0, hidden: false, cover: null, flash: 0, down: 0, mats, icon, flinch: 0, cuffT: 0 };
+    return { g, b: spec.b, state: hostage ? 'hostage' : 'idle', hp: spec.boss ? 8 : 3, boss: !!spec.boss, cd: 1 + Math.random() * 1.5, hide: 0, hidden: false, cover: null, flash: 0, down: 0, mats, icon, flinch: 0, cuffT: 0, path: [] };
   }
 
   spawn(x: number, z: number, specs: SuspectSpec[], opts: { cover?: boolean; hostage?: boolean; approachZ: number }) {
@@ -103,10 +103,10 @@ export class Squad {
   remaining() { return this.list.filter((s) => s.state !== 'cuffed' && s.state !== 'down').length; }
 
   /** closest suspect in front of the officer */
-  target(from: THREE.Vector3, yaw: number, range = 24): Suspect | null {
+  target(from: THREE.Vector3, yaw: number, range = 24, skipSurrendered = false): Suspect | null {
     let best: Suspect | null = null; let bd = range;
     for (const s of this.list) {
-      if (s.state === 'down' || s.state === 'cuffed') continue;
+      if (s.state === 'down' || s.state === 'cuffed' || (skipSurrendered && s.state === 'hands')) continue;
       const dx = s.g.position.x - from.x, dz = s.g.position.z - from.z;
       const d = Math.hypot(dx, dz);
       const a = Math.atan2(dx, dz) - yaw;
@@ -124,7 +124,8 @@ export class Squad {
     this.cool = 0.3; this.ammo--; if (this.ammo <= 0) this.reloadT = 1.3;
     audio.gunshot(); addStat('shots'); this.onShot?.();
     this.onGunfire?.(from.x, from.z);
-    const t = this.target(from, yaw, 28);
+    // auto-aim never locks onto someone with hands up (the officer lowers the gun instead)
+    const t = this.target(from, yaw, 28, true);
     tA.set(from.x + Math.sin(yaw) * 0.6, 1.35, from.z + Math.cos(yaw) * 0.6);
     this.flashLight.position.copy(tA); this.flashLight.intensity = 7;
     // hostage in the line of fire?
@@ -214,11 +215,10 @@ export class Squad {
         case 'flee': {
           if (d < 2.5) { this.surrender(s); break; }
           if (d > 90) { this.failed = 'المشتبه به هرب.'; break; }
-          const sp = 4.1 * dt;
-          let nx = p.x - (dx / d) * sp, nz = p.z - (dz / d) * sp;
-          if (!onRoad(nx, nz, 3.4)) { nx = p.x; nz = p.z - Math.sign(dz || 1) * sp; }
-          if (onRoad(nx, nz, 3.4)) { p.x = nx; p.z = nz; }
-          s.g.rotation.y = Math.atan2(-dx, -dz);
+          // flee AI: A* over the road graph to an intersection far from the officer
+          if (!s.path.length) { const f = farNode(player.x, player.z); s.path = findPath(p.x, p.z, f.x, f.z); }
+          const head = followPath(p, s.path, 4.1 * dt);
+          if (head !== null) s.g.rotation.y = head;
           s.g.userData.forceClip = null;
           break;
         }
