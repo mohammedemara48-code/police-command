@@ -246,7 +246,9 @@ class ModelLib {
         a.cur = want;
       }
       const act = a.actions[a.cur];
+      // keep feet in sync with ground speed (no sliding)
       if (act && a.cur === 'walk') act.timeScale = Math.max(0.6, Math.min(1.6, a.speed / 1.4));
+      if (act && a.cur === 'sprint') act.timeScale = Math.max(0.75, Math.min(1.35, a.speed / 5));
       a.mixer.update(dt);
     }
   }
