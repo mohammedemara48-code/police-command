@@ -122,7 +122,10 @@ function load(): Progress {
 export const progress = load();
 export function saveProgress() { try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch { /* ignore */ } }
 
-export function levelById(id: number) { return LEVELS.find((l) => l.id === id) ?? LEVELS[0]; }
+/** procedurally generated patrol calls (ids ≥ 100), see Dispatch.ts */
+export const patrolCalls = new Map<number, LevelDef>();
+export const isPatrol = (id: number) => id >= 100;
+export function levelById(id: number) { return patrolCalls.get(id) ?? LEVELS.find((l) => l.id === id) ?? LEVELS[0]; }
 
 export const RANKS = [
   { name: 'مستجد', xp: 0, mag: 12, dmg: 1, car: 0 },
@@ -144,6 +147,7 @@ export function completeLevel(id: number, success: boolean, seconds: number) {
   if (!success) return 0;
   const l = levelById(id);
   const stars = seconds <= l.stars[0] ? 3 : seconds <= l.stars[1] ? 2 : 1;
+  if (isPatrol(id)) { progress.xp = (progress.xp ?? 0) + 60 + 30 * stars; saveProgress(); return stars; }
   progress.stars[id] = Math.max(progress.stars[id] ?? 0, stars);
   progress.xp = (progress.xp ?? 0) + 100 + 50 * stars;
   if (id < LEVELS.length) progress.unlocked = Math.max(progress.unlocked, id + 1);

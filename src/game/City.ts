@@ -173,3 +173,67 @@ export function drawCityMap(ctx: CanvasRenderingContext2D, w: number, h: number,
 function mulberry(a: number) {
   return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
+
+// ===================== road graph + A* =====================
+/** Intersections of every avenue with every cross street; edges run along the roads. */
+export interface RNode { id: number; x: number; z: number; n: number[] }
+export const NODES: RNode[] = [];
+for (let i = 0; i < AVENUES_X.length; i++) for (let j = 0; j < CROSS_Z.length; j++) NODES.push({ id: i * CROSS_Z.length + j, x: AVENUES_X[i], z: CROSS_Z[j], n: [] });
+for (let i = 0; i < AVENUES_X.length; i++) for (let j = 0; j < CROSS_Z.length; j++) {
+  const id = i * CROSS_Z.length + j;
+  if (j + 1 < CROSS_Z.length) { NODES[id].n.push(id + 1); NODES[id + 1].n.push(id); }
+  if (i + 1 < AVENUES_X.length) { NODES[id].n.push(id + CROSS_Z.length); NODES[id + CROSS_Z.length].n.push(id); }
+}
+
+export function nearestNode(x: number, z: number) {
+  let best = NODES[0], bd = Infinity;
+  for (const n of NODES) { const d = (n.x - x) ** 2 + (n.z - z) ** 2; if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+
+/** A* over the intersection grid. Returns waypoints (x,z) from the start's nearest node to the goal point. */
+export function findPath(fx: number, fz: number, tx: number, tz: number): { x: number; z: number }[] {
+  const s = nearestNode(fx, fz), g = nearestNode(tx, tz);
+  const open = new Set<number>([s.id]);
+  const came = new Map<number, number>();
+  const gs = new Map<number, number>([[s.id, 0]]);
+  const h = (a: RNode) => Math.abs(a.x - g.x) + Math.abs(a.z - g.z);
+  const fs = new Map<number, number>([[s.id, h(s)]]);
+  while (open.size) {
+    let cur = -1, cf = Infinity;
+    for (const id of open) { const f = fs.get(id) ?? Infinity; if (f < cf) { cf = f; cur = id; } }
+    if (cur === g.id) break;
+    open.delete(cur);
+    const c = NODES[cur];
+    for (const nb of c.n) {
+      const t = (gs.get(cur) ?? 0) + Math.abs(NODES[nb].x - c.x) + Math.abs(NODES[nb].z - c.z);
+      if (t < (gs.get(nb) ?? Infinity)) { came.set(nb, cur); gs.set(nb, t); fs.set(nb, t + h(NODES[nb])); open.add(nb); }
+    }
+  }
+  const out: { x: number; z: number }[] = [];
+  let k: number | undefined = g.id;
+  while (k !== undefined) { out.unshift({ x: NODES[k].x, z: NODES[k].z }); k = came.get(k); if (k === s.id) { out.unshift({ x: s.x, z: s.z }); break; } }
+  // skip the first node if we are already past it toward the second
+  if (out.length > 1 && Math.hypot(out[1].x - fx, out[1].z - fz) < Math.hypot(out[1].x - out[0].x, out[1].z - out[0].z)) out.shift();
+  out.push({ x: tx, z: tz });
+  return out;
+}
+
+/** a node far from (x,z), for fleeing */
+export function farNode(x: number, z: number, rnd = Math.random) {
+  const c = NODES.filter((n) => Math.hypot(n.x - x, n.z - z) > 90);
+  return c[Math.floor(rnd() * c.length)] ?? NODES[0];
+}
+
+/** move (p) toward waypoint list w at speed; returns heading or null when the path is finished */
+export function followPath(p: { x: number; z: number }, w: { x: number; z: number }[], step: number): number | null {
+  while (w.length) {
+    const t = w[0];
+    const dx = t.x - p.x, dz = t.z - p.z, d = Math.hypot(dx, dz);
+    if (d < 1.2) { w.shift(); continue; }
+    const k = Math.min(1, step / d);
+    p.x += dx * k; p.z += dz * k;
+    return Math.atan2(dx, dz);
+  }
+  return null;
+}
