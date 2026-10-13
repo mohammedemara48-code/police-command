@@ -5,6 +5,8 @@
  */
 import { progress, saveProgress } from './Levels';
 import { ach, saveAch } from './Achievements';
+import { storedCharacter, setCharacter } from './Character';
+import { sanitizeChar, newerChar } from './logic/character';
 
 const AUTH = 'https://ep-calm-hill-b4a4ddw6.neonauth.c-6.us-east-2.aws.neon.tech/game/auth';
 const API = 'https://ep-calm-hill-b4a4ddw6.apirest.c-6.us-east-2.aws.neon.tech/game/rest/v1';
@@ -51,7 +53,7 @@ export async function authedFetch(path: string, init: RequestInit = {}) {
 function readMeta() { try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); } catch { return {}; } }
 
 function snapshot() {
-  return { levels: { ...progress, stars: { ...progress.stars } }, ach: { stats: { ...ach.stats }, unlocked: { ...ach.unlocked } }, meta: readMeta() };
+  return { levels: { ...progress, stars: { ...progress.stars } }, ach: { stats: { ...ach.stats }, unlocked: { ...ach.unlocked } }, meta: readMeta(), char: storedCharacter() };
 }
 type Snap = ReturnType<typeof snapshot>;
 
@@ -70,6 +72,8 @@ function merge(a: Snap, b: Partial<Snap>): Snap {
     for (const [k, v] of Object.entries(A.stats || {})) (out.ach.stats as Record<string, number>)[k] = Math.max((a.ach.stats as Record<string, number>)[k] ?? 0, v as number);
     for (const [k, v] of Object.entries(A.unlocked || {})) out.ach.unlocked[k] = Math.min(a.ach.unlocked[k] ?? Infinity, v as number);
   }
+  // character: the newer edit wins (never overwritten by a device that has none)
+  out.char = newerChar(a.char, b.char ? sanitizeChar(b.char) : null);
   const M = b.meta || {};
   for (const k of ['best', 'shifts', 'resolved', 'level']) if (typeof M[k] === 'number') out.meta[k] = Math.max(a.meta[k] ?? 0, M[k]);
   return out;
@@ -81,6 +85,7 @@ function apply(s: Snap) {
   Object.assign(ach.stats, s.ach.stats);
   Object.assign(ach.unlocked, s.ach.unlocked);
   saveAch();
+  if (s.char && s.char !== storedCharacter()) setCharacter(s.char, false);
   try { localStorage.setItem(META_KEY, JSON.stringify({ ...readMeta(), ...s.meta })); } catch { /* ignore */ }
 }
 
