@@ -1,9 +1,30 @@
 # POLICE COMMAND — قيادة الشرطة
 
-لعبة استراتيجية عمليات شرطة **ثلاثية أبعاد** في المتصفح (Three.js + Vite + PWA) — واجهة عربية RTL.
+<p align="center">
+  <img src="docs/media/demo.gif" width="200" alt="gameplay">
+  <img src="docs/media/radio.jpg" width="160" alt="radio call">
+  <img src="docs/media/chase.jpg" width="160" alt="car chase">
+  <img src="docs/media/boss.jpg" width="160" alt="shootout">
+</p>
 
-**مباشر (Vercel):** https://police-command.vercel.app/
+لعبة شرطة ثلاثية الأبعاد في المتصفح (Three.js + Vite + PWA) بواجهة عربية RTL: حملة قصة من 12 مهمة، ودورية حرة ببلاغات عشوائية، ومطاردات، واعتقالات.
 
+**العب الآن (Vercel):** https://police-command.vercel.app/
+
+## تشغيل محلي
+```bash
+npm install
+npm run dev      # تطوير
+npm run build    # بناء الإنتاج إلى dist/
+```
+
+## النشر
+الاستضافة الوحيدة هي **Vercel** (Framework: Vite · Build: `npm run build` · Output: `dist`). كل دمج في `main` ينشر تلقائياً.
+
+## الترخيص
+الكود مرخّص بـ MIT (انظر `LICENSE`). الأصول الخارجية (نماذج وأصوات) لها تراخيصها الخاصة (CC0 / CC-BY)، انظر `CREDITS.md`.
+
+## سجل الإصدارات
 ## v1.2.1 — بناء ثابت لـ Cloudflare Pages
 
 - المصادر في `src/` مباشرة (لم نعد نعتمد على `scripts/game-parts` التالف)
@@ -25,31 +46,3 @@
 - بث CCTV حي للبلاغات الحرجة
 - واجهة مكتب كثيفة + ورقة تنبيهات موبايل
 - صوت خفيف عبر WebAudio
-
-## تشغيل محلي
-```bash
-npm install
-npm run dev
-```
-
-## النشر
-
-### Vercel
-- Framework: Vite · Build: `npm run build` · Output: `dist`
-
-### Cloudflare Pages (الواجهة)
-في مشروع Pages المرتبط بالمستودع:
-- **Build command:** `bun run build` أو `npm run build`
-- **Build output directory:** `dist`
-- **Deploy command:** فارغ — **لا تستخدم** `npx wrangler deploy`
-
-نشر يدوي بعد `npm run build`:
-```bash
-npx wrangler pages deploy dist --project-name=police-command
-```
-
-### Cloudflare Worker (غرف مالتي بلاير — اختياري)
-انظر `worker/` — يحتاج `CLOUDFLARE_ACCOUNT_ID` + توكن بصلاحيات Workers/Durable Objects.
-
-## المستودع
-https://github.com/mohammedemara48-code/police-command
