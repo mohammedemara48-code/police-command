@@ -251,6 +251,9 @@ export class StreetPlay {
   private steerCur = 0;
   private carMax = 16;
   private offRoadT = 0;
+  private stuckT = 0;
+  private stuckX = 0;
+  private stuckZ = 0;
   private rig: CamRig = { lag: 0.0008, ahead: 0, fov: 0 };
   // scratch objects for car contacts (reused every frame)
   private myBox: CarBox = { x: 0, z: 0, yaw: 0, hw: 0.95, hl: 2.35 };
@@ -2440,11 +2443,19 @@ export class StreetPlay {
     let b = back;
     // pull the camera in when the spot behind the player is inside a building block
     const pad = this.inCar ? 4.5 : 6.5; // on foot the sidewalk is walkable space for the camera too
-    while (b > 2.8 && !onRoad(target.position.x - sin * b, target.position.z - cos * b, pad)) b -= 0.8;
+    // walk the boom outwards and stop at the first wall/building it would pass through (not just the end point)
+    const tx = target.position.x,
+      tz = target.position.z;
+    let clear = 1.2;
+    while (clear < back && onRoad(tx - sin * clear, tz - cos * clear, pad)) clear += 0.4;
+    b = Math.max(2.4, Math.min(back, clear - 0.6));
+    const boxed = b < 3.2 && !onRoad(tx - sin * b, tz - cos * b, pad);
     // ease the boom length (no pops), and rise smoothly as it shortens
     this.camB = k >= 1 ? b : this.camB + (b - this.camB) * Math.min(1, k * 1.5);
     const cb = this.camB;
     let h = up + Math.max(0, (back - cb) / back) * 2.2;
+    // wedged with walls all round: go overhead instead of showing the inside of a wall
+    if (boxed) h = Math.max(h, up + 6);
     const cx = target.position.x - sin * cb,
       cz = target.position.z - cos * cb;
     // on foot next to the patrol car: lift over it instead of clipping into the body
@@ -2605,7 +2616,11 @@ export class StreetPlay {
         cmz = Math.cos(this.velYaw) * this.speed * dt;
       const C0 = this.car.position;
       // slide along kerbs/buildings instead of bouncing and getting stuck
-      if (!onRoad(C0.x + cmx, C0.z + cmz, 0.4)) {
+      // check the bumper too, not only the car centre, so the nose can't push into a building
+      const dir = Math.sign(this.speed) || 1;
+      const nx = C0.x + cmx + Math.sin(this.yaw) * 2.2 * dir,
+        nz = C0.z + cmz + Math.cos(this.yaw) * 2.2 * dir;
+      if (!onRoad(C0.x + cmx, C0.z + cmz, 0.4) || !onRoad(nx, nz, 2.4)) {
         // kerb/building: lose the speed going into it, keep sliding along it
         if (onRoad(C0.x + cmx, C0.z, 0.4)) {
           C0.x += cmx;
@@ -2636,6 +2651,18 @@ export class StreetPlay {
       }
       // never stay wedged off the road (pushed by traffic into a block): back to the nearest junction
       this.offRoadT = onRoad(this.car.position.x, this.car.position.z, 0.4) ? 0 : this.offRoadT + dt;
+      // pressing the gas against a wall without moving for a while also counts as stuck
+      const cp = this.car.position;
+      if (throttle === 0 || Math.hypot(cp.x - this.stuckX, cp.z - this.stuckZ) > 2.5) {
+        this.stuckT = 0;
+        this.stuckX = cp.x;
+        this.stuckZ = cp.z;
+      } else this.stuckT += dt;
+      if (this.stuckT > 3) {
+        this.offRoadT = 2;
+        this.stuckT = 0;
+        this.setStatus('العربية اتزنقت، رجعناها للشارع.');
+      }
       if (this.offRoadT > 1.5) {
         const n = nearestNode(this.car.position.x, this.car.position.z);
         this.car.position.set(n.x, 0, n.z);
