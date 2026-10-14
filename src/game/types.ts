@@ -38,22 +38,9 @@ export enum OfficerRank {
   Major = 'Major'
 }
 
-export type IncidentStatus =
-  | 'open'
-  | 'awaiting_decision'
-  | 'dispatched'
-  | 'resolving'
-  | 'resolved'
-  | 'failed';
+export type IncidentStatus = 'open' | 'awaiting_decision' | 'dispatched' | 'resolving' | 'resolved' | 'failed';
 
-export type IncidentPhase =
-  | 'reported'
-  | 'perimeter'
-  | 'breach'
-  | 'arrest'
-  | 'pursuit'
-  | 'negotiate'
-  | 'done';
+export type IncidentPhase = 'reported' | 'perimeter' | 'breach' | 'arrest' | 'pursuit' | 'negotiate' | 'done';
 
 export type DecisionId = 'negotiate' | 'breach' | 'chase' | 'siege' | 'investigate';
 
@@ -156,16 +143,7 @@ export interface Incident {
 }
 
 export type TechId =
-  | 'sirens'
-  | 'patrols'
-  | 'radar'
-  | 'armor'
-  | 'cctv'
-  | 'heli'
-  | 'lab'
-  | 'fuel_eff'
-  | 'swat_boost'
-  | 'response';
+  'sirens' | 'patrols' | 'radar' | 'armor' | 'cctv' | 'heli' | 'lab' | 'fuel_eff' | 'swat_boost' | 'response';
 
 export interface TechNode {
   id: TechId;

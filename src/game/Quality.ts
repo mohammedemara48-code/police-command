@@ -13,12 +13,18 @@ export const quality: Quality = (() => {
   try {
     const q = localStorage.getItem(KEY);
     if (q === 'low' || q === 'medium' || q === 'high') return q;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return detect();
 })();
 
 export function setQuality(q: Quality) {
-  try { localStorage.setItem(KEY, q); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(KEY, q);
+  } catch {
+    /* ignore */
+  }
   location.reload();
 }
 

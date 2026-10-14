@@ -6,7 +6,10 @@ export function restoreCommand(game: GameManager) {
   try {
     const raw = localStorage.getItem(COMMAND_KEY);
     if (!raw) return false;
-    game.state = mergePersisted(game.state as unknown as Record<string, unknown>, JSON.parse(raw)) as unknown as typeof game.state;
+    game.state = mergePersisted(
+      game.state as unknown as Record<string, unknown>,
+      JSON.parse(raw)
+    ) as unknown as typeof game.state;
     for (const t of game.techDefs) t.unlocked = !!game.state.techs[t.id];
     return true;
   } catch {
@@ -15,7 +18,11 @@ export function restoreCommand(game: GameManager) {
 }
 
 export function saveCommand(game: GameManager) {
-  try { localStorage.setItem(COMMAND_KEY, JSON.stringify(pickPersisted(game.state))); } catch { /* storage full / private mode */ }
+  try {
+    localStorage.setItem(COMMAND_KEY, JSON.stringify(pickPersisted(game.state)));
+  } catch {
+    /* storage full / private mode */
+  }
 }
 
 let current: GameManager | null = null;
@@ -25,7 +32,9 @@ export function startAutosave(game: GameManager, everyMs = 15000) {
   setInterval(() => saveCommand(game), everyMs);
   const flush = () => saveCommand(game);
   addEventListener('pagehide', flush);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flush();
+  });
 }
 
 export function exportSave() {
