@@ -1,6 +1,6 @@
 # POLICE COMMAND — قيادة الشرطة
 
-<p align="center"><img src="https://police-command.vercel.app/media/gameplay.gif" width="600" alt="gameplay: walk to the patrol car, chase and arrest, drift, siren, station hub"></p>
+<p align="center"><img src="public/media/gameplay.gif" width="600" alt="gameplay: walk to the patrol car, chase and arrest, drift, siren, station hub"></p>
 
 <p align="center">
   <img src="docs/media/street.svg" width="150" alt="street patrol HUD">

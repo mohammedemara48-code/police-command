@@ -6,11 +6,3 @@ dist
 
 .wrangler
 .dev.vars
-public/media/
-public/models/cop_m.glb
-public/models/cop_f.glb
-public/models/civ_m1.glb
-public/models/civ_m2.glb
-public/models/civ_m3.glb
-public/models/civ_f1.glb
-public/models/civ_f2.glb
