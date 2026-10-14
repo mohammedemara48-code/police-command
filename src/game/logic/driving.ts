@@ -21,8 +21,11 @@ export const REVERSE_MAX = 6;
 export const GRIP = 9; // how fast the velocity heading follows the nose (rad/s-ish)
 export const DRIFT_GRIP = 1.6;
 
+/** Top speed after damage: a wrecked car is slower but never undrivable (60% at 100 damage). */
+export const topSpeed = (max: number, damage = 0) => max * (1 - 0.4 * Math.min(1, Math.max(0, damage) / 100));
+
 export function stepCar(s: CarState, i: CarInput, dt: number): CarState {
-  const max = i.max * (1 - 0.4 * Math.min(1, (i.damage ?? 0) / 100));
+  const max = topSpeed(i.max, i.damage);
   let { speed, yaw, velYaw } = s;
   const t = Math.max(-1, Math.min(1, i.throttle));
   if (t > 0.05) speed += (speed < 0 ? BRAKE : ACCEL * (1 - (0.65 * Math.max(0, speed)) / max)) * t * dt;
@@ -55,3 +58,42 @@ export const hitDamage = (v: number) => (v < 3 ? 0 : Math.min(35, Math.round((v 
 export function pullOver(sirenOn: boolean, dist: number) {
   return sirenOn && dist < 40 ? 1.9 : 0;
 }
+
+/**
+ * Steering wheel: eases toward the input instead of snapping. Turning in gets slower with speed
+ * (calmer at 90 km/h), letting go or counter-steering is quicker so the car recovers from a slide.
+ */
+export function smoothSteer(cur: number, target: number, speed: number, dt: number) {
+  const t = Math.max(-1, Math.min(1, target));
+  const back = t === 0 || (cur !== 0 && Math.sign(t) !== Math.sign(cur));
+  const rate = back ? 7 : 5 / (1 + Math.abs(speed) / 10);
+  const d = t - cur;
+  const step = rate * dt;
+  return Math.abs(d) <= step ? t : cur + Math.sign(d) * step;
+}
+
+export interface CamRig {
+  /** per-second remainder for the follow lerp: k = 1 - lag^dt (smaller = stiffer) */
+  lag: number;
+  /** metres the camera looks ahead of the car */
+  ahead: number;
+  /** extra field of view in degrees */
+  fov: number;
+}
+/** Chase camera at speed: trails a little more and looks further ahead. Reduced motion: rigid, no zoom. */
+export function camRig(speed: number, max: number, reduced: boolean, out: CamRig): CamRig {
+  const a = Math.min(1, Math.abs(speed) / Math.max(1, max));
+  if (reduced) {
+    out.lag = 0;
+    out.ahead = Math.min(4, Math.abs(speed) * 0.25);
+    out.fov = 0;
+    return out;
+  }
+  out.lag = 0.0008 + a * a * 0.006;
+  out.ahead = Math.min(8, Math.abs(speed) * 0.4);
+  out.fov = Math.min(12, Math.abs(speed) * 0.5);
+  return out;
+}
+
+/** Hood smoke from damage: 0 below 50%, ramps to 1 at a wreck. */
+export const smokeLevel = (damage: number) => Math.max(0, Math.min(1, (damage - 50) / 40));

@@ -2980,3 +2980,16 @@ html.armed body[data-play='street'] .street-actions [data-act='shoot'] {
 html.onfoot body[data-play='street'] .street-actions [data-act='siren'] {
   display: none !important;
 }
+/* portrait phones: keep the speedometer clear of the stick and the action cluster */
+@media (orientation: portrait) {
+  body[data-play='street'] #street-speedo {
+    min-width: 0;
+    padding: 4px 8px 5px;
+  }
+  body[data-play='street'] #street-speedo b {
+    font-size: 22px;
+  }
+  body[data-play='street'] #street-speedo i {
+    width: 52px;
+  }
+}

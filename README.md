@@ -22,7 +22,7 @@ Police Command is a 3D police game that runs in the browser. You play a patrol o
 - **Story campaign:** 12 missions, plus free patrol with random calls: robberies, gangs, hostages, chases, speeding stops and checkpoint patrols.
 - **The city:** downtown, suburbs, a port, and a corniche along the sea. It has textured streets, shops with lit display windows, traffic lights, traffic and pedestrians.
 - **On foot:** third-person movement relative to the camera, collision with cars, aim, shoot, "surrender!" orders and handcuffs.
-- **Driving:** arcade handling with handbrake drifts. The siren makes traffic pull over, crashes cause damage, and there's a speedometer.
+- **Driving:** arcade handling with handbrake drifts and a chase camera that trails at speed. Cars are solid and get shoved, crashes cause damage (the bonnet smokes when it's bad), the siren lights up the light bar and makes traffic pull over, and a PIT on a fleeing car spins it out.
 - **Character creator:** body, skin tone, hair, uniform and weapon, with a live 3D preview.
 - **Police station:** missions board, garage, armory and locker room.
 - **Progress:** autosave, achievements, ranks, export/import of your save, and an optional account (Neon Auth) with a weekly leaderboard.
