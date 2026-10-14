@@ -747,7 +747,7 @@ export class CityScene {
       stripe.position.set(0, 1.2, 0.3);
       g.add(cap, stripe);
     }
-    models.dress(g, kind === 'cop' ? 'officer' : (Q.lowDetailPeople ? PEOPLE : REAL_PEOPLE)[shirt % 4], {
+    models.dress(g, kind === 'cop' ? 'cop_m' : (Q.lowDetailPeople ? PEOPLE : REAL_PEOPLE)[shirt % 4]!, {
       height: 2.0
     });
     return g;

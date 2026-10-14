@@ -32,11 +32,19 @@ export type ModelKind =
   | 'woman-a'
   | 'woman-b'
   | 'police-real'
-  | 'challenger';
+  | 'challenger'
+  | HumanKind;
+
+/** Realistic MakeHuman (CC0) people, rigged + animated with the Universal Animation Library (CC0). */
+export type HumanKind = 'cop_m' | 'cop_f' | 'civ_m1' | 'civ_m2' | 'civ_m3' | 'civ_f1' | 'civ_f2';
+const GLB = new Set<string>(['cop_m', 'cop_f', 'civ_m1', 'civ_m2', 'civ_m3', 'civ_f1', 'civ_f2']);
+export const isHuman = (k: string) => GLB.has(k);
+export const MEN: ModelKind[] = ['civ_m1', 'civ_m2', 'civ_m3'];
+export const WOMEN: ModelKind[] = ['civ_f1', 'civ_f2'];
 
 export const CARS: ModelKind[] = ['challenger', 'challenger', 'challenger', 'challenger', 'challenger'];
 export const LOW_CARS: ModelKind[] = ['sedan', 'taxi', 'suv', 'van', 'sedan-sports'];
-export const REAL_PEOPLE: ModelKind[] = ['man-suit', 'woman-a', 'woman-b', 'man-suit'];
+export const REAL_PEOPLE: ModelKind[] = ['civ_m1', 'civ_f1', 'civ_m2', 'civ_f2', 'civ_m3'];
 export const PEOPLE: ModelKind[] = ['character-male-a', 'character-female-a', 'character-male-c', 'character-female-c'];
 export const LOW_BUILDINGS: ModelKind[] = ['building-a', 'building-c', 'building-e', 'building-g'];
 export const TOWERS: ModelKind[] = ['building-skyscraper-a', 'building-skyscraper-c', 'building-skyscraper-e'];
@@ -88,7 +96,7 @@ class ModelLib {
     let p = this.loading.get(kind);
     if (!p) {
       p = this.loader
-        .loadAsync(`/models/${kind}.gltf`)
+        .loadAsync(`/models/${kind}.${GLB.has(kind) ? 'glb' : 'gltf'}`)
         .then((g) => {
           const lights: THREE.Object3D[] = [];
           g.scene.traverse((o) => {
@@ -102,6 +110,11 @@ class ModelLib {
             if (m.isMesh) {
               m.castShadow = this.shadows;
               m.receiveShadow = true;
+              if (GLB.has(kind)) {
+                const mat = m.material as THREE.MeshStandardMaterial;
+                // skin a little glossy, cloth matte
+                mat.roughness = mat.name === 'Skin' ? 0.62 : mat.name === 'Shoes' ? 0.45 : 0.9;
+              }
             }
           });
           const size = new THREE.Box3().setFromObject(g.scene).getSize(new THREE.Vector3());
@@ -182,7 +195,7 @@ class ModelLib {
         if (c === undefined) return;
         const mm = src.clone();
         mm.color.setHex(c);
-        if (mm.map) mm.color.multiplyScalar(1.2);
+        if (mm.map && !GLB.has(kind)) mm.color.multiplyScalar(1.2);
         m.material = mm;
       });
     }
@@ -194,6 +207,7 @@ class ModelLib {
         if (fit.tint !== undefined) m.material = this.tintMat(m.material as THREE.Material, fit.tint);
       });
     }
+    if (kind.startsWith('cop_')) this.policeGear(model);
     group.add(holder);
     if (kind.startsWith('building')) this.decorate(group, holder, kind);
     if (l.clips.length) {
@@ -234,6 +248,54 @@ class ModelLib {
       this.actors.push(a);
       group.userData.actor = a;
     }
+  }
+
+  /** Duty belt, badge and shoulder patches, bound to the bones in bind pose so they move with the body. */
+  private gearMats: THREE.Material[] | null = null;
+  private policeGear(model: THREE.Object3D) {
+    const bone = (n: string) => model.getObjectByName(n) as THREE.Bone | undefined;
+    const pelvis = bone('pelvis');
+    const chest = bone('spine_03');
+    const sh = [bone('upperarm_l'), bone('upperarm_r')];
+    if (!pelvis || !chest) return;
+    const [black, gold, patch] = (this.gearMats ??= [
+      new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.4, metalness: 0.1 }),
+      new THREE.MeshStandardMaterial({ color: 0xd6b04a, roughness: 0.3, metalness: 0.9 }),
+      new THREE.MeshStandardMaterial({ color: 0x0c1730, roughness: 0.7 })
+    ]) as [THREE.Material, THREE.Material, THREE.Material];
+    model.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+    const local = (o: THREE.Object3D) => new THREE.Vector3().setFromMatrixPosition(o.matrixWorld).applyMatrix4(inv);
+    // body extents around the waist / chest from the skinned meshes (bind pose)
+    const box = new THREE.Box3().setFromObject(model);
+    const H = box.max.y - box.min.y;
+    const hip = local(pelvis);
+    const ch = local(chest);
+    const place = (mesh: THREE.Mesh, at: THREE.Vector3, parent: THREE.Bone) => {
+      mesh.position.copy(at).applyMatrix4(model.matrixWorld);
+      parent.updateMatrixWorld(true);
+      model.add(mesh);
+      mesh.updateMatrixWorld(true);
+      parent.attach(mesh);
+      mesh.castShadow = this.shadows;
+    };
+    const belt = new THREE.Mesh(new THREE.TorusGeometry(1, 0.045, 6, 28), black);
+    belt.rotation.x = Math.PI / 2;
+    belt.scale.set(H * 0.098, H * 0.07, 1.1);
+    place(belt, new THREE.Vector3(hip.x, hip.y + H * 0.045, hip.z), pelvis);
+    const holster = new THREE.Mesh(new THREE.BoxGeometry(H * 0.03, H * 0.08, H * 0.05), black);
+    place(holster, new THREE.Vector3(hip.x - H * 0.1, hip.y, hip.z), pelvis);
+    const radio = new THREE.Mesh(new THREE.BoxGeometry(H * 0.025, H * 0.05, H * 0.02), black);
+    place(radio, new THREE.Vector3(ch.x - H * 0.06, ch.y + H * 0.06, ch.z + H * 0.075), chest);
+    const badge = new THREE.Mesh(new THREE.CylinderGeometry(H * 0.012, H * 0.012, 0.004, 6), gold);
+    badge.rotation.x = Math.PI / 2;
+    place(badge, new THREE.Vector3(ch.x + H * 0.055, ch.y + H * 0.045, ch.z + H * 0.072), chest);
+    sh.forEach((b, i) => {
+      if (!b) return;
+      const p = local(b);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(H * 0.012, H * 0.04, H * 0.035), patch);
+      place(m, new THREE.Vector3(p.x + (i ? -1 : 1) * H * 0.045, p.y - H * 0.025, p.z), b);
+    });
   }
 
   private tints = new Map<string, THREE.Material>();
