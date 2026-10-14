@@ -1,4 +1,8 @@
-# Credits (all CC0 / public domain)
+# Credits
+
+Everything below is CC0 / public domain unless marked otherwise. The only exceptions are the Dodge Challenger model (CC-BY 3.0, attribution below) and the three.js `Water` shader and its normal map (MIT).
+
+## Kenney, audio and early models
 
 - 3D models: Kenney — Car Kit, Mini Characters, City Kit Commercial (https://kenney.nl), CC0. Converted to self-contained .gltf.
 - Sound effects: Kenney — Interface Sounds, Impact Sounds, Sci-Fi Sounds, Music Jingles (https://kenney.nl), CC0.
