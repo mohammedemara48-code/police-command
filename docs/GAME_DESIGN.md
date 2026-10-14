@@ -11,7 +11,7 @@ Tone: a game about arresting people. Non-gory. Suspects drop their weapon and fa
 3. **Scripted scenario** (one or more steps):
    - **Arrest:** aim at a suspect, press **«استسلم!»** to order him to surrender, walk up, press **«كلبش»** to handcuff (1.2 s).
    - **Foot flee:** the suspect runs away. Catch him (within 2.5 m) and he gives up.
-   - **Car chase:** catch the car before it escapes, then the driver gets out and is arrested.
+   - **Car chase:** catch the car before it escapes, then the driver gets out and is arrested. Stay on its bumper to box it in, or nudge its rear quarter while running alongside (PIT) to spin it out and finish sooner.
    - **Shootout:** armed gang members take **cover** behind crates and cars, peek out and shoot. Hits on someone hiding are blocked by the cover.
    - **Hostage:** the captors are hostile and the hostage must not be hit.
 4. **Resolve:** a summary with stars based on time, plus money, reputation and XP.
