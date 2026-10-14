@@ -1,6 +1,6 @@
 /**
- * Egyptian street identity, all drawn in code: apartment blocks (red-brick and plastered), blue road signs,
- * striped kerbs, the pyramids on the horizon, and the white microbus / black-and-white taxi.
+ * Egyptian street identity, drawn in code: apartment blocks (red-brick and plastered), blue road signs,
+ * striped kerbs, the taxi roof sign and microbus roof rack, and rolling wheels for the car models.
  */
 import * as THREE from 'three';
 import { Batch } from './Environment';
@@ -241,65 +241,7 @@ export function kerbStripeMat() {
   return kerbM;
 }
 
-// ---------- pyramids ----------
-/** Distant pyramid silhouettes, hazed toward the horizon colour; no fog so they stay visible. */
-export function pyramids(group: THREE.Object3D, cx: number, cz: number) {
-  // unlit, hazed sandstone with baked face shading so they read as a soft silhouette at any time of day
-  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
-  const base = new THREE.Color(0xc4a678);
-  const haze = new THREE.Color(0xc9d6e2);
-  const light = new THREE.Vector3(0.6, 0.5, 0.6).normalize();
-  const list: [number, number, number][] = [
-    [0, 0, 1],
-    [-70, 12, 0.85],
-    [55, -8, 0.55]
-  ];
-  for (const [dx, dz, k] of list) {
-    const r = 40 * k,
-      h = 38 * k;
-    const geo = new THREE.ConeGeometry(r, h, 4, 1).toNonIndexed();
-    geo.rotateY(Math.PI / 4);
-    geo.computeVertexNormals();
-    const n = geo.attributes.normal;
-    const col = new Float32Array(n.count * 3);
-    const c = new THREE.Color();
-    for (let i = 0; i < n.count; i++) {
-      const lit = 0.72 + 0.28 * Math.max(0, n.getX(i) * light.x + n.getY(i) * light.y + n.getZ(i) * light.z);
-      c.copy(base).multiplyScalar(lit).lerp(haze, 0.3 + (1 - k) * 0.2);
-      col.set([c.r, c.g, c.b], i * 3);
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(cx + dx, h / 2 - 2, cz + dz);
-    group.add(m);
-  }
-  const sand = new THREE.Mesh(
-    new THREE.PlaneGeometry(1400, 700),
-    new THREE.MeshBasicMaterial({ color: 0xc2ab84, fog: false })
-  );
-  sand.rotation.x = -Math.PI / 2;
-  sand.position.set(cx, -0.3, cz - 60);
-  group.add(sand);
-}
-
 // ---------- vehicles ----------
-function plateTex() {
-  const [c, x] = canvas(128, 64);
-  x.fillStyle = '#ffffff';
-  x.fillRect(0, 0, 128, 64);
-  x.fillStyle = '#d12c2c';
-  x.fillRect(0, 0, 128, 18);
-  x.fillStyle = '#ffffff';
-  x.font = 'bold 13px Arial';
-  x.textAlign = 'center';
-  x.fillText('EGYPT  مصر', 64, 14);
-  x.fillStyle = '#111';
-  x.font = 'bold 28px Arial';
-  x.direction = 'rtl';
-  x.fillText('٤٥٧ ر ق م', 64, 52);
-  return canvasTex(c, false);
-}
-let plateMat: THREE.MeshStandardMaterial | null = null;
 const VM = {
   tyre: new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9 }),
   rim: new THREE.MeshStandardMaterial({ color: 0xb8bcc0, metalness: 0.8, roughness: 0.3 }),
@@ -344,19 +286,11 @@ export function makeWheel(r: number, width: number) {
 export function rollWheels(obj: THREE.Object3D, ds: number) {
   const ws = obj.userData.wheels as THREE.Object3D[] | undefined;
   if (!ws) return;
-  for (const w of ws) w.rotation.x += ds / (w.userData.r as number);
-}
-
-function addWheels(g: THREE.Group, r: number, xs: number, zf: number, zb: number) {
-  const wheels: THREE.Object3D[] = [];
-  for (const x of [-xs, xs])
-    for (const z of [zf, zb]) {
-      const w = makeWheel(r, 0.24);
-      w.position.set(x, r, z);
-      g.add(w);
-      wheels.push(w);
-    }
-  g.userData.wheels = wheels;
+  for (const w of ws) {
+    const a = ds / (w.userData.r as number);
+    if (w.userData.axis === 'z') w.rotation.z += a;
+    else w.rotation.x += a;
+  }
 }
 
 function box(g: THREE.Object3D, m: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number) {
@@ -367,64 +301,49 @@ function box(g: THREE.Object3D, m: THREE.Material, w: number, h: number, d: numb
   return mesh;
 }
 
-function lightsAndPlate(g: THREE.Group, w: number, y: number, front: number, back: number) {
-  plateMat ??= new THREE.MeshStandardMaterial({ map: plateTex(), roughness: 0.5 });
-  for (const s of [-1, 1]) {
-    box(g, VM.head, 0.3, 0.14, 0.04, s * (w / 2 - 0.25), y, front + 0.01);
-    box(g, VM.tail, 0.18, 0.3, 0.04, s * (w / 2 - 0.12), y + 0.1, back - 0.01);
-  }
-  box(g, plateMat, 0.52, 0.17, 0.02, 0, y - 0.18, back - 0.02);
-  box(g, plateMat, 0.52, 0.17, 0.02, 0, y - 0.18, front + 0.02).rotation.y = Math.PI;
-}
-
-/** White Toyota HiAce-style microbus with blue stripe and roof rack (~4.7 m). Front is +z. */
-export function makeMicrobus() {
-  const g = new THREE.Group();
-  const L = 4.7,
-    W = 1.75;
-  box(g, VM.white, W, 1.35, L, 0, 1.12, 0);
-  box(g, VM.white, W * 0.98, 0.25, 0.5, 0, 0.62, L / 2 + 0.05); // nose
-  box(g, VM.stripe, W + 0.01, 0.1, L - 0.2, 0, 0.82, 0);
-  box(g, VM.black, W + 0.04, 0.16, 0.12, 0, 0.5, L / 2 + 0.22); // bumper
-  box(g, VM.black, W + 0.04, 0.16, 0.12, 0, 0.5, -L / 2 - 0.04);
-  // glass: windscreen, side windows, rear
-  box(g, VM.glass, W * 0.92, 0.55, 0.05, 0, 1.45, L / 2 + 0.01).rotation.x = -0.12;
-  for (const s of [-1, 1]) box(g, VM.glass, 0.03, 0.48, L - 1.0, s * (W / 2 + 0.01), 1.45, -0.25);
-  box(g, VM.glass, W * 0.85, 0.5, 0.03, 0, 1.45, -L / 2 - 0.01);
-  // roof rack
+/** Roof rack for the microbus (bars + rails), sized to the dressed van. */
+export function roofRack(len: number, width: number) {
   const rack = new THREE.Group();
-  for (const s of [-1, 1]) box(rack, VM.black, 0.04, 0.04, L - 0.9, s * 0.78, 0, 0);
-  for (let i = 0; i < 6; i++) box(rack, VM.black, 1.56, 0.03, 0.04, 0, 0, -L / 2 + 0.75 + i * 0.64);
+  for (const s of [-1, 1]) box(rack, VM.black, 0.04, 0.04, len, (s * width) / 2, 0, 0);
+  const n = Math.round(len / 0.6);
+  for (let i = 0; i <= n; i++) box(rack, VM.black, width, 0.03, 0.04, 0, 0, -len / 2 + (i * len) / n);
   for (let i = 0; i < 5; i++)
-    for (const s of [-1, 1]) box(rack, VM.black, 0.03, 0.18, 0.03, s * 0.78, -0.09, -L / 2 + 0.75 + i * 0.8);
-  rack.position.y = 1.98;
-  g.add(rack);
-  for (const s of [-1, 1]) box(g, VM.black, 0.06, 0.12, 0.18, s * (W / 2 + 0.06), 1.4, L / 2 - 0.3); // mirrors
-  lightsAndPlate(g, W, 0.8, L / 2 + 0.3, -L / 2 - 0.01);
-  addWheels(g, 0.34, W / 2 - 0.08, L / 2 - 0.75, -L / 2 + 0.85);
-  g.userData.vehicle = 'microbus';
-  return g;
+    for (const s of [-1, 1]) box(rack, VM.black, 0.03, 0.14, 0.03, (s * width) / 2, -0.07, -len / 2 + (i * len) / 4);
+  rack.userData.keep = true;
+  return rack;
 }
 
-/** Black-and-white Cairo taxi sedan (~4.4 m). Front is +z. */
-export function makeTaxi() {
+function checkerTex() {
+  const [c, x] = canvas(128, 32);
+  for (let i = 0; i < 16; i++)
+    for (let j = 0; j < 4; j++) {
+      x.fillStyle = (i + j) % 2 ? '#111' : '#fff';
+      x.fillRect(i * 8, j * 8, 8, 8);
+    }
+  return canvasTex(c, false);
+}
+
+/** Cairo taxi roof sign: chequered band with "TAXI / تاكسي" on top. */
+export function taxiSign() {
   const g = new THREE.Group();
-  const L = 4.4,
-    W = 1.7;
-  box(g, VM.black, W, 0.5, L, 0, 0.62, 0);
-  box(g, VM.white, W + 0.01, 0.2, L - 0.6, 0, 0.66, 0); // white band
-  box(g, VM.black, W * 0.86, 0.48, 2.1, 0, 1.12, -0.15);
-  box(g, VM.white, W * 0.8, 0.06, 1.9, 0, 1.38, -0.15);
-  box(g, VM.glass, W * 0.8, 0.42, 0.04, 0, 1.12, 0.92).rotation.x = -0.5;
-  box(g, VM.glass, W * 0.8, 0.4, 0.04, 0, 1.12, -1.22).rotation.x = 0.45;
-  for (const s of [-1, 1]) box(g, VM.glass, 0.03, 0.34, 1.8, s * (W * 0.43 + 0.01), 1.14, -0.15);
-  // roof "TAXI" light
-  const sign = box(g, VM.white, 0.6, 0.16, 0.22, 0, 1.47, -0.1);
-  sign.material = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff1a0, emissiveIntensity: 0.5 });
-  for (const s of [-1, 1]) box(g, VM.chrome, W + 0.04, 0.12, 0.1, 0, 0.45, s * (L / 2 + 0.03));
-  lightsAndPlate(g, W, 0.72, L / 2, -L / 2);
-  addWheels(g, 0.31, W / 2 - 0.06, L / 2 - 0.85, -L / 2 + 0.85);
-  g.userData.vehicle = 'taxi';
+  const [c, x] = canvas(256, 64);
+  x.fillStyle = '#fff';
+  x.fillRect(0, 0, 256, 64);
+  x.fillStyle = '#111';
+  x.font = 'bold 34px Arial';
+  x.textAlign = 'center';
+  x.fillText('TAXI  تاكسي', 128, 44);
+  const face = new THREE.MeshStandardMaterial({
+    map: canvasTex(c, false),
+    emissive: 0xffffff,
+    emissiveMap: canvasTex(c, false),
+    emissiveIntensity: 0.25
+  });
+  const chk = new THREE.MeshStandardMaterial({ map: checkerTex() });
+  box(g, chk, 0.7, 0.08, 0.26, 0, 0.04, 0);
+  const top = box(g, face, 0.66, 0.16, 0.22, 0, 0.16, 0);
+  top.castShadow = false;
+  g.userData.keep = true;
   return g;
 }
 
