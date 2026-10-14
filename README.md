@@ -37,7 +37,9 @@ npm run build    # بناء الإنتاج إلى dist/
 الاستضافة الوحيدة هي **Vercel** (`vercel.json`: Vite · `npm run build` · `dist`). كل دمج في `main` ينشر تلقائياً.
 
 ## CI
-ملف GitHub Actions جاهز في `docs/ci/ci.yml`. لازم صاحب الريبو ينسخه يدوياً إلى `.github/workflows/ci.yml` (التوكن المستخدم في التطوير مش مسموح له يكتب ملفات workflows).
+[![CI](https://github.com/mohammedemara48-code/police-command/actions/workflows/ci.yml/badge.svg)](https://github.com/mohammedemara48-code/police-command/actions/workflows/ci.yml)
+
+كل تعديل بيتختبر تلقائياً (فحص الأنواع، ESLint، Prettier، الاختبارات، والبناء) عن طريق GitHub Actions.
 
 ## الترخيص
 الكود مرخّص بـ MIT (انظر `LICENSE`). الأصول الخارجية (نماذج وأصوات) لها تراخيصها الخاصة (CC0 / CC-BY)، انظر `CREDITS.md`.

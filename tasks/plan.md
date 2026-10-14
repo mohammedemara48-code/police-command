@@ -14,7 +14,7 @@ Oct 13: item 1 ✅ (PR #14), item 2 ✅ except the workflow file, which the owne
 Process: spec first (docs/GAME_DESIGN.md), small vertical slices, each one PR → squash-merge → live check, headless 412×915 play-test, perf budget (phones on low quality: ≤ ~60 draw calls in street mode, no per-frame allocations in hot loops).
 
 ### CI status (Oct 13)
-- Done: `npm run check` = typecheck + ESLint + Prettier (logic + tests) + Vitest (11 tests on `src/game/logic/`) + build. Workflow file ready at `docs/ci/ci.yml`; it must be copied to `.github/workflows/ci.yml` by the owner (the automation token lacks the GitHub `workflow` permission).
+- Done: `npm run check` = typecheck + ESLint + Prettier (logic + tests) + Vitest (11 tests on `src/game/logic/`) + build. CI runs via `.github/workflows/ci.yml` on every push.
 - ✅ (PR #21) Strict TS: `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns` and `noImplicitOverride` are on (24 dead fields and methods removed); ESLint now reports 0 warnings, with `no-explicit-any` and `no-unused-vars` set as errors.
 - Next: `noUncheckedIndexedAccess` (158 sites), then `exactOptionalPropertyTypes` (5), and Prettier on the older files.
 
