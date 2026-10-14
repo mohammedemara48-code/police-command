@@ -1,7 +1,11 @@
 /** WebAudio: recorded CC0 samples (Kenney, OpenGameArt) with synth fallback */
 
 const VOL_KEY = 'pc.vol.v1';
-export interface Volumes { master: number; music: number; sfx: number }
+export interface Volumes {
+  master: number;
+  music: number;
+  sfx: number;
+}
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
@@ -18,13 +22,20 @@ export class AudioManager {
   private engineSrc: AudioBufferSourceNode | null = null;
   private engineGain: GainNode | null = null;
   vol: Volumes = (() => {
-    try { return { master: 0.8, music: 0.45, sfx: 0.9, ...JSON.parse(localStorage.getItem(VOL_KEY) || '{}') }; }
-    catch { return { master: 0.8, music: 0.45, sfx: 0.9 }; }
+    try {
+      return { master: 0.8, music: 0.45, sfx: 0.9, ...JSON.parse(localStorage.getItem(VOL_KEY) || '{}') };
+    } catch {
+      return { master: 0.8, music: 0.45, sfx: 0.9 };
+    }
   })();
 
   setVolume(k: keyof Volumes, v: number) {
     this.vol[k] = Math.max(0, Math.min(1, v));
-    try { localStorage.setItem(VOL_KEY, JSON.stringify(this.vol)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(VOL_KEY, JSON.stringify(this.vol));
+    } catch {
+      /* ignore */
+    }
     this.applyVol();
   }
   private applyVol() {
@@ -36,15 +47,31 @@ export class AudioManager {
   private loadSamples() {
     if (this.loading || !this.ctx) return this.loading;
     const ctx = this.ctx;
-    this.loading = Promise.all(['/audio/sounds.json', '/audio/calm.json'].map((u) => fetch(u).then((r) => r.json() as Promise<Record<string, string>>).catch(() => ({}))))
+    this.loading = Promise.all(
+      ['/audio/sounds.json', '/audio/calm.json'].map((u) =>
+        fetch(u)
+          .then((r) => r.json() as Promise<Record<string, string>>)
+          .catch(() => ({}))
+      )
+    )
       .then((maps) => Object.assign({}, ...maps) as Record<string, string>)
-      .then((map) => Promise.all(Object.entries(map).map(async ([k, uri]) => {
-        const bin = atob(uri.slice(uri.indexOf(',') + 1));
-        const u8 = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-        try { this.buffers.set(k, await ctx.decodeAudioData(u8.buffer)); } catch { /* skip */ }
-      })))
-      .then(() => { if (this.wantMusic) this.startMusic(); })
+      .then((map) =>
+        Promise.all(
+          Object.entries(map).map(async ([k, uri]) => {
+            const bin = atob(uri.slice(uri.indexOf(',') + 1));
+            const u8 = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            try {
+              this.buffers.set(k, await ctx.decodeAudioData(u8.buffer));
+            } catch {
+              /* skip */
+            }
+          })
+        )
+      )
+      .then(() => {
+        if (this.wantMusic) this.startMusic();
+      })
       .catch(() => undefined);
     return this.loading;
   }
@@ -71,15 +98,34 @@ export class AudioManager {
   setTrack(t: 'music' | 'calm') {
     if (t === this.track && this.musicSrc) return;
     this.track = t;
-    if (this.musicSrc) { try { this.musicSrc.stop(); } catch { /* ignore */ } this.musicSrc = null; this.startMusic(); }
+    if (this.musicSrc) {
+      try {
+        this.musicSrc.stop();
+      } catch {
+        /* ignore */
+      }
+      this.musicSrc = null;
+      this.startMusic();
+    }
   }
 
   private sirenSrc: AudioBufferSourceNode | null = null;
   sirenLoop(on: boolean) {
-    if (!on || !this.enabled) { try { this.sirenSrc?.stop(); } catch { /* ignore */ } this.sirenSrc = null; return; }
+    if (!on || !this.enabled) {
+      try {
+        this.sirenSrc?.stop();
+      } catch {
+        /* ignore */
+      }
+      this.sirenSrc = null;
+      return;
+    }
     this.ensure();
     const buf = this.buffers.get('siren');
-    if (!buf || !this.ctx || !this.sfxGain) { this.sirenSting(); return; }
+    if (!buf || !this.ctx || !this.sfxGain) {
+      this.sirenSting();
+      return;
+    }
     if (this.sirenSrc) return;
     const g = this.ctx.createGain();
     g.gain.value = 0.45;
@@ -104,7 +150,11 @@ export class AudioManager {
   }
   stopMusic() {
     this.wantMusic = false;
-    try { this.musicSrc?.stop(); } catch { /* ignore */ }
+    try {
+      this.musicSrc?.stop();
+    } catch {
+      /* ignore */
+    }
     this.musicSrc = null;
   }
 
@@ -112,7 +162,11 @@ export class AudioManager {
   engine(on: boolean, speed01 = 0) {
     if (!this.ctx || !this.sfxGain) return;
     if (!on || !this.enabled) {
-      try { this.engineSrc?.stop(); } catch { /* ignore */ }
+      try {
+        this.engineSrc?.stop();
+      } catch {
+        /* ignore */
+      }
       this.engineSrc = null;
       return;
     }
@@ -132,7 +186,8 @@ export class AudioManager {
 
   private ensure() {
     if (this.ctx) return;
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const Ctx =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);

@@ -2,7 +2,12 @@
 import { CHAR_KEY, sanitizeChar, type Character } from './logic/character';
 
 function read(): Character | null {
-  try { const s = localStorage.getItem(CHAR_KEY); return s ? sanitizeChar(JSON.parse(s)) : null; } catch { return null; }
+  try {
+    const s = localStorage.getItem(CHAR_KEY);
+    return s ? sanitizeChar(JSON.parse(s)) : null;
+  } catch {
+    return null;
+  }
 }
 let cur = read();
 const subs: ((c: Character) => void)[] = [];
@@ -14,7 +19,11 @@ export const onCharacter = (f: (c: Character) => void) => subs.push(f);
 
 export function setCharacter(c: Character, edited = true) {
   cur = sanitizeChar({ ...c, t: edited ? Date.now() : c.t });
-  try { localStorage.setItem(CHAR_KEY, JSON.stringify(cur)); } catch { /* private mode */ }
+  try {
+    localStorage.setItem(CHAR_KEY, JSON.stringify(cur));
+  } catch {
+    /* private mode */
+  }
   subs.forEach((f) => f(cur!));
 }
 /** for account sync: null when this device never made one */
