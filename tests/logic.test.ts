@@ -309,3 +309,26 @@ describe('police station hub', () => {
     expect(repairTime(100)).toBe(4);
   });
 });
+
+import { stepPull, speederSpeed, passCheckpoint, PULL_T } from '../src/game/logic/missions';
+describe('new mission types', () => {
+  it('traffic stop needs siren, car and distance', () => {
+    let m = 0;
+    for (let i = 0; i < 30; i++) m = stepPull(m, { siren: true, inCar: true, dist: 15 }, 0.1);
+    expect(m).toBe(PULL_T);
+    expect(stepPull(0, { siren: false, inCar: true, dist: 15 }, 1)).toBe(0);
+    expect(stepPull(0, { siren: true, inCar: true, dist: 60 }, 1)).toBe(0);
+    expect(stepPull(2, { siren: false, inCar: true, dist: 15 }, 1)).toBeCloseTo(1.4);
+  });
+  it('speeder is catchable', () => {
+    expect(speederSpeed(18, 0)).toBeLessThan(18 * 0.7);
+    expect(speederSpeed(18, 1.5)).toBeLessThan(speederSpeed(18, 0));
+  });
+  it('checkpoints advance only in the car and in range', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 0, z: 50 }];
+    expect(passCheckpoint(0, pts, 2, 2, true)).toBe(1);
+    expect(passCheckpoint(0, pts, 2, 2, false)).toBe(0);
+    expect(passCheckpoint(1, pts, 2, 2, true)).toBe(1);
+    expect(passCheckpoint(2, pts, 0, 50, true)).toBe(2);
+  });
+});
