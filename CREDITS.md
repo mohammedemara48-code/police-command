@@ -26,3 +26,9 @@
 - Uniform shirt/trousers are the casual-suit textures desaturated and tinted at runtime; duty belt, holster, radio, badge
   and shoulder patches are simple meshes made in code.
 - Built with Blender 4.2 (GPL tool; output not covered) and glTF-Transform (meshopt, WebP textures 512 px).
+
+## Realistic cars
+
+- `car-sedan.glb` is based on "Sedan car" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/sedan-car-42109739
+- `car-police.glb` is based on "Police SUV with generic livery" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/police-suv-with-generic-livery-76e4ca9b
+- Re-oriented, materials renamed (paint tinted per car, emissive lamps), simplified and compressed with glTF-Transform.

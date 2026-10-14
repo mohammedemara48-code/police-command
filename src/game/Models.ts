@@ -36,13 +36,24 @@ export type ModelKind =
   | HumanKind;
 
 /** Realistic MakeHuman (CC0) people, rigged + animated with the Universal Animation Library (CC0). */
-export type HumanKind = 'cop_m' | 'cop_f' | 'civ_m1' | 'civ_m2' | 'civ_m3' | 'civ_f1' | 'civ_f2';
-const GLB = new Set<string>(['cop_m', 'cop_f', 'civ_m1', 'civ_m2', 'civ_m3', 'civ_f1', 'civ_f2']);
-export const isHuman = (k: string) => GLB.has(k);
+export type HumanKind =
+  'cop_m' | 'cop_f' | 'civ_m1' | 'civ_m2' | 'civ_m3' | 'civ_f1' | 'civ_f2' | 'car-sedan' | 'car-police';
+const GLB = new Set<string>([
+  'cop_m',
+  'cop_f',
+  'civ_m1',
+  'civ_m2',
+  'civ_m3',
+  'civ_f1',
+  'civ_f2',
+  'car-sedan',
+  'car-police'
+]);
+const CAR_GLB = new Set<string>(['car-sedan', 'car-police']);
 export const MEN: ModelKind[] = ['civ_m1', 'civ_m2', 'civ_m3'];
 export const WOMEN: ModelKind[] = ['civ_f1', 'civ_f2'];
 
-export const CARS: ModelKind[] = ['challenger', 'challenger', 'challenger', 'challenger', 'challenger'];
+export const CARS: ModelKind[] = ['car-sedan', 'car-sedan', 'challenger', 'car-sedan', 'car-sedan'];
 export const LOW_CARS: ModelKind[] = ['sedan', 'taxi', 'suv', 'van', 'sedan-sports'];
 export const REAL_PEOPLE: ModelKind[] = ['civ_m1', 'civ_f1', 'civ_m2', 'civ_f2', 'civ_m3'];
 export const PEOPLE: ModelKind[] = ['character-male-a', 'character-female-a', 'character-male-c', 'character-female-c'];
@@ -110,7 +121,8 @@ class ModelLib {
             if (m.isMesh) {
               m.castShadow = this.shadows;
               m.receiveShadow = true;
-              if (GLB.has(kind)) {
+              if (CAR_GLB.has(kind)) m.material = this.carMat(m.material as THREE.MeshStandardMaterial);
+              else if (GLB.has(kind)) {
                 const mat = m.material as THREE.MeshStandardMaterial;
                 // skin a little glossy, cloth matte
                 mat.roughness = mat.name === 'Skin' ? 0.62 : mat.name === 'Shoes' ? 0.45 : 0.9;
@@ -204,7 +216,11 @@ class ModelLib {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
         if (fit.noShadow || !this.shadows) m.castShadow = false;
-        if (fit.tint !== undefined) m.material = this.tintMat(m.material as THREE.Material, fit.tint);
+        if (fit.tint === undefined) return;
+        if (CAR_GLB.has(kind)) {
+          if ((m.material as THREE.Material).name === 'Paint')
+            m.material = this.paintMat(m.material as THREE.Material, fit.tint);
+        } else m.material = this.tintMat(m.material as THREE.Material, fit.tint);
       });
     }
     if (kind.startsWith('cop_')) this.policeGear(model);
@@ -300,6 +316,47 @@ class ModelLib {
 
   private tints = new Map<string, THREE.Material>();
   /** Cached tinted copy of a material (multiplies the palette texture), shared by all cars of that colour. */
+  /** Car paint gets a clear coat (high quality), lamps glow, glass reflects. */
+  hiQuality = true;
+  private carMat(src: THREE.MeshStandardMaterial): THREE.Material {
+    const n = src.name;
+    if ((n === 'Paint' || n === 'Livery') && this.hiQuality) {
+      const m = new THREE.MeshPhysicalMaterial({
+        name: n,
+        color: src.color,
+        metalness: 0.45,
+        roughness: 0.32,
+        clearcoat: 1,
+        clearcoatRoughness: 0.08
+      });
+      return m;
+    }
+    if (n === 'Headlight') {
+      src.emissive.setHex(0xfff1d6);
+      src.emissiveIntensity = 0.9;
+    } else if (n === 'Taillight') {
+      src.emissive.setHex(0xff1a10);
+      src.emissiveIntensity = 0.8;
+    } else if (n === 'Beacon') {
+      src.emissive.setHex(0x2a6bff);
+      src.emissiveIntensity = 0.6;
+    } else if (/glaz|glass/i.test(n)) {
+      src.envMapIntensity = 1.6;
+      src.depthWrite = false;
+    }
+    return src;
+  }
+  private paintMat(src: THREE.Material, tint: number) {
+    const key = src.uuid + ':p' + tint;
+    let m = this.tints.get(key);
+    if (!m) {
+      m = src.clone();
+      (m as THREE.MeshStandardMaterial).color.setHex(tint);
+      this.tints.set(key, m);
+    }
+    return m;
+  }
+
   private tintMat(src: THREE.Material, tint: number) {
     const key = src.uuid + ':' + tint;
     let m = this.tints.get(key);
