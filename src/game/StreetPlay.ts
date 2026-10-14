@@ -926,9 +926,12 @@ export class StreetPlay {
   private renderHud() {
     const q = this.squad;
     const stars = Math.round(q.threat);
-    const html = `<div class="gun">🔫 <b>${q.reloading ? 'تعمير…' : `${q.ammo}/${q.mag}`}</b></div>
-      <div class="bar hp"><i style="width:${q.hp}%"></i><span>❤ ${Math.round(q.hp)}</span></div>
-      <div class="bar ar"><i style="width:${q.armor * 2}%"></i><span>🛡 ${Math.round(q.armor)}</span></div>
+    const ring = (cls: string, pct: number, icon: string, label: string) => {
+      const v = Math.max(0, Math.min(100, Math.round(pct)));
+      return `<div class="ring ${cls}${v <= 25 ? ' low' : ''}" role="meter" aria-label="${label}" aria-valuenow="${v}" aria-valuemin="0" aria-valuemax="100"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="15.5" pathLength="100"/><circle class="fg" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="${v} 100"/></svg><span>${icon}</span></div>`;
+    };
+    const html = `<div class="hud-row">${ring('hp', q.hp, '❤', `الصحة ${Math.round(q.hp)}%`)}${ring('ar', q.armor * 2, '🛡', `الدرع ${Math.round(q.armor * 2)}%`)}
+      <div class="gun">🔫 <b>${q.reloading ? '…' : `${q.ammo}/${q.mag}`}</b></div></div>
       <div class="threat">${stars ? 'تهديد ' + '★'.repeat(stars) + '☆'.repeat(5 - stars) : `رتبة: ${rank().name}`}</div>`;
     if (this.hudEl && html !== this.hudHtml) { this.hudEl.innerHTML = html; this.hudHtml = html; }
     // contextual buttons

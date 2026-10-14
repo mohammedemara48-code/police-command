@@ -878,3 +878,43 @@ html.onfoot.can-hub .street-actions button[data-act="hub"]{display:block;backgro
 .hub-list button:disabled{opacity:.45}
 .hub-list small{opacity:.7}
 .hub-close{margin-top:14px;width:100%}
+
+/* ===== Compact HUD (ring gauges) + no-overlap layout for portrait & phone landscape ===== */
+#street-hp .hud-row{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-bottom:4px}
+#street-hp .ring{position:relative;width:34px;height:34px;flex:none}
+#street-hp .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+#street-hp .ring circle{fill:rgba(0,0,0,.55);stroke-width:3.4;stroke-linecap:round}
+#street-hp .ring .bg{stroke:rgba(255,255,255,.14)}
+#street-hp .ring .fg{fill:none;stroke:#ff3b4e;transition:stroke-dasharray .25s}
+#street-hp .ring.ar .fg{stroke:#4aa8ff}
+#street-hp .ring.low .fg{animation:ringpulse .8s infinite alternate}
+@keyframes ringpulse{to{opacity:.45}}
+html.reduce-motion #street-hp .ring.low .fg{animation:none}
+#street-hp .ring span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1}
+#street-hp .gun{margin:0!important;padding:3px 8px!important;font-size:12px!important;border-radius:10px}
+#street-hp .threat{font-size:11px!important;padding:2px 7px!important}
+body[data-play="street"] #street-hp{width:auto!important;text-align:end}
+/* compact objective */
+body[data-play="street"] #street-obj{padding:6px 9px!important;font-size:11px!important;line-height:1.35!important;border-radius:10px}
+#street-obj small{font-size:10px!important}
+#street-obj .now{font-size:13px!important;font-weight:700!important}
+#street-obj .now em{font-size:12px!important}
+#street-tut{font-size:12px}
+
+/* phone landscape: top strip = minimap | objective | gauges; controls stay in the bottom corners */
+@media (orientation:landscape) and (max-height:540px){
+  body[data-play="street"] #street-mini{top:calc(40px + env(safe-area-inset-top))!important;left:calc(8px + env(safe-area-inset-left))!important;width:78px!important;height:78px!important}
+  body[data-play="street"] #street-obj{top:calc(40px + env(safe-area-inset-top))!important;left:calc(94px + env(safe-area-inset-left))!important;right:auto!important;max-width:min(46vw,360px)!important;width:max-content}
+  body[data-play="street"] #street-obj .now{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body[data-play="street"] #street-hp{top:calc(40px + env(safe-area-inset-top))!important;right:calc(8px + env(safe-area-inset-right))!important}
+  body[data-play="street"] #street-hp .ring{width:30px;height:30px}
+  body[data-play="street"] .meta-pause-btn{top:calc(124px + env(safe-area-inset-top))!important;left:calc(8px + env(safe-area-inset-left))!important;width:34px!important;height:34px!important;font-size:14px!important}
+  body[data-play="street"] .street-stick{width:100px!important;height:100px!important;left:calc(14px + env(safe-area-inset-left))!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;top:auto!important}
+  body[data-play="street"] .street-actions{bottom:calc(8px + env(safe-area-inset-bottom))!important;right:calc(8px + env(safe-area-inset-right))!important;top:auto!important;display:grid!important;grid-template-columns:repeat(2,auto);gap:5px!important;align-items:end;max-height:calc(100vh - 140px)}
+  body[data-play="street"] .street-actions button{padding:7px 10px!important;font-size:11px!important;min-height:34px;border-radius:10px}
+  body[data-play="street"] .street-actions button[data-act="shoot"]{width:64px!important;height:64px!important;font-size:12px!important;grid-row:span 2}
+  body[data-play="street"] #street-speedo{bottom:calc(8px + env(safe-area-inset-bottom))!important;padding:4px 10px 5px!important;min-width:76px}
+  body[data-play="street"] #street-speedo b{font-size:20px}
+  body[data-play="street"] #street-status{top:auto!important;bottom:calc(98px + env(safe-area-inset-bottom))!important;font-size:11px!important;max-width:40vw!important;padding:5px 10px!important}
+  body[data-play="street"] #street-speedo i{width:56px}
+}
