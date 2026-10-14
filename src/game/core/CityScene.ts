@@ -1,15 +1,15 @@
-import { reducedMotion } from './Motion';
+import { reducedMotion } from '../config/Motion';
 // @source-complete
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { loadEnvironment } from './Environment';
+import { loadEnvironment } from '../world/Environment';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
 import type { StreetPlay } from './StreetPlay';
-import { Q } from './Quality';
+import { Q } from '../config/Quality';
 import { models, fx, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS } from './Models';
 
 type CarMesh = THREE.Group & { userData: { unitId?: string; flashing?: boolean; lights?: THREE.PointLight[] } };

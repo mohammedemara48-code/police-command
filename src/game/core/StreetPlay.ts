@@ -1,13 +1,13 @@
-import { reducedMotion } from './Motion';
-import { stepLoco, followCamYaw, wrapAngle } from './logic/locomotion';
-import { stepCar, driftOf, kmh, hitDamage, pullOver } from './logic/driving';
-import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from './logic/chase';
-import { character, onCharacter, setCharacter } from './Character';
-import { STATION, hubAllowed } from './logic/station';
-import { resolve as collide, type OBB } from './logic/collide';
-import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from './logic/missions';
-import { openCreator } from './CharacterCreator';
-import { modelFor, recolorFor, WEAPONS, type WeaponId } from './logic/character';
+import { reducedMotion } from '../config/Motion';
+import { stepLoco, followCamYaw, wrapAngle } from '../logic/locomotion';
+import { stepCar, driftOf, kmh, hitDamage, pullOver } from '../logic/driving';
+import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from '../logic/chase';
+import { character, onCharacter, setCharacter } from '../entities/Character';
+import { STATION, hubAllowed } from '../logic/station';
+import { resolve as collide, type OBB } from '../logic/collide';
+import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from '../logic/missions';
+import { openCreator } from '../ui/CharacterCreator';
+import { modelFor, recolorFor, WEAPONS, type WeaponId } from '../logic/character';
 import {
   buildCity,
   onRoad,
@@ -20,7 +20,7 @@ import {
   findPath,
   farNode,
   followPath
-} from './City';
+} from '../world/City';
 import {
   surface,
   worldUV,
@@ -37,16 +37,16 @@ import {
   corniche,
   CORNICHE,
   type Sea
-} from './Environment';
-import { newCall, type Kind } from './Dispatch';
-import { Squad } from './Npc';
-import { addStat, checkAch } from './Achievements';
+} from '../world/Environment';
+import { newCall, type Kind } from '../missions/Dispatch';
+import { Squad } from '../entities/Npc';
+import { addStat, checkAch } from '../systems/Achievements';
 import * as THREE from 'three';
 import { models, CARS, MEN, WOMEN, LOW_BUILDINGS, TOWERS, fx } from './Models';
-import { audio } from './AudioManager';
-import { Q } from './Quality';
+import { audio } from '../systems/AudioManager';
+import { Q } from '../config/Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { tutorialHint, TUT_KEY, TUT_STEPS, type TutAct } from './logic/tutorial';
+import { tutorialHint, TUT_KEY, TUT_STEPS, type TutAct } from '../logic/tutorial';
 import {
   LEVELS,
   levelById,
@@ -57,7 +57,7 @@ import {
   type LevelDef,
   type Line,
   type Behaviour
-} from './Levels';
+} from '../missions/Levels';
 
 export interface StreetPlace {
   id: string;

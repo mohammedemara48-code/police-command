@@ -5,13 +5,13 @@ if (!location.search.includes('autotest')) inject({ mode: 'production' });
 
 // Touch devices (also when the browser reports a fine pointer, e.g. 'desktop site' mode) get the joystick UI.
 if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.documentElement.classList.add('touch');
-import { GameManager } from './game/GameManager';
-import { IncidentManager } from './game/IncidentManager';
-import { CityScene } from './game/CityScene';
-import { UI } from './game/UI';
-import { audio } from './game/AudioManager';
-import { Meta } from './game/Meta';
-import { restoreCommand, startAutosave, saveCommand } from './game/Save';
+import { GameManager } from './game/core/GameManager';
+import { IncidentManager } from './game/missions/IncidentManager';
+import { CityScene } from './game/core/CityScene';
+import { UI } from './game/ui/UI';
+import { audio } from './game/systems/AudioManager';
+import { Meta } from './game/ui/Meta';
+import { restoreCommand, startAutosave, saveCommand } from './game/systems/Save';
 import { registerSW as register } from 'virtual:pwa-register';
 const registerSW = (o: Parameters<typeof register>[0]) => {
   updateSW = register(o);

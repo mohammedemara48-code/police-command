@@ -2,7 +2,7 @@
  * Port of Unity PoliceCommand.Core.IncidentManager
  * Decisions, multi-step criticals, longer tense timers
  */
-import { GameManager } from './GameManager';
+import { GameManager } from '../core/GameManager';
 import {
   Incident,
   CrimeType,
@@ -23,10 +23,10 @@ import {
   heatForDecision,
   districtById,
   clamp
-} from './types';
-import { audio } from './AudioManager';
-import { previewOdds, resolveOdds } from './logic/odds';
-import { dispatchReward, reputationDelta, injureChance as injureChanceFor } from './logic/rewards';
+} from '../core/types';
+import { audio } from '../systems/AudioManager';
+import { previewOdds, resolveOdds } from '../logic/odds';
+import { dispatchReward, reputationDelta, injureChance as injureChanceFor } from '../logic/rewards';
 
 interface IncidentTemplate {
   crimeType: CrimeType;

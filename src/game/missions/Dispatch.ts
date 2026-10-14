@@ -2,7 +2,7 @@
  * Procedural dispatch: endless radio calls for free patrol after (or alongside) the story.
  * Each call becomes a LevelDef with the same step-script the story uses, placed on a real road.
  */
-import { AVENUES_X, CROSS_Z, districtAt, DISTRICT_NAMES } from './City';
+import { AVENUES_X, CROSS_Z, districtAt, DISTRICT_NAMES } from '../world/City';
 import { patrolCalls, rank, type LevelDef, type SuspectSpec, type Step, type Behaviour } from './Levels';
 
 export type Kind = 'robbery' | 'chase' | 'gang' | 'hostage' | 'runner' | 'speeder' | 'route';

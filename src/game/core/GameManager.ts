@@ -1,4 +1,4 @@
-import { addRewards, promoteCost } from './logic/economy';
+import { addRewards, promoteCost } from '../logic/economy';
 /**
  * Port of Unity PoliceCommand.Core.GameManager
  * Starting resources match concept HUD: $125400 / 82★ / fuel 750 / supplies 900 / research 400

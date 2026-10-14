@@ -1,8 +1,8 @@
-import { reducedMotion, setReducedMotion } from './Motion';
-import { exportSave, importSave } from './Save';
-import type { GameManager } from './GameManager';
-import { audio } from './AudioManager';
-import { quality, setQuality, type Quality } from './Quality';
+import { reducedMotion, setReducedMotion } from '../config/Motion';
+import { exportSave, importSave } from '../systems/Save';
+import type { GameManager } from '../core/GameManager';
+import { audio } from '../systems/AudioManager';
+import { quality, setQuality, type Quality } from '../config/Quality';
 
 const KEY = 'pc.save.v1';
 interface Save {
