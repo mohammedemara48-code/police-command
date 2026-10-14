@@ -10,7 +10,8 @@ export function stepPull(m: number, o: { siren: boolean; inCar: boolean; dist: n
 }
 
 /** Speeder pace: a bit slower than the patrol car so you can always catch up. */
-export const speederSpeed = (playerMax: number, turn: number) => playerMax * 0.62 * (1 - 0.4 * Math.min(1, Math.abs(turn) / 1.2));
+export const speederSpeed = (playerMax: number, turn: number, dist = 0) =>
+  playerMax * 0.62 * (1 - 0.4 * Math.min(1, Math.abs(turn) / 1.2)) * (dist > 90 ? 0 : dist > 60 ? 0.4 : dist > 35 ? 0.7 : 1); // rubber band: waits for you (mission clock is the only fail)
 
 /** Checkpoint progress: returns the next index after passing (or the same). */
 export function passCheckpoint(i: number, pts: { x: number; z: number }[], x: number, z: number, inCar: boolean) {
