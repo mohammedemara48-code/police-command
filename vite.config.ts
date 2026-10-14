@@ -9,7 +9,8 @@ export default defineConfig({
       manifest: {
         name: 'قيادة الشرطة — POLICE COMMAND',
         short_name: 'Police Command',
-        description: 'لعبة شرطة ثلاثية الأبعاد بالعربي: حملة 12 مهمة، دورية حرة، مطاردات واعتقالات. تشتغل على الموبايل ومن غير نت بعد أول مرة.',
+        description:
+          'لعبة شرطة ثلاثية الأبعاد بالعربي: حملة 12 مهمة، دورية حرة، مطاردات واعتقالات. تشتغل على الموبايل ومن غير نت بعد أول مرة.',
         categories: ['games'],
         theme_color: '#0a1628',
         background_color: '#050b14',
@@ -31,11 +32,27 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
-          { urlPattern: ({ request }) => request.mode === 'navigate', handler: 'NetworkFirst', options: { cacheName: 'pages', networkTimeoutSeconds: 4 } },
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: { cacheName: 'pages', networkTimeoutSeconds: 4 }
+          },
           { urlPattern: /\/(models|audio)\//, handler: 'StaleWhileRevalidate', options: { cacheName: 'game-assets' } },
           // three.js comes from the CDN (import map) and fonts from Google: cache them so the game starts offline
-          { urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/npm\/three@/, handler: 'CacheFirst', options: { cacheName: 'three-cdn', expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 365 }, cacheableResponse: { statuses: [0, 200] } } },
-          { urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//, handler: 'StaleWhileRevalidate', options: { cacheName: 'fonts', expiration: { maxEntries: 20 }, cacheableResponse: { statuses: [0, 200] } } }
+          {
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/npm\/three@/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'three-cdn',
+              expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'fonts', expiration: { maxEntries: 20 }, cacheableResponse: { statuses: [0, 200] } }
+          }
         ]
       }
     })
