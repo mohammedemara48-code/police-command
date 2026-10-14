@@ -275,8 +275,7 @@ export class GameManager {
   tick(dt: number) {
     if (!this.state.running) return;
     this.state.timeSec += dt;
-    this.state.cityHour =
-      (this.state.cityHour + (dt / Math.max(60, this.state.dayCycleSec)) * 24) % 24;
+    this.state.cityHour = (this.state.cityHour + (dt / Math.max(60, this.state.dayCycleSec)) * 24) % 24;
 
     const dayLen = 180;
     const newDay = Math.floor(this.state.timeSec / dayLen) + 1;

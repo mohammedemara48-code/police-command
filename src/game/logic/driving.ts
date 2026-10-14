@@ -1,8 +1,18 @@
 /** Arcade car handling (pure, unit-tested): accel/brake, speed-sensitive steering, grip and handbrake drift. */
 import { wrapAngle } from './locomotion';
 
-export interface CarState { speed: number; yaw: number; velYaw: number }
-export interface CarInput { throttle: number; steer: number; handbrake: boolean; max: number; damage?: number }
+export interface CarState {
+  speed: number;
+  yaw: number;
+  velYaw: number;
+}
+export interface CarInput {
+  throttle: number;
+  steer: number;
+  handbrake: boolean;
+  max: number;
+  damage?: number;
+}
 
 export const ACCEL = 10; // m/s²
 export const BRAKE = 22;
@@ -15,7 +25,7 @@ export function stepCar(s: CarState, i: CarInput, dt: number): CarState {
   const max = i.max * (1 - 0.4 * Math.min(1, (i.damage ?? 0) / 100));
   let { speed, yaw, velYaw } = s;
   const t = Math.max(-1, Math.min(1, i.throttle));
-  if (t > 0.05) speed += (speed < 0 ? BRAKE : ACCEL * (1 - 0.65 * Math.max(0, speed) / max)) * t * dt;
+  if (t > 0.05) speed += (speed < 0 ? BRAKE : ACCEL * (1 - (0.65 * Math.max(0, speed)) / max)) * t * dt;
   else if (t < -0.05) speed += (speed > 0.5 ? -BRAKE : -ACCEL * 0.6) * -t * dt * (speed > 0.5 ? 1 : 1);
   else speed -= Math.sign(speed) * Math.min(Math.abs(speed), COAST * dt);
   if (i.handbrake) speed -= Math.sign(speed) * Math.min(Math.abs(speed), 7 * dt);

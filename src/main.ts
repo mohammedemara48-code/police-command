@@ -13,7 +13,9 @@ import { audio } from './game/AudioManager';
 import { Meta } from './game/Meta';
 import { restoreCommand, startAutosave, saveCommand } from './game/Save';
 import { registerSW as register } from 'virtual:pwa-register';
-const registerSW = (o: Parameters<typeof register>[0]) => { updateSW = register(o); };
+const registerSW = (o: Parameters<typeof register>[0]) => {
+  updateSW = register(o);
+};
 let updateSW: (reload?: boolean) => Promise<void> = async () => undefined;
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -40,7 +42,10 @@ function frame(now: number) {
     if (!city.street?.active) incidents.tick(dt);
   }
   meta.check();
-  if (meta.paused || meta.over) { requestAnimationFrame(frame); return; }
+  if (meta.paused || meta.over) {
+    requestAnimationFrame(frame);
+    return;
+  }
   city.syncIncidents(incidents.openIncidents);
 
   for (const u of game.units) {
@@ -65,7 +70,6 @@ function frame(now: number) {
 }
 requestAnimationFrame(frame);
 
-
 // PWA: offline cache + "new version available" prompt (the new service worker waits until the player taps Update).
 registerSW({
   onNeedRefresh() {
@@ -73,14 +77,20 @@ registerSW({
     const bar = document.createElement('div');
     bar.id = 'pwa-update';
     bar.setAttribute('role', 'status');
-    bar.innerHTML = '<span>🚨 فيه نسخة جديدة من اللعبة.</span><button type="button" data-u="go">تحديث</button><button type="button" data-u="later">بعدين</button>';
+    bar.innerHTML =
+      '<span>🚨 فيه نسخة جديدة من اللعبة.</span><button type="button" data-u="go">تحديث</button><button type="button" data-u="later">بعدين</button>';
     bar.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest('[data-u]') as HTMLElement | null;
       if (!b) return;
-      if (b.dataset.u === 'go') { saveCommand(game); void updateSW(true); }
+      if (b.dataset.u === 'go') {
+        saveCommand(game);
+        void updateSW(true);
+      }
       bar.remove();
     });
     document.body.appendChild(bar);
   },
-  onOfflineReady() { /* cached for offline play */ }
+  onOfflineReady() {
+    /* cached for offline play */
+  }
 });

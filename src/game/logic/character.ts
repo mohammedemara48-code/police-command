@@ -30,7 +30,8 @@ export interface Character {
 
 export const DEFAULT_CHAR: Character = { body: 'male', skin: 1, hair: 0, uniform: 0, weapon: 'pistol', t: 0 };
 
-const idx = (v: unknown, n: number, d: number) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) < n ? (v as number) : d);
+const idx = (v: unknown, n: number, d: number) =>
+  Number.isInteger(v) && (v as number) >= 0 && (v as number) < n ? (v as number) : d;
 
 /** Clamp anything (old saves, imports, server data) into a valid character. */
 export function sanitizeChar(raw: unknown): Character {

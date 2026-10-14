@@ -32,13 +32,20 @@ function png(size, rgbaFn) {
     for (let x = 0; x < size; x++) {
       const [r, g, b, a] = rgbaFn(x, y, size);
       const o = y * (size * 4 + 1) + 1 + x * 4;
-      raw[o] = r; raw[o + 1] = g; raw[o + 2] = b; raw[o + 3] = a;
+      raw[o] = r;
+      raw[o + 1] = g;
+      raw[o + 2] = b;
+      raw[o + 3] = a;
     }
   }
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
   const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   return Buffer.concat([
     sig,
@@ -50,12 +57,18 @@ function png(size, rgbaFn) {
 
 function icon(size) {
   return png(size, (x, y, s) => {
-    const cx = s / 2, cy = s / 2;
-    const dx = x - cx, dy = y - cy;
+    const cx = s / 2,
+      cy = s / 2;
+    const dx = x - cx,
+      dy = y - cy;
     const r = Math.hypot(dx, dy);
     if (r > s * 0.45) return [8, 16, 28, 255];
     if (r > s * 0.38) return [126, 200, 255, 255];
-    const inShield = Math.abs(dx) < s * 0.22 && dy > -s * 0.28 && dy < s * 0.3 && (dy < s * 0.1 || Math.abs(dx) < s * 0.22 * (1 - (dy - s * 0.1) / (s * 0.2)));
+    const inShield =
+      Math.abs(dx) < s * 0.22 &&
+      dy > -s * 0.28 &&
+      dy < s * 0.3 &&
+      (dy < s * 0.1 || Math.abs(dx) < s * 0.22 * (1 - (dy - s * 0.1) / (s * 0.2)));
     if (inShield) return [46, 229, 157, 255];
     return [26, 90, 175, 255];
   });
@@ -66,7 +79,11 @@ function badge(dx, dy, k) {
   const r = Math.hypot(dx, dy);
   if (r > k * 0.45) return null;
   if (r > k * 0.38) return [126, 200, 255, 255];
-  const inShield = Math.abs(dx) < k * 0.22 && dy > -k * 0.28 && dy < k * 0.3 && (dy < k * 0.1 || Math.abs(dx) < k * 0.22 * (1 - (dy - k * 0.1) / (k * 0.2)));
+  const inShield =
+    Math.abs(dx) < k * 0.22 &&
+    dy > -k * 0.28 &&
+    dy < k * 0.3 &&
+    (dy < k * 0.1 || Math.abs(dx) < k * 0.22 * (1 - (dy - k * 0.1) / (k * 0.2)));
   return inShield ? [46, 229, 157, 255] : [26, 90, 175, 255];
 }
 
@@ -101,14 +118,23 @@ function wide(w, h) {
       const b = badge(x - w / 2, y - h * 0.47, h * 0.62);
       if (b) c = b;
       const o = y * (w * 4 + 1) + 1 + x * 4;
-      raw[o] = c[0]; raw[o + 1] = c[1]; raw[o + 2] = c[2]; raw[o + 3] = c[3];
+      raw[o] = c[0];
+      raw[o + 1] = c[1];
+      raw[o + 2] = c[2];
+      raw[o + 3] = c[3];
     }
   }
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(w, 0);
   ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8; ihdr[9] = 6;
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0))
+  ]);
 }
 
 fs.writeFileSync(path.join(outDir, 'icon-192.png'), icon(192));

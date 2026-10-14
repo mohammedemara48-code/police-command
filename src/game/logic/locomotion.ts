@@ -5,7 +5,11 @@ export const ACCEL = 16; // m/s²
 export const DECEL = 22; // m/s²
 export const TURN_RATE = 11; // rad/s
 
-export interface Loco { vx: number; vz: number; yaw: number }
+export interface Loco {
+  vx: number;
+  vz: number;
+  yaw: number;
+}
 
 export function wrapAngle(a: number) {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -19,20 +23,29 @@ export function wrapAngle(a: number) {
  */
 export function stepLoco(s: Loco, ix: number, iy: number, camYaw: number, run: boolean, dt: number): Loco {
   let m = Math.hypot(ix, iy);
-  if (m > 1) { ix /= m; iy /= m; m = 1; }
+  if (m > 1) {
+    ix /= m;
+    iy /= m;
+    m = 1;
+  }
   if (m < 0.12) m = 0; // dead zone
   // world direction: forward = camera heading, right = heading - 90°
-  const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
-  const rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
+  const fx = Math.sin(camYaw),
+    fz = Math.cos(camYaw);
+  const rx = -Math.cos(camYaw),
+    rz = Math.sin(camYaw);
   const dx = m ? (fx * iy + rx * ix) / Math.hypot(ix, iy) : 0;
   const dz = m ? (fz * iy + rz * ix) / Math.hypot(ix, iy) : 0;
   const top = run || m > 0.92 ? RUN : WALK * Math.max(0.45, m / 0.92);
-  const tx = dx * (m ? top : 0), tz = dz * (m ? top : 0);
-  const ex = tx - s.vx, ez = tz - s.vz;
+  const tx = dx * (m ? top : 0),
+    tz = dz * (m ? top : 0);
+  const ex = tx - s.vx,
+    ez = tz - s.vz;
   const el = Math.hypot(ex, ez);
   const rate = (m ? ACCEL : DECEL) * dt;
   const k = el > rate ? rate / el : 1;
-  const vx = s.vx + ex * k, vz = s.vz + ez * k;
+  const vx = s.vx + ex * k,
+    vz = s.vz + ez * k;
   let yaw = s.yaw;
   if (m) {
     const want = Math.atan2(dx, dz);

@@ -209,7 +209,8 @@ describe('character profile', () => {
     expect(c).toEqual({ body: 'female', skin: 1, hair: 3, uniform: 2, weapon: 'pistol', t: 5 });
   });
   it('newer edit wins when syncing', () => {
-    const a = { ...DEFAULT_CHAR, t: 10 }, b = { ...DEFAULT_CHAR, body: 'female' as const, t: 20 };
+    const a = { ...DEFAULT_CHAR, t: 10 },
+      b = { ...DEFAULT_CHAR, body: 'female' as const, t: 20 };
     expect(newerChar(a, b)).toBe(b);
     expect(newerChar(b, a)).toBe(b);
     expect(newerChar(null, a)).toBe(a);
@@ -219,7 +220,9 @@ describe('character profile', () => {
     expect(Object.keys(recolorFor({ ...DEFAULT_CHAR, body: 'female' }))).toContain('Hair_Brown');
   });
   it('weapons trade magazine size for damage fairly', () => {
-    const p = weaponStats(DEFAULT_CHAR, 12, 1), r = weaponStats({ ...DEFAULT_CHAR, weapon: 'revolver' }, 12, 1), s = weaponStats({ ...DEFAULT_CHAR, weapon: 'smg' }, 12, 1);
+    const p = weaponStats(DEFAULT_CHAR, 12, 1),
+      r = weaponStats({ ...DEFAULT_CHAR, weapon: 'revolver' }, 12, 1),
+      s = weaponStats({ ...DEFAULT_CHAR, weapon: 'smg' }, 12, 1);
     expect(p).toEqual({ mag: 12, dmg: 1, cool: 0.3 });
     expect(r.mag).toBe(6);
     expect(s.mag).toBe(24);
@@ -231,8 +234,10 @@ describe('character profile', () => {
 import { fleeSpeed, trimBehind, chaseOutcome, stepLock, LOCK_T } from '../src/game/logic/chase';
 describe('chase fairness', () => {
   it('suspect is always slower than the player car, even on the hardest chase', () => {
-    for (const k of [0.85, 1, 1.3]) for (const t of [0, 20, 60]) for (const dist of [5, 30, 100])
-      expect(fleeSpeed({ t, k, playerMax: 18, dist, turn: 0 })).toBeLessThan(18 * 0.9);
+    for (const k of [0.85, 1, 1.3])
+      for (const t of [0, 20, 60])
+        for (const dist of [5, 30, 100])
+          expect(fleeSpeed({ t, k, playerMax: 18, dist, turn: 0 })).toBeLessThan(18 * 0.9);
   });
   it('brakes for corners and eases off when far', () => {
     const s = fleeSpeed({ t: 10, k: 1, playerMax: 18, dist: 30, turn: 0 });
@@ -240,7 +245,16 @@ describe('chase fairness', () => {
     expect(fleeSpeed({ t: 10, k: 1, playerMax: 18, dist: 100, turn: 0 })).toBeLessThan(s);
   });
   it('drops waypoints behind the car at start', () => {
-    const p = trimBehind([{ x: 0, z: -10 }, { x: 0, z: 0 }, { x: 0, z: 60 }], 0, 5, 0);
+    const p = trimBehind(
+      [
+        { x: 0, z: -10 },
+        { x: 0, z: 0 },
+        { x: 0, z: 60 }
+      ],
+      0,
+      5,
+      0
+    );
     expect(p).toEqual([{ x: 0, z: 60 }]);
   });
   it('catch only counts in the car', () => {
@@ -263,7 +277,10 @@ describe('chase fairness', () => {
 import { stepCar, driftOf, kmh, hitDamage, pullOver } from '../src/game/logic/driving';
 describe('arcade driving', () => {
   const s0 = { speed: 0, yaw: 0, velYaw: 0 };
-  const run = (s: typeof s0, i: Parameters<typeof stepCar>[1], n: number) => { for (let k = 0; k < n; k++) s = stepCar(s, i, 0.05); return s; };
+  const run = (s: typeof s0, i: Parameters<typeof stepCar>[1], n: number) => {
+    for (let k = 0; k < n; k++) s = stepCar(s, i, 0.05);
+    return s;
+  };
   it('accelerates toward top speed and brakes hard', () => {
     const s = run(s0, { throttle: 1, steer: 0, handbrake: false, max: 18 }, 100);
     expect(s.speed).toBeGreaterThan(16);
@@ -326,7 +343,10 @@ describe('new mission types', () => {
     expect(speederSpeed(18, 0, 80)).toBeLessThan(speederSpeed(18, 0, 10) * 0.5);
   });
   it('checkpoints advance only in the car and in range', () => {
-    const pts = [{ x: 0, z: 0 }, { x: 0, z: 50 }];
+    const pts = [
+      { x: 0, z: 0 },
+      { x: 0, z: 50 }
+    ];
     expect(passCheckpoint(0, pts, 2, 2, true)).toBe(1);
     expect(passCheckpoint(0, pts, 2, 2, false)).toBe(0);
     expect(passCheckpoint(1, pts, 2, 2, true)).toBe(1);

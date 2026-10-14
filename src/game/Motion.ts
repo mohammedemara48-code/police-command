@@ -5,13 +5,19 @@ function read(): boolean {
     const v = localStorage.getItem(KEY);
     if (v === 'reduce') return true;
     if (v === 'full') return false;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 export let reducedMotion = read();
 document.documentElement.classList.toggle('reduce-motion', reducedMotion);
 export function setReducedMotion(on: boolean) {
   reducedMotion = on;
-  try { localStorage.setItem(KEY, on ? 'reduce' : 'full'); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(KEY, on ? 'reduce' : 'full');
+  } catch {
+    /* ignore */
+  }
   document.documentElement.classList.toggle('reduce-motion', on);
 }

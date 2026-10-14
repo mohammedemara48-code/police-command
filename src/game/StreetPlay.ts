@@ -18,7 +18,17 @@ import { audio } from './AudioManager';
 import { Q } from './Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { tutorialHint, TUT_KEY, TUT_STEPS, type TutAct } from './logic/tutorial';
-import { LEVELS, levelById, completeLevel, progress, rank, isPatrol, type LevelDef, type Line, type Behaviour } from './Levels';
+import {
+  LEVELS,
+  levelById,
+  completeLevel,
+  progress,
+  rank,
+  isPatrol,
+  type LevelDef,
+  type Line,
+  type Behaviour
+} from './Levels';
 
 export interface StreetPlace {
   id: string;
@@ -64,7 +74,13 @@ const MISSION_POOL: MissionDef[] = [
   { id: 'm-port-chase', placeId: 'port', kind: 'chase', title: 'مطاردة هاربين', blurb: 'سيارة سودا هاربة من الميناء' },
   { id: 'm-down-rob', placeId: 'downtown', kind: 'robbery', title: 'سطو على محل', blurb: 'مسلحون داخل محل وسط البلد' },
   { id: 'm-corn-drug', placeId: 'corniche', kind: 'drugs', title: 'تفتيش مخدرات', blurb: 'صفقة مشبوهة على الكورنيش' },
-  { id: 'm-sub-assault', placeId: 'suburb', kind: 'assault', title: 'اعتداء في الشارع', blurb: 'مشاجرة وعنف في الضاحية' },
+  {
+    id: 'm-sub-assault',
+    placeId: 'suburb',
+    kind: 'assault',
+    title: 'اعتداء في الشارع',
+    blurb: 'مشاجرة وعنف في الضاحية'
+  },
   { id: 'm-port-traffic', placeId: 'port', kind: 'traffic', title: 'حادث مروري', blurb: 'تصادم وإغلاق طريق بالميناء' },
   { id: 'm-down-chase', placeId: 'downtown', kind: 'chase', title: 'مطاردة وسط البلد', blurb: 'هارب يقطع الإشارات' },
   { id: 'm-corn-rob', placeId: 'corniche', kind: 'robbery', title: 'سرقة على الكورنيش', blurb: 'سطو على كشك ليلي' },
@@ -204,16 +220,27 @@ export class StreetPlay {
   private boundKeyUp = (e: KeyboardEvent) => this.onKey(e, false);
   /** Desktop: left-click on the 3D view aims at the cursor and fires. */
   private boundMouse = (e: MouseEvent) => {
-    if (this.inCar || e.button !== 0 || (e.target as HTMLElement).tagName !== 'CANVAS' || (e.target as HTMLElement).id === 'street-mini') return;
+    if (
+      this.inCar ||
+      e.button !== 0 ||
+      (e.target as HTMLElement).tagName !== 'CANVAS' ||
+      (e.target as HTMLElement).id === 'street-mini'
+    )
+      return;
     const r = (e.target as HTMLElement).getBoundingClientRect();
-    this.aimRay.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.camera);
+    this.aimRay.setFromCamera(
+      new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
+      this.camera
+    );
     if (this.aimRay.ray.intersectPlane(this.aimPlane, this.aimPt)) {
       this.yaw = Math.atan2(this.aimPt.x - this.player.position.x, this.aimPt.z - this.player.position.z);
       this.player.rotation.y = this.yaw;
     }
     this.firing = true;
   };
-  private boundMouseUp = () => { if (!this.hold.run) this.firing = false; };
+  private boundMouseUp = () => {
+    if (!this.hold.run) this.firing = false;
+  };
 
   constructor(
     private scene: THREE.Scene,
@@ -238,7 +265,6 @@ export class StreetPlay {
     this.activeMission = this.missions[0] || null;
     this.missionId = this.activeMission?.placeId || 'port';
   }
-
 
   private mat(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
     return new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.12, ...opts });
@@ -322,8 +348,13 @@ export class StreetPlay {
       models.setClip(g, 'idle');
       return g;
     });
-    this.squad.onGunfire = (x, z) => { this.panicAt.set(x, 0, z); this.panicT = 6; };
-    this.squad.onShot = () => { this.recoil = 1; };
+    this.squad.onGunfire = (x, z) => {
+      this.panicAt.set(x, 0, z);
+      this.panicT = 6;
+    };
+    this.squad.onShot = () => {
+      this.recoil = 1;
+    };
     this.buildGun();
     this.buildTrafficLights();
     this.spawnPeople();
@@ -352,7 +383,10 @@ export class StreetPlay {
       if (m.isMesh && !c.userData.dynamic && !Array.isArray(m.material) && m.geometry.index) {
         if (take(m)) remove.push(c);
       } else if (c.userData.static) {
-        c.traverse((o) => { const mm = o as THREE.Mesh; if (mm.isMesh && mm.geometry.index) take(mm); });
+        c.traverse((o) => {
+          const mm = o as THREE.Mesh;
+          if (mm.isMesh && mm.geometry.index) take(mm);
+        });
         remove.push(c);
       }
     }
@@ -377,14 +411,25 @@ export class StreetPlay {
   /** Continuous rows of buildings with ground-floor shops along the whole street. */
   private buildStreetRows() {
     const shops: Array<[string, string]> = [
-      ['صيدلية', '#2ecc71'], ['مخبز', '#f39c12'], ['كافيه', '#a0522d'], ['سوبر ماركت', '#e74c3c'],
-      ['مطعم', '#e67e22'], ['ملابس', '#9b59b6'], ['موبايلات', '#3498db'], ['حلويات', '#ff6fa8'], ['بنك', '#16a085'], ['مكتبة', '#c0a050']
+      ['صيدلية', '#2ecc71'],
+      ['مخبز', '#f39c12'],
+      ['كافيه', '#a0522d'],
+      ['سوبر ماركت', '#e74c3c'],
+      ['مطعم', '#e67e22'],
+      ['ملابس', '#9b59b6'],
+      ['موبايلات', '#3498db'],
+      ['حلويات', '#ff6fa8'],
+      ['بنك', '#16a085'],
+      ['مكتبة', '#c0a050']
     ];
     let n = 0;
     for (const side of [-1, 1]) {
       for (let z = -96; z <= 232; z += 9) {
         if (nearCross(z, 8)) continue;
-        if (side > 0 && Math.abs(z - STATION.z) < 5) { if (!this.stationBuilt) this.buildStation(); continue; }
+        if (side > 0 && Math.abs(z - STATION.z) < 5) {
+          if (!this.stationBuilt) this.buildStation();
+          continue;
+        }
         const near = STREET_PLACES.reduce((a, p) => (Math.abs(p.z - z) < Math.abs(a.z - z) ? p : a));
         const seed = Math.abs(Math.floor(z * 7 + side * 13));
         const h = near.id === 'downtown' ? 9 + (seed % 12) : near.id === 'suburb' ? 4 + (seed % 3) : 5 + (seed % 7);
@@ -393,7 +438,11 @@ export class StreetPlay {
         bg.position.set(side * (8.4 + w / 2), 0, z);
         bg.add(this.box(w, h, 8.4, this.mat(0x8a94a0), 0, h / 2, 0));
         const kinds = h > 10 ? TOWERS : LOW_BUILDINGS;
-        models.dress(bg, kinds[seed % kinds.length], { box: [w, h, 8.4], yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2, noShadow: true });
+        models.dress(bg, kinds[seed % kinds.length], {
+          box: [w, h, 8.4],
+          yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2,
+          noShadow: true
+        });
         this.group.add(bg);
         if (near.id !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
       }
@@ -414,10 +463,16 @@ export class StreetPlay {
     g.position.set(ax + 1.6 * -dir, 0, this.car.position.z + dir * 30);
     g.rotation.y = dir > 0 ? 0 : Math.PI;
     const far = farNode(g.position.x, g.position.z);
-    this.spPath = trimBehind(findPath(g.position.x, g.position.z, far.x, far.z), g.position.x, g.position.z, g.rotation.y);
+    this.spPath = trimBehind(
+      findPath(g.position.x, g.position.z, far.x, far.z),
+      g.position.x,
+      g.position.z,
+      g.rotation.y
+    );
     this.group.add(g);
     this.speeder = g;
-    this.pullM = 0; this.pullStopped = false;
+    this.pullM = 0;
+    this.pullStopped = false;
     this.setStatus('🚗💨 العربية المسرعة قدامك. شغّل السارينة 🚨 وقرّب منها.');
   }
   private endPullover() {
@@ -429,12 +484,20 @@ export class StreetPlay {
     if (!g) return;
     const me = this.inCar ? this.car.position : this.player.position;
     const dist = Math.hypot(g.position.x - me.x, g.position.z - me.z);
-    this.msTarget.copy(g.position); this.msHasTarget = true;
+    this.msTarget.copy(g.position);
+    this.msHasTarget = true;
     if (!this.pullStopped) {
       const v = speederSpeed(18 + rank().car, this.spTurn, dist) * (this.inCar ? 1 : 0.3);
       let head = followPath(g.position, this.spPath, v * dt);
-      if (head === null) { const f = farNode(g.position.x, g.position.z); this.spPath = findPath(g.position.x, g.position.z, f.x, f.z); head = followPath(g.position, this.spPath, v * dt); }
-      if (head !== null) { this.spTurn = wrapAngle(head - g.rotation.y); g.rotation.y = approachAngle(g.rotation.y, head, dt * 5); }
+      if (head === null) {
+        const f = farNode(g.position.x, g.position.z);
+        this.spPath = findPath(g.position.x, g.position.z, f.x, f.z);
+        head = followPath(g.position, this.spPath, v * dt);
+      }
+      if (head !== null) {
+        this.spTurn = wrapAngle(head - g.rotation.y);
+        g.rotation.y = approachAngle(g.rotation.y, head, dt * 5);
+      }
       this.pullM = stepPull(this.pullM, { siren: this.siren, inCar: this.inCar, dist }, dt);
       if (this.pullM >= PULL_T) {
         this.pullStopped = true;
@@ -444,7 +507,13 @@ export class StreetPlay {
         this.setStatus('العربية وقفت على جنب. انزل واكتب المخالفة 📝');
       }
       const pct = Math.round((this.pullM / PULL_T) * 100);
-      this.msText = !this.inCar ? 'اركب الدورية' : !this.siren ? '🚨 شغّل السارينة!' : pct > 0 ? `🚨 خليك وراها… ${pct}%` : text;
+      this.msText = !this.inCar
+        ? 'اركب الدورية'
+        : !this.siren
+          ? '🚨 شغّل السارينة!'
+          : pct > 0
+            ? `🚨 خليك وراها… ${pct}%`
+            : text;
     } else {
       this.msText = this.inCar ? 'انزل واكتب المخالفة' : 'روح للسواق واكتب المخالفة';
       if (!this.inCar && dist < TICKET_R) {
@@ -462,26 +531,38 @@ export class StreetPlay {
   private cpRing: THREE.Mesh | null = null;
   private showCheckpoint(pts: { x: number; z: number }[]) {
     const p = pts[this.cpIdx];
-    if (!p) { this.clearCheckpoint(); return; }
+    if (!p) {
+      this.clearCheckpoint();
+      return;
+    }
     if (!this.cpRing) {
-      this.cpRing = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.25, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.85 }));
+      this.cpRing = new THREE.Mesh(
+        new THREE.TorusGeometry(3.2, 0.25, 8, 40),
+        new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.85 })
+      );
       this.cpRing.rotation.x = -Math.PI / 2;
       this.group.add(this.cpRing);
     }
     this.cpRing.position.set(p.x, 0.3, p.z);
     this.cpRing.visible = true;
   }
-  private clearCheckpoint() { if (this.cpRing) this.cpRing.visible = false; }
+  private clearCheckpoint() {
+    if (this.cpRing) this.cpRing.visible = false;
+  }
 
   private boxes: OBB[] = [];
   /** oriented boxes of every vehicle the officer can bump into */
   private vehicleBoxes() {
-    const b = this.boxes; b.length = 0;
-    const add = (g: THREE.Object3D | null | undefined, hw = 1.0, hl = 2.3) => { if (g && g.visible) b.push({ x: g.position.x, z: g.position.z, yaw: g.rotation.y, hw, hl }); };
+    const b = this.boxes;
+    b.length = 0;
+    const add = (g: THREE.Object3D | null | undefined, hw = 1.0, hl = 2.3) => {
+      if (g && g.visible) b.push({ x: g.position.x, z: g.position.z, yaw: g.rotation.y, hw, hl });
+    };
     if (!this.inCar) add(this.car, 1.05, 2.4);
     for (const t of this.traffic) add(t.mesh);
     for (const t of this.cross) add(t.mesh);
-    add(this.suspect); add(this.speeder);
+    add(this.suspect);
+    add(this.speeder);
     return b;
   }
 
@@ -493,11 +574,19 @@ export class StreetPlay {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       if (on) {
-        if (!m.userData.solidMat) { m.userData.solidMat = m.material; const c = (m.material as THREE.Material).clone(); c.transparent = true; c.opacity = 0.28; c.depthWrite = false; m.userData.fadeMat = c; }
+        if (!m.userData.solidMat) {
+          m.userData.solidMat = m.material;
+          const c = (m.material as THREE.Material).clone();
+          c.transparent = true;
+          c.opacity = 0.28;
+          c.depthWrite = false;
+          m.userData.fadeMat = c;
+        }
         m.material = m.userData.fadeMat as THREE.Material;
       } else if (m.userData.solidMat) m.material = m.userData.solidMat as THREE.Material;
     });
-    if (on) this.faded.add(g); else this.faded.delete(g);
+    if (on) this.faded.add(g);
+    else this.faded.delete(g);
   }
   private tickOcclusion(dt: number) {
     this.fadeT -= dt;
@@ -505,14 +594,20 @@ export class StreetPlay {
     this.fadeT = 0.1;
     const T = this.inCar ? this.car.position : this.player.position;
     const C = this.camera.position;
-    const sx = T.x - C.x, sz = T.z - C.z, L2 = sx * sx + sz * sz || 1;
+    const sx = T.x - C.x,
+      sz = T.z - C.z,
+      L2 = sx * sx + sz * sz || 1;
     const now = new Set<THREE.Object3D>();
     const test = (g: THREE.Object3D | null | undefined) => {
       if (!g || !g.visible || g === (this.inCar ? this.car : null)) return;
       const t = ((g.position.x - C.x) * sx + (g.position.z - C.z) * sz) / L2;
-      if (Math.hypot(g.position.x - C.x, g.position.z - C.z) < 3.4) { now.add(g); return; }
+      if (Math.hypot(g.position.x - C.x, g.position.z - C.z) < 3.4) {
+        now.add(g);
+        return;
+      }
       if (t <= 0 || t >= 0.92) return;
-      const px = C.x + sx * t - g.position.x, pz = C.z + sz * t - g.position.z;
+      const px = C.x + sx * t - g.position.x,
+        pz = C.z + sz * t - g.position.z;
       if (px * px + pz * pz < 2.6 * 2.6) now.add(g);
       // or simply right next to the lens
       else if (Math.hypot(g.position.x - C.x, g.position.z - C.z) < 3.4) now.add(g);
@@ -520,7 +615,8 @@ export class StreetPlay {
     test(this.car);
     for (const t of this.traffic) test(t.mesh);
     for (const t of this.cross) test(t.mesh);
-    test(this.suspect); test(this.speeder);
+    test(this.suspect);
+    test(this.speeder);
     for (const g of [...this.faded]) if (!now.has(g)) this.setFade(g, false);
     for (const g of now) if (!this.faded.has(g)) this.setFade(g, true);
   }
@@ -532,22 +628,42 @@ export class StreetPlay {
     this.stationBuilt = true;
     const g = new THREE.Group();
     g.position.set(STATION.x, 0, STATION.z);
-    const w = 8, h = 8, d = 8.4;
+    const w = 8,
+      h = 8,
+      d = 8.4;
     g.add(this.box(d, h, w, this.mat(0xe8edf3, { roughness: 0.7 }), 0, h / 2, 0));
     g.add(this.box(d + 0.1, 1.1, w + 0.1, this.mat(0x1d4fa3), 0, 2.9, 0));
     g.add(this.box(0.2, 2.6, 2.4, this.mat(0x1b2230, { roughness: 0.3, metalness: 0.4 }), -d / 2 - 0.05, 1.3, 0));
     // lit sign
-    const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 128;
     const x = c.getContext('2d')!;
-    x.fillStyle = '#0d2c66'; x.fillRect(0, 0, 512, 128);
-    x.fillStyle = '#fff'; x.font = 'bold 54px Cairo, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#0d2c66';
+    x.fillRect(0, 0, 512, 128);
+    x.fillStyle = '#fff';
+    x.font = 'bold 54px Cairo, sans-serif';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
     x.fillText('قسم الشرطة  POLICE', 256, 66);
-    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.6 }));
-    sign.position.set(-d / 2 - 0.12, 4.4, 0); sign.rotation.y = -Math.PI / 2;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(6, 1.5),
+      new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.6 })
+    );
+    sign.position.set(-d / 2 - 0.12, 4.4, 0);
+    sign.rotation.y = -Math.PI / 2;
     g.add(sign);
     for (const s of [-1, 1]) {
-      const l = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: s > 0 ? 0xff3355 : 0x3377ff, emissive: s > 0 ? 0xff3355 : 0x3377ff, emissiveIntensity: 2 }));
+      const l = new THREE.Mesh(
+        new THREE.SphereGeometry(0.22, 10, 8),
+        new THREE.MeshStandardMaterial({
+          color: s > 0 ? 0xff3355 : 0x3377ff,
+          emissive: s > 0 ? 0xff3355 : 0x3377ff,
+          emissiveIntensity: 2
+        })
+      );
       l.position.set(-d / 2 - 0.2, 3.1, s * 1.6);
       l.userData.blink = s;
       g.add(l);
@@ -555,8 +671,12 @@ export class StreetPlay {
     }
     this.group.add(g);
     // door ring on the sidewalk
-    const ring = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.45, 36), new THREE.MeshBasicMaterial({ color: 0x5ab0ff, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2; ring.position.set(STATION.door.x, 0.04, STATION.door.z);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(1.1, 1.45, 36),
+      new THREE.MeshBasicMaterial({ color: 0x5ab0ff, transparent: true, opacity: 0.75, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(STATION.door.x, 0.04, STATION.door.z);
     this.stationRing = ring;
     this.group.add(ring);
   }
@@ -570,15 +690,23 @@ export class StreetPlay {
     const el = document.createElement('div');
     el.id = 'street-hub';
     const c = character();
-    const body = tab === 'missions'
-      ? `<h2>📋 لوحة المهام</h2><div class="hub-list">${LEVELS.map((l) => {
-          const locked = l.id > progress.unlocked, st = progress.stars[l.id] ?? 0;
-          return `<button type="button" data-lv="${l.id}" ${locked ? 'disabled' : ''}>${locked ? '🔒' : '▶'} ${l.id}. ${l.title} <small>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</small></button>`;
-        }).join('')}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية)</button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button></div>`
-      : tab === 'armory'
-        ? `<h2>🔫 مخزن السلاح</h2><div class="hub-list">${(Object.keys(WEAPONS) as WeaponId[]).map((k) =>
-            `<button type="button" data-wp="${k}" class="${c.weapon === k ? 'on' : ''}">${WEAPONS[k].name} <small>${WEAPONS[k].desc}</small></button>`).join('')}</div>`
-        : `<h2>🏢 قسم الشرطة</h2><p class="hub-sub">رتبتك: ${rank().name} · الدورية ${100 - this.damage}%</p>
+    const body =
+      tab === 'missions'
+        ? `<h2>📋 لوحة المهام</h2><div class="hub-list">${LEVELS.map((l) => {
+            const locked = l.id > progress.unlocked,
+              st = progress.stars[l.id] ?? 0;
+            return `<button type="button" data-lv="${l.id}" ${locked ? 'disabled' : ''}>${locked ? '🔒' : '▶'} ${l.id}. ${l.title} <small>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</small></button>`;
+          }).join(
+            ''
+          )}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية)</button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button></div>`
+        : tab === 'armory'
+          ? `<h2>🔫 مخزن السلاح</h2><div class="hub-list">${(Object.keys(WEAPONS) as WeaponId[])
+              .map(
+                (k) =>
+                  `<button type="button" data-wp="${k}" class="${c.weapon === k ? 'on' : ''}">${WEAPONS[k].name} <small>${WEAPONS[k].desc}</small></button>`
+              )
+              .join('')}</div>`
+          : `<h2>🏢 قسم الشرطة</h2><p class="hub-sub">رتبتك: ${rank().name} · الدورية ${100 - this.damage}%</p>
           <div class="hub-grid">
             <button type="button" data-hub="missions">📋<b>لوحة المهام</b><small>اختار مهمتك</small></button>
             <button type="button" data-hub="garage">🔧<b>الجراج</b><small>${this.damage ? 'صلّح الدورية' : 'الدورية سليمة'}</small></button>
@@ -589,38 +717,47 @@ export class StreetPlay {
     document.getElementById('app')!.appendChild(el);
     this.hubEl = el;
     audio.sample('door', 0.6);
-    el.querySelectorAll<HTMLButtonElement>('[data-hub]').forEach((b) => b.addEventListener('click', () => {
-      audio.click();
-      const a = b.dataset.hub!;
-      if (a === 'close') this.closeHub();
-      else if (a === 'main' || a === 'missions' || a === 'armory') this.openHub(a);
-      else if (a === 'garage') {
-        this.damage = 0;
-        this.car.position.set(STATION.parking.x, 0, STATION.parking.z);
-        this.car.rotation.y = 0; this.speed = 0;
+    el.querySelectorAll<HTMLButtonElement>('[data-hub]').forEach((b) =>
+      b.addEventListener('click', () => {
+        audio.click();
+        const a = b.dataset.hub!;
+        if (a === 'close') this.closeHub();
+        else if (a === 'main' || a === 'missions' || a === 'armory') this.openHub(a);
+        else if (a === 'garage') {
+          this.damage = 0;
+          this.car.position.set(STATION.parking.x, 0, STATION.parking.z);
+          this.car.rotation.y = 0;
+          this.speed = 0;
+          this.squad.resetPlayer();
+          this.setStatus('🔧 الدورية اتصلحت ومركونة قدام القسم.');
+          this.openHub('main');
+        } else if (a === 'locker') {
+          el.innerHTML = '';
+          openCreator(el, { first: false, done: () => this.openHub('main') });
+        }
+      })
+    );
+    el.querySelectorAll<HTMLButtonElement>('[data-wp]').forEach((b) =>
+      b.addEventListener('click', () => {
+        setCharacter({ ...character(), weapon: b.dataset.wp as WeaponId });
         this.squad.resetPlayer();
-        this.setStatus('🔧 الدورية اتصلحت ومركونة قدام القسم.');
-        this.openHub('main');
-      } else if (a === 'locker') {
-        el.innerHTML = '';
-        openCreator(el, { first: false, done: () => this.openHub('main') });
-      }
-    }));
-    el.querySelectorAll<HTMLButtonElement>('[data-wp]').forEach((b) => b.addEventListener('click', () => {
-      setCharacter({ ...character(), weapon: b.dataset.wp as WeaponId });
-      this.squad.resetPlayer();
-      audio.sample('confirm', 0.7);
-      this.openHub('armory');
-    }));
-    el.querySelectorAll<HTMLButtonElement>('[data-call]').forEach((b) => b.addEventListener('click', () => {
-      this.closeHub();
-      const me = this.player.position;
-      this.setLevel(newCall(me.x, me.z, Date.now(), b.dataset.call as Kind).id);
-    }));
-    el.querySelectorAll<HTMLButtonElement>('[data-lv]').forEach((b) => b.addEventListener('click', () => {
-      this.closeHub();
-      this.setLevel(Number(b.dataset.lv));
-    }));
+        audio.sample('confirm', 0.7);
+        this.openHub('armory');
+      })
+    );
+    el.querySelectorAll<HTMLButtonElement>('[data-call]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.closeHub();
+        const me = this.player.position;
+        this.setLevel(newCall(me.x, me.z, Date.now(), b.dataset.call as Kind).id);
+      })
+    );
+    el.querySelectorAll<HTMLButtonElement>('[data-lv]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.closeHub();
+        this.setLevel(Number(b.dataset.lv));
+      })
+    );
   }
   private closeHub() {
     this.hubEl?.remove();
@@ -636,26 +773,44 @@ export class StreetPlay {
     g.rotation.y = rot;
     g.userData.static = true;
     // lit shop window
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.2),
-      new THREE.MeshStandardMaterial({ color: 0xfff4dc, emissive: 0xffe2b0, emissiveIntensity: 0.9, roughness: 0.2 }));
+    const glass = new THREE.Mesh(
+      new THREE.PlaneGeometry(5.6, 2.2),
+      new THREE.MeshStandardMaterial({ color: 0xfff4dc, emissive: 0xffe2b0, emissiveIntensity: 0.9, roughness: 0.2 })
+    );
     glass.position.set(0, 1.35, 0.06);
     g.add(glass);
     // awning
     let aw = this.shopMats.get(color);
-    if (!aw) { aw = this.mat(new THREE.Color(color).getHex(), { roughness: 0.6 }); this.shopMats.set(color, aw); }
+    if (!aw) {
+      aw = this.mat(new THREE.Color(color).getHex(), { roughness: 0.6 });
+      this.shopMats.set(color, aw);
+    }
     const awning = new THREE.Mesh(new THREE.BoxGeometry(6, 0.12, 1.4), aw);
     awning.position.set(0, 2.75, 0.7);
     awning.rotation.x = 0.25;
     g.add(awning);
     // sign
     const c = document.createElement('canvas');
-    c.width = 256; c.height = 64;
+    c.width = 256;
+    c.height = 64;
     const x = c.getContext('2d')!;
-    x.fillStyle = color; x.fillRect(0, 0, 256, 64);
-    x.fillStyle = '#fff'; x.font = 'bold 40px Cairo, Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.direction = 'rtl'; x.fillText(name, 128, 34);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.05),
-      new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(c), emissive: 0xffffff, emissiveMap: null, emissiveIntensity: 0.25 }));
+    x.fillStyle = color;
+    x.fillRect(0, 0, 256, 64);
+    x.fillStyle = '#fff';
+    x.font = 'bold 40px Cairo, Arial';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.direction = 'rtl';
+    x.fillText(name, 128, 34);
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.2, 1.05),
+      new THREE.MeshStandardMaterial({
+        map: new THREE.CanvasTexture(c),
+        emissive: 0xffffff,
+        emissiveMap: null,
+        emissiveIntensity: 0.25
+      })
+    );
     (sign.material as THREE.MeshStandardMaterial).emissiveMap = (sign.material as THREE.MeshStandardMaterial).map;
     sign.position.set(0, 3.55, 0.1);
     g.add(sign);
@@ -682,10 +837,7 @@ export class StreetPlay {
     ctx.direction = 'rtl';
     ctx.fillText(text, 256, 80);
     const tex = new THREE.CanvasTexture(canvas);
-    const board = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.4, 1.05),
-      new THREE.MeshBasicMaterial({ map: tex })
-    );
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.05), new THREE.MeshBasicMaterial({ map: tex }));
     board.position.set(0, 3.15, 0);
     board.rotation.y = Math.PI / 2;
     g.add(board);
@@ -736,7 +888,12 @@ export class StreetPlay {
     gr.addColorStop(1, 'rgba(255,200,120,0)');
     g.fillStyle = gr;
     g.fillRect(0, 0, 64, 64);
-    this._pool = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    this._pool = new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(c),
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
     return this._pool;
   }
 
@@ -745,18 +902,28 @@ export class StreetPlay {
   private beacon = new THREE.Group();
   private arrow: THREE.Mesh | null = null;
   private buildBeacon() {
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 40, 20, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.6, 1.6, 40, 20, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd23d,
+        transparent: true,
+        opacity: 0.22,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    );
     beam.position.y = 20;
-    const ring = new THREE.Mesh(new THREE.RingGeometry(1.4, 2.2, 32),
-      new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(1.4, 2.2, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+    );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.15;
     this.beacon.add(beam, ring);
     this.group.add(this.beacon);
     // floating chevron above the target (suspect during chase)
-    this.arrow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 4),
-      new THREE.MeshBasicMaterial({ color: 0xff3355 }));
+    this.arrow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 4), new THREE.MeshBasicMaterial({ color: 0xff3355 }));
     this.arrow.rotation.x = Math.PI;
     this.arrow.userData.dynamic = true;
     this.group.add(this.arrow);
@@ -765,10 +932,13 @@ export class StreetPlay {
   /** GTA-style objective list + target marker + on-screen direction arrow. */
   private objectiveWorld() {
     if (!this.arrow || !this.arrow.visible) return;
-    this.arrow.position.set(this.msTarget.x, (this.chasing ? 3 : 4.5) + Math.sin(performance.now() / 250) * 0.3, this.msTarget.z);
+    this.arrow.position.set(
+      this.msTarget.x,
+      (this.chasing ? 3 : 4.5) + Math.sin(performance.now() / 250) * 0.3,
+      this.msTarget.z
+    );
     this.arrow.rotation.y += 0.04;
   }
-
 
   /** Current objective card (8 Hz): big step text + distance + timer; drives beacon, 3D chevron and edge arrow. */
   private objective() {
@@ -776,9 +946,15 @@ export class StreetPlay {
     const has = this.msHasTarget && !this.resultEl;
     const dist = has ? Math.hypot(this.msTarget.x - pos.x, this.msTarget.z - pos.z) : 0;
     if (this.objEl) {
-      const timer = this.msIdx >= 0 ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.msTime))}ث</span>` : '';
+      const timer =
+        this.msIdx >= 0
+          ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.msTime))}ث</span>`
+          : '';
       const html = `<small>${isPatrol(this.level.id) ? '🚨' : `مهمة ${this.level.id}/${LEVELS.length}`} · ${this.level.title} ${timer}</small><div class="now">➤ ${this.msText || '...'}${has ? ` <em>${Math.round(dist)} م</em>` : ''}</div>`;
-      if (html !== this.objHtml) { this.objEl.innerHTML = html; this.objHtml = html; }
+      if (html !== this.objHtml) {
+        this.objEl.innerHTML = html;
+        this.objHtml = html;
+      }
     }
     const step = this.level.steps[this.msIdx];
     this.beacon.visible = has && step?.t === 'goto';
@@ -812,17 +988,30 @@ export class StreetPlay {
     this.squad.resetPlayer();
     this.damage = 0;
     let seen = false;
-    try { seen = !!localStorage.getItem(TUT_KEY); } catch { /* private mode */ }
+    try {
+      seen = !!localStorage.getItem(TUT_KEY);
+    } catch {
+      /* private mode */
+    }
     this.tutOn = this.level.id === 1 && !seen;
     this.tutHtml = '';
     this.enterStep();
   }
 
   private endTutorial(save: boolean) {
-    if (save) { try { localStorage.setItem(TUT_KEY, '1'); } catch { /* ignore */ } }
+    if (save) {
+      try {
+        localStorage.setItem(TUT_KEY, '1');
+      } catch {
+        /* ignore */
+      }
+    }
     this.tutOn = false;
     this.setTutGlow(null);
-    if (this.tutEl) { this.tutEl.classList.remove('show'); this.tutEl.innerHTML = ''; }
+    if (this.tutEl) {
+      this.tutEl.classList.remove('show');
+      this.tutEl.innerHTML = '';
+    }
     this.tutHtml = '';
   }
 
@@ -848,12 +1037,20 @@ export class StreetPlay {
       const d = Math.hypot(x.g.position.x - me.x, x.g.position.z - me.z);
       if (!best || d < best.d) best = { state: x.state, d };
     }
-    const hint = this.resultEl ? null : tutorialHint({
-      step: st ? st.t : 'done', inCar: this.inCar, radioShowing: !!this.radioEl?.classList.contains('show'),
-      targetState: best?.state, targetDist: best?.d, touch: matchMedia('(pointer:coarse)').matches
-    });
+    const hint = this.resultEl
+      ? null
+      : tutorialHint({
+          step: st ? st.t : 'done',
+          inCar: this.inCar,
+          radioShowing: !!this.radioEl?.classList.contains('show'),
+          targetState: best?.state,
+          targetDist: best?.d,
+          touch: matchMedia('(pointer:coarse)').matches
+        });
     this.setTutGlow(hint?.act ?? null);
-    const html = hint ? `<b>تعليم ${hint.n}/${TUT_STEPS}</b><span>${hint.text}</span><button type="button" data-tut="skip">تخطي</button>` : '';
+    const html = hint
+      ? `<b>تعليم ${hint.n}/${TUT_STEPS}</b><span>${hint.text}</span><button type="button" data-tut="skip">تخطي</button>`
+      : '';
     if (html !== this.tutHtml) {
       this.tutHtml = html;
       this.tutEl.innerHTML = html;
@@ -870,20 +1067,52 @@ export class StreetPlay {
   private enterStep() {
     const st = this.level.steps[this.msIdx];
     this.msHasTarget = false;
-    if (!st) { this.finishMission(true); return; }
+    if (!st) {
+      this.finishMission(true);
+      return;
+    }
     switch (st.t) {
-      case 'radio': this.msText = 'اسمع اللاسلكي'; this.radio(st.lines, () => this.nextStep()); break;
-      case 'car': this.msText = st.text ?? 'اركب الدورية'; if (this.inCar) this.nextStep(); break;
-      case 'goto': this.msText = st.text; this.msTarget.set(st.x, 0, st.z); this.msHasTarget = true; break;
-      case 'chase': this.chaseText = this.msText = st.text ?? 'الحق العربية'; this.chaseThen = st.then ?? null; this.chaseLimit = st.limit; this.chaseSpeed = st.speed; this.beginChase(); break;
-      case 'pullover': this.msText = st.text; this.beginPullover(); break;
-      case 'checkpoints': this.msText = st.text; this.cpIdx = 0; this.showCheckpoint(st.pts); break;
+      case 'radio':
+        this.msText = 'اسمع اللاسلكي';
+        this.radio(st.lines, () => this.nextStep());
+        break;
+      case 'car':
+        this.msText = st.text ?? 'اركب الدورية';
+        if (this.inCar) this.nextStep();
+        break;
+      case 'goto':
+        this.msText = st.text;
+        this.msTarget.set(st.x, 0, st.z);
+        this.msHasTarget = true;
+        break;
+      case 'chase':
+        this.chaseText = this.msText = st.text ?? 'الحق العربية';
+        this.chaseThen = st.then ?? null;
+        this.chaseLimit = st.limit;
+        this.chaseSpeed = st.speed;
+        this.beginChase();
+        break;
+      case 'pullover':
+        this.msText = st.text;
+        this.beginPullover();
+        break;
+      case 'checkpoints':
+        this.msText = st.text;
+        this.cpIdx = 0;
+        this.showCheckpoint(st.pts);
+        break;
       case 'suspects': {
         this.msText = st.text;
-        const prev = [...this.level.steps].slice(0, this.msIdx).reverse().find((x) => x.t === 'goto');
+        const prev = [...this.level.steps]
+          .slice(0, this.msIdx)
+          .reverse()
+          .find((x) => x.t === 'goto');
         const approachZ = prev && prev.t === 'goto' ? prev.z : this.player.position.z;
         this.squad.spawn(st.x, st.z, st.list, { cover: st.cover, hostage: st.hostage, approachZ });
-        if (st.list.some((x) => x.b === 'fight')) { audio.setTrack('music'); this.setStatus('⚠ مسلحين! اتحامى واضرب.'); }
+        if (st.list.some((x) => x.b === 'fight')) {
+          audio.setTrack('music');
+          this.setStatus('⚠ مسلحين! اتحامى واضرب.');
+        }
         break;
       }
     }
@@ -898,47 +1127,78 @@ export class StreetPlay {
     const pos = this.inCar ? this.car.position : this.player.position;
     switch (st.t) {
       case 'car':
-        this.msTarget.copy(this.car.position); this.msHasTarget = !this.inCar;
+        this.msTarget.copy(this.car.position);
+        this.msHasTarget = !this.inCar;
         if (this.inCar) this.nextStep();
         break;
       case 'goto':
         // 2D distance from whatever the player controls (car or on foot): fixes the old "1 m" stall
-        if (Math.hypot(st.x - pos.x, st.z - pos.z) < (st.r ?? 9)) { this.setStatus('وصلت.'); this.nextStep(); }
+        if (Math.hypot(st.x - pos.x, st.z - pos.z) < (st.r ?? 9)) {
+          this.setStatus('وصلت.');
+          this.nextStep();
+        }
         break;
-      case 'pullover': this.tickPullover(dt, st.text); break;
+      case 'pullover':
+        this.tickPullover(dt, st.text);
+        break;
       case 'checkpoints': {
         const n = passCheckpoint(this.cpIdx, st.pts, pos.x, pos.z, this.inCar);
-        if (n !== this.cpIdx) { this.cpIdx = n; audio.sample('confirm', 0.7); this.setStatus(`✔ نقطة ${n}/${st.pts.length}`); this.showCheckpoint(st.pts); }
-        if (this.cpIdx >= st.pts.length) { this.clearCheckpoint(); this.nextStep(); break; }
+        if (n !== this.cpIdx) {
+          this.cpIdx = n;
+          audio.sample('confirm', 0.7);
+          this.setStatus(`✔ نقطة ${n}/${st.pts.length}`);
+          this.showCheckpoint(st.pts);
+        }
+        if (this.cpIdx >= st.pts.length) {
+          this.clearCheckpoint();
+          this.nextStep();
+          break;
+        }
         const p = st.pts[this.cpIdx]!;
-        this.msTarget.set(p.x, 0, p.z); this.msHasTarget = true;
+        this.msTarget.set(p.x, 0, p.z);
+        this.msHasTarget = true;
         this.msText = `${st.text} (${this.cpIdx}/${st.pts.length})`;
         break;
       }
       case 'chase':
         if (this.chaseArrest) {
           const t = this.squad.list.find((x) => x.state !== 'cuffed' && x.state !== 'down');
-          if (t) { this.msTarget.copy(t.g.position); this.msHasTarget = true; }
+          if (t) {
+            this.msTarget.copy(t.g.position);
+            this.msHasTarget = true;
+          }
           this.msText = this.inCar ? 'انزل واقبض على السواق' : 'اقبض على السواق';
-          if (this.squad.done()) { this.chaseArrest = false; this.nextStep(); }
+          if (this.squad.done()) {
+            this.chaseArrest = false;
+            this.nextStep();
+          }
         } else if (this.suspect) {
-          this.msTarget.copy(this.suspect.position); this.msHasTarget = true;
+          this.msTarget.copy(this.suspect.position);
+          this.msHasTarget = true;
           const left = Math.max(0, Math.ceil(this.chaseLimit - this.chaseClock));
           const far = this.suspect.position.distanceTo(this.car.position) > WARN_R;
           const lock = Math.round((this.chaseLock / LOCK_T) * 100);
-          this.msText = !this.inCar ? 'اركب الدورية والحقه!' : lock > 0 ? `🔒 حاصره! ${lock}% · ⏳ ${left}ث` : `${this.chaseText} · ⏳ ${left}ث${far ? ' · ⚠ بيبعد!' : ''}`;
+          this.msText = !this.inCar
+            ? 'اركب الدورية والحقه!'
+            : lock > 0
+              ? `🔒 حاصره! ${lock}% · ⏳ ${left}ث`
+              : `${this.chaseText} · ⏳ ${left}ث${far ? ' · ⚠ بيبعد!' : ''}`;
         }
         break;
       case 'suspects': {
         const left = this.squad.remaining();
         const t = this.squad.list.find((x) => x.state !== 'cuffed' && x.state !== 'down');
-        if (t) { this.msTarget.copy(t.g.position); this.msHasTarget = true; }
+        if (t) {
+          this.msTarget.copy(t.g.position);
+          this.msHasTarget = true;
+        }
         this.msText = `${st.text} (${left} باقيين)`;
         if (this.squad.done() && !this.squad.hostage) this.nextStep();
         else if (this.squad.done() && this.squad.hostage?.state === 'free') this.nextStep();
         break;
       }
-      case 'radio': break;
+      case 'radio':
+        break;
     }
     if (this.squad.failed) this.finishMission(false, this.squad.failed);
     else if (!this.tutOn && this.msTime > this.level.limit) this.finishMission(false, 'الوقت خلص.');
@@ -946,8 +1206,12 @@ export class StreetPlay {
 
   // ---- radio dialogue
   private static WHO: Record<string, [string, string]> = {
-    mona: ['الرقيب منى · العمليات', '#3aa0ff'], hamed: ['النقيب حامد', '#ffd23d'], yasser: ['ياسر', '#7dff9a'],
-    suspect: ['المشتبه به', '#ff6b81'], informant: ['الواشي', '#c39bff'], boss: ['الزعيم', '#ff3b3b']
+    mona: ['الرقيب منى · العمليات', '#3aa0ff'],
+    hamed: ['النقيب حامد', '#ffd23d'],
+    yasser: ['ياسر', '#7dff9a'],
+    suspect: ['المشتبه به', '#ff6b81'],
+    informant: ['الواشي', '#c39bff'],
+    boss: ['الزعيم', '#ff3b3b']
   };
   private radio(lines: Line[], done: (() => void) | null) {
     this.radioQ = [...lines];
@@ -958,7 +1222,9 @@ export class StreetPlay {
     const l = this.radioQ.shift();
     if (!l) {
       this.radioEl?.classList.remove('show');
-      const d = this.radioDone; this.radioDone = null; d?.();
+      const d = this.radioDone;
+      this.radioDone = null;
+      d?.();
       return;
     }
     const [name, col] = StreetPlay.WHO[l.who] ?? ['', '#fff'];
@@ -986,18 +1252,31 @@ export class StreetPlay {
     const html = `<div class="hud-row">${ring('hp', q.hp, '❤', `الصحة ${Math.round(q.hp)}%`)}${ring('ar', q.armor * 2, '🛡', `الدرع ${Math.round(q.armor * 2)}%`)}
       <div class="gun">🔫 <b>${q.reloading ? '…' : `${q.ammo}/${q.mag}`}</b></div></div>
       ${stars ? `<div class="threat">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</div>` : ''}`;
-    if (this.hudEl && html !== this.hudHtml) { this.hudEl.innerHTML = html; this.hudHtml = html; }
+    if (this.hudEl && html !== this.hudHtml) {
+      this.hudEl.innerHTML = html;
+      this.hudHtml = html;
+    }
     // contextual buttons
     const me = this.player.position;
     const t = this.inCar ? null : q.target(me, this.yaw, 18);
-    const can = (t && t.state !== 'hands' && t.state !== 'hostage' ? 'o' : '') + (!this.inCar && q.cuffable(me) ? 'c' : '');
+    const can =
+      (t && t.state !== 'hands' && t.state !== 'hostage' ? 'o' : '') + (!this.inCar && q.cuffable(me) ? 'c' : '');
     if (can !== this.flags) {
       this.flags = can;
       document.documentElement.classList.toggle('can-order', can.includes('o'));
       document.documentElement.classList.toggle('can-cuff', can.includes('c'));
     }
-    const hub = hubAllowed({ inCar: this.inCar, chasing: this.chasing, hostiles: q.list.filter((s) => s.b === 'fight' && s.state !== 'cuffed' && s.state !== 'down').length, x: me.x, z: me.z });
-    if (hub !== this.canHub) { this.canHub = hub; document.documentElement.classList.toggle('can-hub', hub); }
+    const hub = hubAllowed({
+      inCar: this.inCar,
+      chasing: this.chasing,
+      hostiles: q.list.filter((s) => s.b === 'fight' && s.state !== 'cuffed' && s.state !== 'down').length,
+      x: me.x,
+      z: me.z
+    });
+    if (hub !== this.canHub) {
+      this.canHub = hub;
+      document.documentElement.classList.toggle('can-hub', hub);
+    }
     if (this.stationRing) (this.stationRing.material as THREE.MeshBasicMaterial).opacity = hub ? 1 : 0.55;
   }
 
@@ -1005,13 +1284,19 @@ export class StreetPlay {
   private tickReticle() {
     if (!this.retEl) return;
     const t = this.inCar || this.resultEl ? null : this.squad.target(this.player.position, this.yaw, 24);
-    if (!t) { if (this.retEl.style.display !== 'none') this.retEl.style.display = 'none'; return; }
+    if (!t) {
+      if (this.retEl.style.display !== 'none') this.retEl.style.display = 'none';
+      return;
+    }
     const v = this.tmpV.set(t.g.position.x, 1.25 + t.g.position.y, t.g.position.z).project(this.camera);
     this.retEl.style.display = 'block';
     this.retEl.style.left = `${(v.x * 0.5 + 0.5) * 100}%`;
     this.retEl.style.top = `${(-v.y * 0.5 + 0.5) * 100}%`;
     const cls = t.state === 'hands' ? 'cuff' : t.hidden ? 'cover' : 'hot';
-    if (this.retEl.dataset.c !== cls) { this.retEl.dataset.c = cls; this.retEl.className = cls; }
+    if (this.retEl.dataset.c !== cls) {
+      this.retEl.dataset.c = cls;
+      this.retEl.className = cls;
+    }
   }
 
   private orderSurrender() {
@@ -1021,7 +1306,10 @@ export class StreetPlay {
   }
   private cuffNow() {
     const s = this.squad.cuffable(this.player.position);
-    if (!s) { this.setStatus('قرّب من المشتبه به المستسلم.'); return; }
+    if (!s) {
+      this.setStatus('قرّب من المشتبه به المستسلم.');
+      return;
+    }
     this.squad.cuff(s);
     this.setStatus('🔗 اتكلبش.');
   }
@@ -1032,13 +1320,18 @@ export class StreetPlay {
     const slide = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.22), m);
     slide.position.z = 0.06;
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.06), m);
-    grip.position.set(0, -0.07, -0.02); grip.rotation.x = 0.25;
+    grip.position.set(0, -0.07, -0.02);
+    grip.rotation.x = 0.25;
     const len = WEAPONS[character().weapon].len;
-    slide.scale.z = len / 0.22; slide.position.z = len / 2 - 0.05;
+    slide.scale.z = len / 0.22;
+    slide.position.z = len / 2 - 0.05;
     this.gun.add(slide, grip);
     onCharacter((c) => {
-      const l = WEAPONS[c.weapon].len; slide.scale.z = l / 0.22; slide.position.z = l / 2 - 0.05;
-      for (const g of [this.player, this.driver]) if (g) models.redress(g, modelFor(c), { height: 1.8, recolor: recolorFor(c) });
+      const l = WEAPONS[c.weapon].len;
+      slide.scale.z = l / 0.22;
+      slide.position.z = l / 2 - 0.05;
+      for (const g of [this.player, this.driver])
+        if (g) models.redress(g, modelFor(c), { height: 1.8, recolor: recolorFor(c) });
     });
     this.gun.userData.dynamic = true;
     this.player.add(this.gun);
@@ -1061,10 +1354,14 @@ export class StreetPlay {
     for (const z of CROSS_Z.slice(1, 4)) {
       for (const sx of [-1, 1]) {
         const g = new THREE.Group();
-        const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, 4.2, 0.16), pole); p.position.y = 2.1;
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.9, 0.35), pole); head.position.y = 4.2;
-        const la = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), ave); la.position.set(0, 4.2, 0.2 * -sx);
-        const lc = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), cross); lc.position.set(0.24 * sx, 4.2, 0);
+        const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, 4.2, 0.16), pole);
+        p.position.y = 2.1;
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.9, 0.35), pole);
+        head.position.y = 4.2;
+        const la = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), ave);
+        la.position.set(0, 4.2, 0.2 * -sx);
+        const lc = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), cross);
+        lc.position.set(0.24 * sx, 4.2, 0);
         g.add(p, head, la, lc);
         g.position.set(sx * 5.4, 0, z - sx * 5.6);
         g.userData.dynamic = true;
@@ -1078,7 +1375,10 @@ export class StreetPlay {
     const green = this.lightT % 16 < 10;
     if (green === this.avenueGreen) return;
     this.avenueGreen = green;
-    for (const l of this.lights) { l.mats[0].color.setHex(green ? 0x33ff66 : 0xff3030); l.mats[1].color.setHex(green ? 0xff3030 : 0x33ff66); }
+    for (const l of this.lights) {
+      l.mats[0].color.setHex(green ? 0x33ff66 : 0xff3030);
+      l.mats[1].color.setHex(green ? 0xff3030 : 0x33ff66);
+    }
   }
 
   private objEl: HTMLElement | null = null;
@@ -1088,8 +1388,17 @@ export class StreetPlay {
   /** Mission start card; blocks input until "start". */
   private briefing() {
     this.closeResultSilently();
-    const steps = this.level.steps.filter((x) => x.t !== 'radio').map((x) =>
-      x.t === 'car' ? 'اركب الدورية' : x.t === 'goto' ? x.text + ' (اتبع الـGPS الأصفر)' : x.t === 'chase' ? x.text ?? 'الحق العربية' : x.text);
+    const steps = this.level.steps
+      .filter((x) => x.t !== 'radio')
+      .map((x) =>
+        x.t === 'car'
+          ? 'اركب الدورية'
+          : x.t === 'goto'
+            ? x.text + ' (اتبع الـGPS الأصفر)'
+            : x.t === 'chase'
+              ? (x.text ?? 'الحق العربية')
+              : x.text
+      );
     const el = document.createElement('div');
     el.id = 'street-result';
     el.innerHTML = `<div class="street-result-card mission-card"><div class="mc-tag">${isPatrol(this.level.id) ? '🚨 بلاغ دورية' : `مهمة ${this.level.id} من ${LEVELS.length}`} · رتبتك: ${rank().name}</div><h2>${this.level.title}</h2>
@@ -1100,9 +1409,12 @@ export class StreetPlay {
       <button type="button" data-ok>ابدأ المهمة</button></div>`;
     document.getElementById('app')!.appendChild(el);
     this.resultEl = el;
-    el.querySelector('[data-ok]')!.addEventListener('click', () => { audio.click(); this.closeResultSilently(); this.startMission(); });
+    el.querySelector('[data-ok]')!.addEventListener('click', () => {
+      audio.click();
+      this.closeResultSilently();
+      this.startMission();
+    });
   }
-
 
   private buildLights() {
     this.group.add(new THREE.HemisphereLight(0xcfe0ff, 0x56606c, 1.7));
@@ -1111,7 +1423,12 @@ export class StreetPlay {
     key.castShadow = Q.shadows;
     key.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
     const sc = key.shadow.camera;
-    sc.left = -25; sc.right = 25; sc.top = 25; sc.bottom = -25; sc.near = 1; sc.far = 90;
+    sc.left = -25;
+    sc.right = 25;
+    sc.top = 25;
+    sc.bottom = -25;
+    sc.near = 1;
+    sc.far = 90;
     key.shadow.bias = -0.0004;
     this.group.add(key, key.target);
     this.key = key;
@@ -1262,7 +1579,12 @@ export class StreetPlay {
     });
     g.add(this.box(1.4, 0.32, 1.7, glass, 0, 0.98, -0.15));
     const wheel = this.mat(0x111111, { roughness: 0.9 });
-    for (const [x, z] of [[-0.75, 1.25], [0.75, 1.25], [-0.75, -1.25], [0.75, -1.25]] as const) {
+    for (const [x, z] of [
+      [-0.75, 1.25],
+      [0.75, 1.25],
+      [-0.75, -1.25],
+      [0.75, -1.25]
+    ] as const) {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.22, 10), wheel);
       w.rotation.z = Math.PI / 2;
       w.position.set(x, 0.28, z);
@@ -1315,7 +1637,10 @@ export class StreetPlay {
         const dir = k ? 1 : -1;
         mesh.position.set(-100 + i * 70 + k * 40, 0, z + dir * 1.7);
         mesh.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
-        models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[0], { length: 4.5, tint: Q.lowDetailPeople ? undefined : tints[(i * 2 + k) % tints.length] });
+        models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[0], {
+          length: 4.5,
+          tint: Q.lowDetailPeople ? undefined : tints[(i * 2 + k) % tints.length]
+        });
         this.group.add(mesh);
         this.cross.push({ mesh, speed: dir * (5 + i) });
       }
@@ -1333,7 +1658,10 @@ export class StreetPlay {
       mesh.position.set(laneX, 0, -60 + i * 38);
       mesh.rotation.y = i % 2 === 0 ? 0 : Math.PI;
       const tints = [0xffffff, 0x4a7bd6, 0xbfc4cc, 0x3a3a3a, 0x3f9a5a, 0xf2f2f2, 0xd9b44a];
-      models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[i % CARS.length], { length: 4.5, tint: Q.lowDetailPeople ? undefined : tints[i % tints.length] });
+      models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[i % CARS.length], {
+        length: 4.5,
+        tint: Q.lowDetailPeople ? undefined : tints[i % tints.length]
+      });
       this.group.add(mesh);
       this.traffic.push({ mesh, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
     }
@@ -1376,12 +1704,21 @@ export class StreetPlay {
     this.msText = 'اقرا المهمة واضغط «ابدأ»';
     this.msHasTarget = false;
     this.endGang();
-    this.radioQ = []; this.radioT = 0; this.radioEl?.classList.remove('show');
-    if (this.suspect) { this.group.remove(this.suspect); this.suspect = null; }
+    this.radioQ = [];
+    this.radioT = 0;
+    this.radioEl?.classList.remove('show');
+    if (this.suspect) {
+      this.group.remove(this.suspect);
+      this.suspect = null;
+    }
     this.closeResultSilently();
     const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
     const startZ = place.z - 48 < -95 ? place.z + 48 : place.z - 48;
-    if (keep) { this.setStatus(this.level.brief); this.briefing(); return; }
+    if (keep) {
+      this.setStatus(this.level.brief);
+      this.briefing();
+      return;
+    }
     this.car.position.set(-2.6, 0, startZ + 11);
     this.car.rotation.y = startZ < place.z ? 0 : Math.PI;
     this.player.position.set(0.9, 0, startZ);
@@ -1479,7 +1816,9 @@ export class StreetPlay {
     this.statusEl = ui.querySelector('#street-status');
     this.objEl = ui.querySelector('#street-obj');
     this.tutEl = ui.querySelector('#street-tut');
-    this.tutEl?.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-tut="skip"]')) this.endTutorial(true); });
+    this.tutEl?.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('[data-tut="skip"]')) this.endTutorial(true);
+    });
     this.dirEl = ui.querySelector('#street-dir');
     this.objHtml = '';
     const press = (k: keyof Hold, on: boolean) => {
@@ -1491,13 +1830,20 @@ export class StreetPlay {
       btn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         active.add(e.pointerId);
-        try { btn.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+        try {
+          btn.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
         btn.classList.add('held');
         on(true);
       });
       const up = (e: PointerEvent) => {
         if (!active.delete(e.pointerId)) return;
-        if (!active.size) { btn.classList.remove('held'); on(false); }
+        if (!active.size) {
+          btn.classList.remove('held');
+          on(false);
+        }
       };
       btn.addEventListener('pointerup', up);
       btn.addEventListener('pointercancel', up);
@@ -1517,12 +1863,24 @@ export class StreetPlay {
     this.hudHtml = '';
     this.radioEl = ui.querySelector('#street-radio');
     this.retEl = ui.querySelector('#street-ret');
-    this.radioEl!.addEventListener('click', () => { this.radioT = 0; this.showRadio(); });
+    this.radioEl!.addEventListener('click', () => {
+      this.radioT = 0;
+      this.showRadio();
+    });
     ui.querySelector('[data-act="order"]')!.addEventListener('click', () => this.orderSurrender());
     ui.querySelector('[data-act="cuff"]')!.addEventListener('click', () => this.cuffNow());
-    ui.querySelector('[data-act="hub"]')!.addEventListener('click', () => { if (this.canHub) this.openHub(); });
+    ui.querySelector('[data-act="hub"]')!.addEventListener('click', () => {
+      if (this.canHub) this.openHub();
+    });
     // Stop the browser from turning touches on the controls into scroll/zoom/long-press.
-    ui.addEventListener('touchstart', (e) => { if ((e.target as HTMLElement).closest('[data-k], [data-act="run"], [data-act="shoot"], .street-stick')) e.preventDefault(); }, { passive: false });
+    ui.addEventListener(
+      'touchstart',
+      (e) => {
+        if ((e.target as HTMLElement).closest('[data-k], [data-act="run"], [data-act="shoot"], .street-stick'))
+          e.preventDefault();
+      },
+      { passive: false }
+    );
     ui.querySelector('[data-act="car"]')!.addEventListener('click', () => this.toggleCar());
     ui.querySelector('[data-act="map"]')!.addEventListener('click', () => this.openMap());
     this.mini!.addEventListener('click', () => this.openMap());
@@ -1537,16 +1895,28 @@ export class StreetPlay {
     const set = (dx: number, dy: number) => {
       const m = Math.hypot(dx, dy);
       const k = m > R ? R / m : 1;
-      dx *= k; dy *= k;
+      dx *= k;
+      dy *= k;
       knob.style.transform = `translate(${dx}px, ${dy}px)`;
-      const nx = dx / R, ny = dy / R;
-      this.stick.x = nx; this.stick.y = -ny;
-      this.hold.f = ny < -0.3; this.hold.b = ny > 0.3;
-      this.hold.l = nx < -0.35; this.hold.r = nx > 0.35;
+      const nx = dx / R,
+        ny = dy / R;
+      this.stick.x = nx;
+      this.stick.y = -ny;
+      this.hold.f = ny < -0.3;
+      this.hold.b = ny > 0.3;
+      this.hold.l = nx < -0.35;
+      this.hold.r = nx > 0.35;
       this.hold.run = false; // full deflection runs (see stepLoco)
     };
     el.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); if (id !== null) return; id = e.pointerId; try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      e.preventDefault();
+      if (id !== null) return;
+      id = e.pointerId;
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
       const r = el.getBoundingClientRect();
       set(e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
     });
@@ -1555,7 +1925,12 @@ export class StreetPlay {
       const r = el.getBoundingClientRect();
       set(e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
     });
-    const end = (e: PointerEvent) => { if (e.pointerId !== id) return; id = null; set(0, 0); this.hold.run = false; };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== id) return;
+      id = null;
+      set(0, 0);
+      this.hold.run = false;
+    };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
     el.addEventListener('lostpointercapture', end);
@@ -1604,12 +1979,14 @@ export class StreetPlay {
       audio.engine(false);
       this.player.visible = true;
       const cy = this.car.rotation.y;
-      const ex = this.car.position.x + Math.cos(cy) * 2.2, ez = this.car.position.z - Math.sin(cy) * 2.2;
+      const ex = this.car.position.x + Math.cos(cy) * 2.2,
+        ez = this.car.position.z - Math.sin(cy) * 2.2;
       if (onRoad(ex, ez, 3.6)) this.player.position.set(ex, 0, ez);
       else this.player.position.set(this.car.position.x, 0, this.car.position.z);
       this.yaw = cy;
       this.camYaw = cy;
-      this.vel.x = 0; this.vel.z = 0;
+      this.vel.x = 0;
+      this.vel.z = 0;
       document.documentElement.classList.add('onfoot');
       if (this.siren) this.toggleSiren(false);
       this.setStatus('نزلت من الدورية.');
@@ -1689,8 +2066,6 @@ export class StreetPlay {
     this.setStatus(`بتسوق نحو ${place.name}…`);
   }
 
-
-
   private beginChase() {
     this.chasing = true;
     this.chaseTime = 0;
@@ -1706,15 +2081,17 @@ export class StreetPlay {
     this.suspect.position.set(ax - 1.6, 0, this.car.position.z + this.chaseDir * START_GAP);
     this.suspect.rotation.y = this.chaseDir > 0 ? 0 : Math.PI;
     const far = farNode(this.suspect.position.x, this.suspect.position.z);
-    this.chasePath = trimBehind(findPath(this.suspect.position.x, this.suspect.position.z, far.x, far.z), this.suspect.position.x, this.suspect.position.z, this.suspect.rotation.y);
+    this.chasePath = trimBehind(
+      findPath(this.suspect.position.x, this.suspect.position.z, far.x, far.z),
+      this.suspect.position.x,
+      this.suspect.position.z,
+      this.suspect.rotation.y
+    );
     this.group.add(this.suspect);
     audio.sirenLoop(true);
     audio.setTrack('music');
     this.setStatus(this.inCar ? '🚨 مطاردة! الحق العربية السودا.' : '🚨 اركب الدورية بسرعة — العربية هربت!');
   }
-
-
-
 
   private endGang() {
     this.firing = false;
@@ -1722,8 +2099,6 @@ export class StreetPlay {
     document.documentElement.classList.remove('armed', 'can-order', 'can-cuff');
     this.flags = '';
   }
-
-
 
   private finishMission(success: boolean, reason = '') {
     if (this.msIdx < 0 || this.resultEl) return;
@@ -1735,12 +2110,14 @@ export class StreetPlay {
     this.clearCheckpoint();
     this.firing = false;
     audio.sirenLoop(false);
-    if (success) audio.success(); else audio.fail();
+    if (success) audio.success();
+    else audio.fail();
     const lv = this.level;
     const place = STREET_PLACES.find((p) => p.id === lv.placeId) || STREET_PLACES[0];
     const before = rank().name;
     const stars = completeLevel(lv.id, success, this.msTime);
-    if (success) addStat('missions'); else checkAch();
+    if (success) addStat('missions');
+    else checkAch();
     const after = rank().name;
     const report: ChaseReport = {
       success,
@@ -1755,12 +2132,14 @@ export class StreetPlay {
     };
     this.lastResult = { success, levelId: lv.id };
     setTimeout(() => this.squad.clear(), 1500);
-    if (this.suspect) { this.group.remove(this.suspect); this.suspect = null; }
+    if (this.suspect) {
+      this.group.remove(this.suspect);
+      this.suspect = null;
+    }
     this.onReport?.(report);
     if (success && lv.ending) this.radio(lv.ending, null);
     this.showResult(report);
   }
-
 
   private showResult(r: ChaseReport) {
     this.closeMap();
@@ -1783,7 +2162,10 @@ export class StreetPlay {
       el.remove();
       this.resultEl = null;
       const r = this.lastResult;
-      if (r) this.setLevel(isPatrol(r.levelId) || (r.success && r.levelId >= LEVELS.length) ? -1 : r.success ? r.levelId + 1 : r.levelId);
+      if (r)
+        this.setLevel(
+          isPatrol(r.levelId) || (r.success && r.levelId >= LEVELS.length) ? -1 : r.success ? r.levelId + 1 : r.levelId
+        );
       this.onResultClosed?.();
     });
   }
@@ -1865,7 +2247,8 @@ export class StreetPlay {
     this.camB = k >= 1 ? b : this.camB + (b - this.camB) * Math.min(1, k * 1.5);
     const cb = this.camB;
     let h = up + Math.max(0, (back - cb) / back) * 2.2;
-    const cx = target.position.x - sin * cb, cz = target.position.z - cos * cb;
+    const cx = target.position.x - sin * cb,
+      cz = target.position.z - cos * cb;
     // on foot next to the patrol car: lift over it instead of clipping into the body
     if (!this.inCar) {
       const C = this.car.position;
@@ -1884,10 +2267,12 @@ export class StreetPlay {
   update(dt: number) {
     if (!this.active) return;
     if (!Number.isFinite(dt) || dt <= 0) return;
-    const P = this.player.position, C = this.car.position;
+    const P = this.player.position,
+      C = this.car.position;
     if (!Number.isFinite(P.x + P.z + C.x + C.z + this.yaw + this.speed)) {
       // never leave the player stranded in an invalid spot (blank screen): snap back to the avenue
-      this.speed = 0; this.yaw = 0;
+      this.speed = 0;
+      this.yaw = 0;
       C.set(-1.4, 0, Number.isFinite(C.z) ? THREE.MathUtils.clamp(C.z, -95, 235) : 0);
       P.set(0.9, 0, C.z);
     }
@@ -1919,26 +2304,45 @@ export class StreetPlay {
       this.key.target.position.set(a.x, 0, a.z);
     }
     const ph = Math.floor(performance.now() / 420) % 2 === 0;
-    for (const l of this.stationLights) l.visible = ph === (l.userData.blink > 0);
+    for (const l of this.stationLights) l.visible = ph === l.userData.blink > 0;
     const sp = Math.abs(this.speed);
     audio.engine(this.inCar, Math.min(1, sp / 18));
     if (this.inCar && sp > 2 && Math.random() < dt * 30) {
-      fx.smoke(this.group, this.car.position.x - Math.sin(this.yaw) * 2.1, 0.35, this.car.position.z - Math.cos(this.yaw) * 2.1);
+      fx.smoke(
+        this.group,
+        this.car.position.x - Math.sin(this.yaw) * 2.1,
+        0.35,
+        this.car.position.z - Math.cos(this.yaw) * 2.1
+      );
     }
     if (this.speedoEl) {
-      const txt = this.inCar ? `<b>${kmh(this.speed)}</b><small>كم/س</small><i style="--d:${this.damage}%"></i><span>🚓 ${100 - this.damage}%</span>` : '';
-      if (txt !== this.speedoTxt) { this.speedoEl.innerHTML = txt; this.speedoTxt = txt; }
+      const txt = this.inCar
+        ? `<b>${kmh(this.speed)}</b><small>كم/س</small><i style="--d:${this.damage}%"></i><span>🚓 ${100 - this.damage}%</span>`
+        : '';
+      if (txt !== this.speedoTxt) {
+        this.speedoEl.innerHTML = txt;
+        this.speedoTxt = txt;
+      }
     }
     // chase camera: widen the view with speed, smoothly
     const fovT = 48 + (this.inCar ? Math.min(12, Math.abs(this.speed) * 0.5) : 0);
     this.camFov += (fovT - this.camFov) * Math.min(1, dt * 3);
-    if (Math.abs(this.camera.fov - this.camFov) > 0.05) { this.camera.fov = this.camFov; this.camera.updateProjectionMatrix(); }
+    if (Math.abs(this.camera.fov - this.camFov) > 0.05) {
+      this.camera.fov = this.camFov;
+      this.camera.updateProjectionMatrix();
+    }
     this.snapCamera(1 - Math.pow(0.0008, dt));
     this.tickOcclusion(dt);
-    if (this.recoil > 0 && !reducedMotion) { this.camera.position.y += this.recoil * 0.05; this.camera.rotation.x += this.recoil * 0.012; }
+    if (this.recoil > 0 && !reducedMotion) {
+      this.camera.position.y += this.recoil * 0.05;
+      this.camera.rotation.x += this.recoil * 0.012;
+    }
     this.uiT += dt;
-    if (this.uiT > 0.12) { this.uiT = 0; this.drawMini(); this.objective(); }
-    else this.objectiveWorld();
+    if (this.uiT > 0.12) {
+      this.uiT = 0;
+      this.drawMini();
+      this.objective();
+    } else this.objectiveWorld();
     const here = this.currentPlace();
     if (here.id !== this.placeId && !this.travel && !this.chasing) {
       this.placeId = here.id;
@@ -1971,24 +2375,50 @@ export class StreetPlay {
       const thr = this.travel ? throttle : this.stick.y || throttle;
       const steer = this.travel ? 0 : -this.stick.x || turn;
       const hb = !this.travel && (this.hold.run || this.keys.has('Space'));
-      const cs = stepCar({ speed: this.speed, yaw: this.yaw, velYaw: this.velYaw }, { throttle: thr, steer, handbrake: hb, max, damage: this.damage }, dt);
-      if (this.travel) { cs.yaw = this.yaw; cs.velYaw = this.yaw; }
-      this.speed = cs.speed; this.yaw = cs.yaw; this.velYaw = cs.velYaw;
+      const cs = stepCar(
+        { speed: this.speed, yaw: this.yaw, velYaw: this.velYaw },
+        { throttle: thr, steer, handbrake: hb, max, damage: this.damage },
+        dt
+      );
+      if (this.travel) {
+        cs.yaw = this.yaw;
+        cs.velYaw = this.yaw;
+      }
+      this.speed = cs.speed;
+      this.yaw = cs.yaw;
+      this.velYaw = cs.velYaw;
       this.car.rotation.y = this.yaw;
       const drift = driftOf(cs);
       if (drift > 0.3 && Math.abs(this.speed) > 6 && Math.random() < dt * 40) {
-        for (const sd of [-0.8, 0.8]) fx.smoke(this.group, this.car.position.x - Math.sin(this.yaw) * 1.8 + Math.cos(this.yaw) * sd, 0.15, this.car.position.z - Math.cos(this.yaw) * 1.8 - Math.sin(this.yaw) * sd);
+        for (const sd of [-0.8, 0.8])
+          fx.smoke(
+            this.group,
+            this.car.position.x - Math.sin(this.yaw) * 1.8 + Math.cos(this.yaw) * sd,
+            0.15,
+            this.car.position.z - Math.cos(this.yaw) * 1.8 - Math.sin(this.yaw) * sd
+          );
       }
-      const cmx = Math.sin(this.velYaw) * this.speed * dt, cmz = Math.cos(this.velYaw) * this.speed * dt;
+      const cmx = Math.sin(this.velYaw) * this.speed * dt,
+        cmz = Math.cos(this.velYaw) * this.speed * dt;
       const C0 = this.car.position;
       // slide along kerbs/buildings instead of bouncing and getting stuck
       if (!onRoad(C0.x + cmx, C0.z + cmz, 0.4)) {
-        if (onRoad(C0.x + cmx, C0.z, 0.4)) { C0.x += cmx; this.speed *= 1 - Math.min(0.9, dt * 2.5); }
-        else if (onRoad(C0.x, C0.z + cmz, 0.4)) { C0.z += cmz; this.speed *= 1 - Math.min(0.9, dt * 2.5); }
-        else this.speed *= -0.2;
-      } else { C0.x += cmx; C0.z += cmz; }
+        if (onRoad(C0.x + cmx, C0.z, 0.4)) {
+          C0.x += cmx;
+          this.speed *= 1 - Math.min(0.9, dt * 2.5);
+        } else if (onRoad(C0.x, C0.z + cmz, 0.4)) {
+          C0.z += cmz;
+          this.speed *= 1 - Math.min(0.9, dt * 2.5);
+        } else this.speed *= -0.2;
+      } else {
+        C0.x += cmx;
+        C0.z += cmz;
+      }
       this.distAcc += Math.abs(this.speed) * dt;
-      if (this.distAcc > 25) { addStat('distance', this.distAcc); this.distAcc = 0; }
+      if (this.distAcc > 25) {
+        addStat('distance', this.distAcc);
+        this.distAcc = 0;
+      }
       if (!onRoad(this.car.position.x, this.car.position.z, 0.4)) {
         // hit a kerb/building: back out and bleed speed
         this.car.position.x -= Math.sin(this.yaw) * this.speed * dt * 1.5;
@@ -1997,31 +2427,55 @@ export class StreetPlay {
       }
     } else {
       // camera-relative third-person movement with acceleration, turning and wall sliding
-      let ix = this.stick.x, iy = this.stick.y;
-      if (!ix && !iy) { ix = -turn; iy = throttle; }
+      let ix = this.stick.x,
+        iy = this.stick.y;
+      if (!ix && !iy) {
+        ix = -turn;
+        iy = throttle;
+      }
       const lo = stepLoco({ vx: this.vel.x, vz: this.vel.z, yaw: this.yaw }, ix, iy, this.camYaw, input.run, dt);
-      this.vel.x = lo.vx; this.vel.z = lo.vz;
+      this.vel.x = lo.vx;
+      this.vel.z = lo.vz;
       if (!this.firing) this.yaw = lo.yaw;
       const P = this.player.position;
-      const mx = lo.vx * dt, mz = lo.vz * dt;
-      if (onRoad(P.x + mx, P.z + mz, 3.6)) { P.x += mx; P.z += mz; }
-      else if (onRoad(P.x + mx, P.z, 3.6)) { P.x += mx; this.vel.z *= 0.5; }
-      else if (onRoad(P.x, P.z + mz, 3.6)) { P.z += mz; this.vel.x *= 0.5; }
-      else { this.vel.x = 0; this.vel.z = 0; }
+      const mx = lo.vx * dt,
+        mz = lo.vz * dt;
+      if (onRoad(P.x + mx, P.z + mz, 3.6)) {
+        P.x += mx;
+        P.z += mz;
+      } else if (onRoad(P.x + mx, P.z, 3.6)) {
+        P.x += mx;
+        this.vel.z *= 0.5;
+      } else if (onRoad(P.x, P.z + mz, 3.6)) {
+        P.z += mz;
+        this.vel.x *= 0.5;
+      } else {
+        this.vel.x = 0;
+        this.vel.z = 0;
+      }
       // solid vehicles: push the officer out and let him slide along the body
       const hit = collide(P.x, P.z, 0.42, this.vehicleBoxes());
       if (hit.hit && onRoad(hit.x, hit.z, 3.6)) {
-        const nx = hit.x - P.x, nz = hit.z - P.z, nl = Math.hypot(nx, nz) || 1;
+        const nx = hit.x - P.x,
+          nz = hit.z - P.z,
+          nl = Math.hypot(nx, nz) || 1;
         const vn = (this.vel.x * nx + this.vel.z * nz) / nl;
-        if (vn < 0) { this.vel.x -= (vn * nx) / nl; this.vel.z -= (vn * nz) / nl; }
-        P.x = hit.x; P.z = hit.z;
+        if (vn < 0) {
+          this.vel.x -= (vn * nx) / nl;
+          this.vel.z -= (vn * nz) / nl;
+        }
+        P.x = hit.x;
+        P.z = hit.z;
       }
       this.player.rotation.y = this.yaw;
       const spd = Math.hypot(this.vel.x, this.vel.z);
       this.camYaw = followCamYaw(this.camYaw, this.yaw, spd, dt);
       if (spd > 0.3) {
         this.stepT -= dt * spd;
-        if (this.stepT <= 0) { this.stepT = 1.5; audio.sample(Math.random() < 0.5 ? 'step1' : 'step2', 0.5, 0.9 + Math.random() * 0.2); }
+        if (this.stepT <= 0) {
+          this.stepT = 1.5;
+          audio.sample(Math.random() < 0.5 ? 'step1' : 'step2', 0.5, 0.9 + Math.random() * 0.2);
+        }
       }
       // fallback primitive legs (before the rigged model loads): swing in step with speed
       const legs = (this.player.userData.legs || []) as THREE.Object3D[];
@@ -2052,12 +2506,13 @@ export class StreetPlay {
       for (let j = 0; j < n; j++) {
         if (j === i) continue;
         const o = this.peds[j].mesh.position;
-        const dz = o.z - m.z, dx = o.x - m.x;
+        const dz = o.z - m.z,
+          dx = o.x - m.x;
         if (Math.abs(dz) < 1.4 && Math.abs(dx) < 0.8 && Math.sign(dz) === p.dir) side += dx >= 0 ? -1 : 1;
       }
       if (!this.inCar && Math.abs(me.z - m.z) < 1.6 && Math.abs(me.x - m.x) < 1) side += me.x >= m.x ? -1.5 : 1.5;
       const home = m.x > 0 ? 6.5 : -6.5;
-      m.x += (side ? side * 1.6 * dt : (home - m.x) * dt * 0.8);
+      m.x += side ? side * 1.6 * dt : (home - m.x) * dt * 0.8;
       m.x = m.x > 0 ? THREE.MathUtils.clamp(m.x, 5, 7.9) : THREE.MathUtils.clamp(m.x, -7.9, -5);
       p.mesh.rotation.y = p.dir > 0 ? 0 : Math.PI;
       p.phase += dt * speed * 6;
@@ -2068,7 +2523,6 @@ export class StreetPlay {
       p.armR.rotation.x = swing * 0.6;
     }
   }
-
 
   private stepTraffic(dt: number) {
     if (this.hitCool > 0) this.hitCool -= dt;
@@ -2085,10 +2539,14 @@ export class StreetPlay {
     for (const t of this.traffic) {
       const z = t.mesh.position.z;
       let stop = false;
-      if (red) for (const l of this.lights) {
-        const ahead = t.speed > 0 ? (l.z - 6) - z : z - (l.z + 6);
-        if (ahead > 0 && ahead < 7) { stop = true; break; }
-      }
+      if (red)
+        for (const l of this.lights) {
+          const ahead = t.speed > 0 ? l.z - 6 - z : z - (l.z + 6);
+          if (ahead > 0 && ahead < 7) {
+            stop = true;
+            break;
+          }
+        }
       // don't drive through the officer or the patrol car
       const me = this.inCar ? this.car.position : this.player.position;
       const dz = (me.z - z) * Math.sign(t.speed);
@@ -2112,7 +2570,9 @@ export class StreetPlay {
             this.hitCool = 0.6;
             audio.sample('crash', Math.min(1, rel / 15));
             this.recoil = Math.min(1, rel / 10);
-            this.setStatus(this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}%`);
+            this.setStatus(
+              this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}%`
+            );
           }
         }
         // push both apart; the hit car gets shoved and stops a moment
@@ -2122,13 +2582,16 @@ export class StreetPlay {
         t.bumpT = 1.5;
         this.speed *= -0.25;
       }
-      if (t.bumpT && t.bumpT > 0) { t.bumpT -= dt; stop = true; t.mesh.rotation.z = Math.sin(t.bumpT * 20) * 0.03 * t.bumpT; }
+      if (t.bumpT && t.bumpT > 0) {
+        t.bumpT -= dt;
+        stop = true;
+        t.mesh.rotation.z = Math.sin(t.bumpT * 20) * 0.03 * t.bumpT;
+      }
       if (!stop) t.mesh.position.z += t.speed * dt;
       if (t.mesh.position.z > 250) t.mesh.position.z = -110;
       if (t.mesh.position.z < -110) t.mesh.position.z = 250;
     }
   }
-
 
   private stepChase(dt: number) {
     if (!this.chasing || !this.suspect) return;
@@ -2137,7 +2600,13 @@ export class StreetPlay {
     const sp = this.suspect.position;
     const dist = sp.distanceTo(this.car.position);
     // fair suspect speed: below the patrol car's top speed, brakes for corners, eases off when far
-    const flee = fleeSpeed({ t: this.chaseClock, k: this.chaseSpeed, playerMax: 18 + rank().car, dist, turn: this.chaseTurn });
+    const flee = fleeSpeed({
+      t: this.chaseClock,
+      k: this.chaseSpeed,
+      playerMax: 18 + rank().car,
+      dist,
+      turn: this.chaseTurn
+    });
     // waits for the player to get in the car (no escape while they're running to it)
     const step = this.inCar || this.chaseTime > GRACE ? flee * dt : flee * dt * 0.35;
     let head = followPath(sp, this.chasePath, step);
@@ -2153,13 +2622,22 @@ export class StreetPlay {
     // solid cars: you can't drive through the suspect, you bump and stay on its bumper
     if (this.inCar && dist < 4.2) {
       const C = this.car.position;
-      const dx = C.x - sp.x, dz = C.z - sp.z, L = Math.hypot(dx, dz) || 1;
-      C.x = sp.x + (dx / L) * 4.2; C.z = sp.z + (dz / L) * 4.2;
+      const dx = C.x - sp.x,
+        dz = C.z - sp.z,
+        L = Math.hypot(dx, dz) || 1;
+      C.x = sp.x + (dx / L) * 4.2;
+      C.z = sp.z + (dz / L) * 4.2;
       this.speed = Math.min(this.speed, flee * 0.95);
       if (this.chaseLock < 0.05) audio.click();
     }
     this.chaseLock = stepLock(this.chaseLock, dist, this.inCar, dt);
-    const r = chaseOutcome({ dist, inCar: this.inCar, clock: this.chaseClock, limit: this.chaseLimit, lock: this.chaseLock });
+    const r = chaseOutcome({
+      dist,
+      inCar: this.inCar,
+      clock: this.chaseClock,
+      limit: this.chaseLimit,
+      lock: this.chaseLock
+    });
     if (r === 'caught') this.caught();
     else if (r === 'escaped') this.finishMission(false, 'العربية بعدت أوي وهربت.');
     else if (r === 'timeout') this.finishMission(false, 'الوقت خلص والعربية هربت.');
@@ -2176,10 +2654,15 @@ export class StreetPlay {
       this.squad.spawnOne(b, p.x + 2.2, p.z);
       if (b === 'fight') this.squad.spawnOne('fight', p.x - 2.4, p.z + 1);
       this.chaseArrest = true;
-      this.setStatus(b === 'flee' ? 'السواق نزل يجري! انزل والحقه.' : b === 'fight' ? '⚠ نزلوا مسلحين! انزل واتعامل.' : 'العربية وقفت. انزل واقبض على السواق.');
+      this.setStatus(
+        b === 'flee'
+          ? 'السواق نزل يجري! انزل والحقه.'
+          : b === 'fight'
+            ? '⚠ نزلوا مسلحين! انزل واتعامل.'
+            : 'العربية وقفت. انزل واقبض على السواق.'
+      );
     } else this.nextStep();
   }
-
 
   private stepRain(dt: number) {
     if (!this.rain || !this.rainVel) return;
@@ -2208,21 +2691,33 @@ export class StreetPlay {
     const ctx = c.getContext('2d');
     if (!ctx) return;
     const pos = this.inCar ? this.car.position : this.player.position;
-    const dots: { x: number; z: number; c: string; r: number }[] = STREET_PLACES.map((p) => ({ x: 0, z: p.z, c: p.id === this.missionId ? '#ff4d6d' : '#3aa0ff', r: p.id === this.missionId ? 5 : 3 }));
-    for (const m of this.squad.list) if (m.state !== 'down' && m.state !== 'cuffed') dots.push({ x: m.g.position.x, z: m.g.position.z, c: m.state === 'hands' ? '#7dff9a' : '#ff3b3b', r: 2.5 });
+    const dots: { x: number; z: number; c: string; r: number }[] = STREET_PLACES.map((p) => ({
+      x: 0,
+      z: p.z,
+      c: p.id === this.missionId ? '#ff4d6d' : '#3aa0ff',
+      r: p.id === this.missionId ? 5 : 3
+    }));
+    for (const m of this.squad.list)
+      if (m.state !== 'down' && m.state !== 'cuffed')
+        dots.push({ x: m.g.position.x, z: m.g.position.z, c: m.state === 'hands' ? '#7dff9a' : '#ff3b3b', r: 2.5 });
     if (this.msHasTarget) dots.push({ x: this.msTarget.x, z: this.msTarget.z, c: '#ffd23d', r: 4 });
-    if (this.chasing && this.suspect) dots.push({ x: this.suspect.position.x, z: this.suspect.position.z, c: '#ffd23d', r: 4 });
+    if (this.chasing && this.suspect)
+      dots.push({ x: this.suspect.position.x, z: this.suspect.position.z, c: '#ffd23d', r: 4 });
 
     dots.push({ x: pos.x, z: pos.z, c: '#ffffff', r: 4 });
     const m = drawCityMap(ctx, c.width, c.height, dots);
     if (this.route.length > 1) {
-      ctx.strokeStyle = '#ffd23d'; ctx.lineWidth = 2.5; ctx.setLineDash([5, 3]);
-      ctx.beginPath(); ctx.moveTo(m.sx(pos.x), m.sz(pos.z));
+      ctx.strokeStyle = '#ffd23d';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.moveTo(m.sx(pos.x), m.sz(pos.z));
       for (const w of this.route) ctx.lineTo(m.sx(w.x), m.sz(w.z));
-      ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
     }
   }
-
 }
 
 function approachAngle(current: number, target: number, maxStep: number) {

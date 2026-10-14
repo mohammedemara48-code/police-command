@@ -80,7 +80,10 @@ export class CityScene {
       alpha: false,
       powerPreference: 'high-performance'
     });
-    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); document.body.classList.add('gl-lost'); });
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      document.body.classList.add('gl-lost');
+    });
     canvas.addEventListener('webglcontextrestored', () => location.reload());
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, Q.pixelRatio));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -127,7 +130,9 @@ export class CityScene {
         this.street = new StreetPlay(this.scene, this.camera, this.root, this.carRoot, this.markerRoot);
         return this.street;
       });
-      this.streetP.catch(() => { this.streetP = null; });
+      this.streetP.catch(() => {
+        this.streetP = null;
+      });
     }
     return this.streetP;
   }
@@ -245,15 +250,7 @@ export class CityScene {
     }
   }
 
-  private buildBuilding(
-    x: number,
-    z: number,
-    w: number,
-    h: number,
-    d: number,
-    color: number,
-    name?: string
-  ) {
+  private buildBuilding(x: number, z: number, w: number, h: number, d: number, color: number, name?: string) {
     const g = new THREE.Group();
     g.position.set(x, 0, z);
     const body = this.box(w, h, d, this.mat(color, { roughness: 0.65, metalness: 0.25 }), 0, h / 2, 0);
@@ -296,12 +293,33 @@ export class CityScene {
     // Helipad
     const pad = this.box(8, 0.2, 8, this.mat(0x1a2230), 0, 11.6, 0);
     hq.add(pad);
-    const H = this.box(3.2, 0.05, 0.45, this.mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.3 }), 0, 11.75, 0);
-    const Hbar = this.box(0.45, 0.05, 3.2, this.mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.3 }), 0, 11.75, 0);
+    const H = this.box(
+      3.2,
+      0.05,
+      0.45,
+      this.mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.3 }),
+      0,
+      11.75,
+      0
+    );
+    const Hbar = this.box(
+      0.45,
+      0.05,
+      3.2,
+      this.mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.3 }),
+      0,
+      11.75,
+      0
+    );
     hq.add(H, Hbar);
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(3.2, 3.6, 48),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x88aacc, emissiveIntensity: 0.4, side: THREE.DoubleSide })
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0x88aacc,
+        emissiveIntensity: 0.4,
+        side: THREE.DoubleSide
+      })
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 11.72;
@@ -324,9 +342,14 @@ export class CityScene {
 
     // Antenna
     hq.add(this.box(0.15, 4, 0.15, this.mat(0xaaaaaa), -5.5, 13.5, 3));
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 12), new THREE.MeshStandardMaterial({
-      color: 0xff3344, emissive: 0xff0000, emissiveIntensity: 1.2
-    }));
+    const tip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.25, 12, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0xff3344,
+        emissive: 0xff0000,
+        emissiveIntensity: 1.2
+      })
+    );
     tip.position.set(-5.5, 15.6, 3);
     hq.add(tip);
 
@@ -397,7 +420,12 @@ export class CityScene {
     fx.glow(blue, 0x2288ff, 3);
     // wheels
     const wheelMat = this.mat(0x111111);
-    for (const [wx, wz] of [[-0.7, 1], [0.7, 1], [-0.7, -1], [0.7, -1]] as const) {
+    for (const [wx, wz] of [
+      [-0.7, 1],
+      [0.7, 1],
+      [-0.7, -1],
+      [0.7, -1]
+    ] as const) {
       const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.28, 12), wheelMat);
       wh.rotation.z = Math.PI / 2;
       wh.position.set(wx, 0.28, wz);
@@ -411,7 +439,15 @@ export class CityScene {
     const bank = this.buildBuilding(x, z, 14, 9, 10, 0x3a4558, 'bank');
     // Columns
     for (let i = -2; i <= 2; i++) {
-      const col = this.box(0.55, 4.5, 0.55, this.mat(0xd8dde8, { metalness: 0.35, roughness: 0.4 }), i * 2.2, 2.25, 5.2);
+      const col = this.box(
+        0.55,
+        4.5,
+        0.55,
+        this.mat(0xd8dde8, { metalness: 0.35, roughness: 0.4 }),
+        i * 2.2,
+        2.25,
+        5.2
+      );
       bank.add(col);
     }
     // Gold vault glow
@@ -430,9 +466,18 @@ export class CityScene {
 
     // Residential blocks
     const residPlots = [
-      [-40, -40], [-40, -12], [-40, 18], [-40, 40],
-      [40, -40], [40, -12], [40, 22], [40, 40],
-      [-16, -42], [16, -42], [-16, 42], [16, 42]
+      [-40, -40],
+      [-40, -12],
+      [-40, 18],
+      [-40, 40],
+      [40, -40],
+      [40, -12],
+      [40, 22],
+      [40, 40],
+      [-16, -42],
+      [16, -42],
+      [-16, 42],
+      [16, 42]
     ];
     residPlots.forEach(([x, z], i) => {
       const h = 4 + (i % 4) * 1.8;
@@ -441,8 +486,14 @@ export class CityScene {
 
     // Commercial towers
     const comPlots = [
-      [-18, -18], [18, -18], [-18, 18], [18, 22],
-      [-50, 0], [50, 0], [0, -50], [0, 50]
+      [-18, -18],
+      [18, -18],
+      [-18, 18],
+      [18, 22],
+      [-50, 0],
+      [50, 0],
+      [0, -50],
+      [0, 50]
     ];
     comPlots.forEach(([x, z], i) => {
       const h = 10 + (i % 5) * 3.5;
@@ -451,9 +502,18 @@ export class CityScene {
 
     // Fill voids with mid blocks
     const fillers: Array<[number, number]> = [
-      [-22, -32], [22, -32], [-32, 22], [24, 32],
-      [-48, -28], [48, 28], [-24, 8], [24, -8],
-      [-8, -36], [8, 36], [-36, -8], [36, 8]
+      [-22, -32],
+      [22, -32],
+      [-32, 22],
+      [24, 32],
+      [-48, -28],
+      [48, 28],
+      [-24, 8],
+      [24, -8],
+      [-8, -36],
+      [8, 36],
+      [-36, -8],
+      [36, 8]
     ];
     fillers.forEach(([x, z], i) => {
       if (Math.hypot(x, z) < 16) return;
@@ -491,7 +551,11 @@ export class CityScene {
       bulb.setMatrixAt(i, m4.makeTranslation(x, 4.6, z));
       this.lampPos.push(new THREE.Vector3(x, 4.35, z));
     });
-    for (const im of [pole, arm, bulb]) { im.computeBoundingSphere(); im.castShadow = false; this.root.add(im); }
+    for (const im of [pole, arm, bulb]) {
+      im.computeBoundingSphere();
+      im.castShadow = false;
+      this.root.add(im);
+    }
     // Real lights are expensive on phones (every PointLight is in every shader): low 0, medium 3, high 6.
     const n = Q.lampLights;
     for (let i = 0; i < n; i++) {
@@ -505,10 +569,11 @@ export class CityScene {
   private placeLampLights() {
     if (!this.lampLights.length) return;
     const t = this.controls.target;
-    const near = this.lampPos
-      .map((p) => ({ p, d: (p.x - t.x) ** 2 + (p.z - t.z) ** 2 }))
-      .sort((a, b) => a.d - b.d);
-    this.lampLights.forEach((l, i) => { const q = near[i]?.p; if (q) l.position.copy(q); });
+    const near = this.lampPos.map((p) => ({ p, d: (p.x - t.x) ** 2 + (p.z - t.z) ** 2 })).sort((a, b) => a.d - b.d);
+    this.lampLights.forEach((l, i) => {
+      const q = near[i]?.p;
+      if (q) l.position.copy(q);
+    });
   }
 
   private buildLandmarks() {
@@ -556,14 +621,62 @@ export class CityScene {
   private registerPOIs() {
     this.pois = [
       { id: 'hq', name: 'مركز القيادة', kind: 'hq', zone: ZoneType.HQ, x: 0, z: 0, districtId: 'downtown' },
-      { id: 'bank-1', name: 'البنك المركزي', kind: 'bank', zone: ZoneType.Bank, x: -28, z: -18, districtId: 'downtown' },
+      {
+        id: 'bank-1',
+        name: 'البنك المركزي',
+        kind: 'bank',
+        zone: ZoneType.Bank,
+        x: -28,
+        z: -18,
+        districtId: 'downtown'
+      },
       { id: 'bank-2', name: 'البنك التجاري', kind: 'bank', zone: ZoneType.Bank, x: 32, z: 14, districtId: 'suburb' },
-      { id: 'res-1', name: 'حي النخيل', kind: 'residential', zone: ZoneType.Residential, x: -40, z: -12, districtId: 'port' },
-      { id: 'res-2', name: 'حي الروضة', kind: 'residential', zone: ZoneType.Residential, x: 40, z: 22, districtId: 'suburb' },
-      { id: 'com-1', name: 'المجمع التجاري', kind: 'commercial', zone: ZoneType.Commercial, x: 18, z: -18, districtId: 'downtown' },
-      { id: 'com-2', name: 'برج الأعمال', kind: 'commercial', zone: ZoneType.Downtown, x: -18, z: 18, districtId: 'downtown' },
+      {
+        id: 'res-1',
+        name: 'حي النخيل',
+        kind: 'residential',
+        zone: ZoneType.Residential,
+        x: -40,
+        z: -12,
+        districtId: 'port'
+      },
+      {
+        id: 'res-2',
+        name: 'حي الروضة',
+        kind: 'residential',
+        zone: ZoneType.Residential,
+        x: 40,
+        z: 22,
+        districtId: 'suburb'
+      },
+      {
+        id: 'com-1',
+        name: 'المجمع التجاري',
+        kind: 'commercial',
+        zone: ZoneType.Commercial,
+        x: 18,
+        z: -18,
+        districtId: 'downtown'
+      },
+      {
+        id: 'com-2',
+        name: 'برج الأعمال',
+        kind: 'commercial',
+        zone: ZoneType.Downtown,
+        x: -18,
+        z: 18,
+        districtId: 'downtown'
+      },
       { id: 'st-1', name: 'تقاطع الشمال', kind: 'street', zone: ZoneType.Street, x: 0, z: 28, districtId: 'corniche' },
-      { id: 'st-2', name: 'تقاطع الجنوب', kind: 'street', zone: ZoneType.Street, x: 0, z: -28, districtId: 'industrial' },
+      {
+        id: 'st-2',
+        name: 'تقاطع الجنوب',
+        kind: 'street',
+        zone: ZoneType.Street,
+        x: 0,
+        z: -28,
+        districtId: 'industrial'
+      },
       { id: 'st-3', name: 'الطريق الشرقي', kind: 'street', zone: ZoneType.Street, x: 28, z: 0, districtId: 'suburb' },
       { id: 'st-4', name: 'الطريق الغربي', kind: 'street', zone: ZoneType.Street, x: -28, z: 0, districtId: 'port' }
     ];
@@ -571,7 +684,11 @@ export class CityScene {
 
   private spawnFleetCars() {
     const spots: Array<[number, number, number]> = [
-      [8, 0, 8], [-10, 0, 6], [12, 0, -8], [-14, 0, -10], [6, 0, -16]
+      [8, 0, 8],
+      [-10, 0, 6],
+      [12, 0, -8],
+      [-14, 0, -10],
+      [6, 0, -16]
     ];
     spots.forEach(([x, , z], i) => {
       const car = this.makePoliceCar();
@@ -630,7 +747,9 @@ export class CityScene {
       stripe.position.set(0, 1.2, 0.3);
       g.add(cap, stripe);
     }
-    models.dress(g, kind === 'cop' ? 'officer' : (Q.lowDetailPeople ? PEOPLE : REAL_PEOPLE)[shirt % 4], { height: 2.0 });
+    models.dress(g, kind === 'cop' ? 'officer' : (Q.lowDetailPeople ? PEOPLE : REAL_PEOPLE)[shirt % 4], {
+      height: 2.0
+    });
     return g;
   }
 
@@ -673,10 +792,12 @@ export class CityScene {
         bob: i
       });
     });
-    ([
-      [x + 15, z - 1],
-      [x + 13, z + 7]
-    ] as Array<[number, number]>).forEach(([px, pz], i) => {
+    (
+      [
+        [x + 15, z - 1],
+        [x + 13, z + 7]
+      ] as Array<[number, number]>
+    ).forEach(([px, pz], i) => {
       const mesh = this.makeWalker('cop', 0x1a4e9a);
       mesh.position.set(px, 0, pz);
       this.carRoot.add(mesh);
@@ -717,9 +838,9 @@ export class CityScene {
   private spawnTracer(x: number, z: number) {
     const y = 1.35 + Math.random() * 0.8;
     const a = new THREE.Vector3(x + (Math.random() - 0.5) * 5, y, z + (Math.random() - 0.5) * 5);
-    const b = a.clone().add(
-      new THREE.Vector3((Math.random() - 0.5) * 7, (Math.random() - 0.5) * 1.4, (Math.random() - 0.5) * 7)
-    );
+    const b = a
+      .clone()
+      .add(new THREE.Vector3((Math.random() - 0.5) * 7, (Math.random() - 0.5) * 1.4, (Math.random() - 0.5) * 7));
     const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
     const mat = new THREE.LineBasicMaterial({
       color: Math.random() > 0.25 ? 0xfff6cf : 0xff5533,
@@ -771,7 +892,6 @@ export class CityScene {
     }
     this.action.next = now + (heat === 'hot' ? 90 : 260);
   }
-
 
   private stepFx(dt: number) {
     for (let i = this.fx.length - 1; i >= 0; i--) {
@@ -936,7 +1056,9 @@ export class CityScene {
   }
 
   syncIncidents(incidents: Incident[]) {
-    const activeIds = new Set(incidents.filter((i) => i.status !== 'resolved' && i.status !== 'failed').map((i) => i.id));
+    const activeIds = new Set(
+      incidents.filter((i) => i.status !== 'resolved' && i.status !== 'failed').map((i) => i.id)
+    );
 
     for (const [id, g] of this.incidentMarkers) {
       if (!activeIds.has(id)) {
@@ -1094,10 +1216,12 @@ export class CityScene {
   private perfT = 0;
   private perfFrames = 0;
   private adaptPerf(dt: number) {
-    this.perfT += dt; this.perfFrames++;
+    this.perfT += dt;
+    this.perfFrames++;
     if (this.perfT < 4) return;
     const fps = this.perfFrames / this.perfT;
-    this.perfT = 0; this.perfFrames = 0;
+    this.perfT = 0;
+    this.perfFrames = 0;
     if (document.hidden) return;
     const pr = this.renderer.getPixelRatio();
     if (fps < 26 && pr > 0.6) {
@@ -1111,7 +1235,10 @@ export class CityScene {
     fx.update(dt);
     this.adaptPerf(dt);
     this.lampPoolT -= dt;
-    if (this.lampPoolT <= 0) { this.lampPoolT = 0.5; if (!this.street?.active) this.placeLampLights(); }
+    if (this.lampPoolT <= 0) {
+      this.lampPoolT = 0.5;
+      if (!this.street?.active) this.placeLampLights();
+    }
     if (this.street?.active) {
       this.renderer.toneMappingExposure = 1.45;
       this.street.update(dt);

@@ -195,10 +195,7 @@ export class IncidentManager {
   get openIncidents() {
     return this.incidents.filter(
       (i) =>
-        i.status === 'open' ||
-        i.status === 'awaiting_decision' ||
-        i.status === 'dispatched' ||
-        i.status === 'resolving'
+        i.status === 'open' || i.status === 'awaiting_decision' || i.status === 'dispatched' || i.status === 'resolving'
     );
   }
 
@@ -252,8 +249,7 @@ export class IncidentManager {
     const t = pool[Math.floor(Math.random() * pool.length)] || TEMPLATES[0];
     const district = districtId ? districtById(districtId) : this.rollDistrict(this.lastDistrictId);
     this.lastDistrictId = district.id;
-    const poi =
-      this.pois.find((p) => p.districtId === district.id) ||
+    const poi = this.pois.find((p) => p.districtId === district.id) ||
       this.pois[0] || {
         id: district.id,
         name: district.name,
@@ -327,7 +323,12 @@ export class IncidentManager {
 
   previewChance(inc: Incident, choice: DecisionChoice): number {
     const st = this.game.state;
-    inc.successChancePreview = previewOdds({ successBonus: choice.successBonus, equipment: st.equipment, techs: st.techs, swatBonus: st.swatBonus });
+    inc.successChancePreview = previewOdds({
+      successBonus: choice.successBonus,
+      equipment: st.equipment,
+      techs: st.techs,
+      swatBonus: st.swatBonus
+    });
     return inc.successChancePreview;
   }
 
@@ -352,21 +353,16 @@ export class IncidentManager {
     return { ok: true, message: `تم اختيار: ${choice.label}` };
   }
 
-  async DispatchUnitToIncident(
-    incidentId: string,
-    unitId: string
-  ): Promise<{ ok: boolean; message: string }> {
+  async DispatchUnitToIncident(incidentId: string, unitId: string): Promise<{ ok: boolean; message: string }> {
     const inc = this.incidents.find((i) => i.id === incidentId);
     const unit = this.game.units.find((u) => u.id === unitId);
     if (!inc || !unit) return { ok: false, message: 'بلاغ أو وحدة غير موجودة' };
-    if (inc.status === 'resolved' || inc.status === 'failed')
-      return { ok: false, message: 'البلاغ مغلق' };
+    if (inc.status === 'resolved' || inc.status === 'failed') return { ok: false, message: 'البلاغ مغلق' };
     if (inc.status === 'awaiting_decision' || !inc.selectedDecision) {
       return { ok: false, message: 'اختر قراراً أولاً (تفاوض / اقتحام / حصار…)' };
     }
     if (!unit.available) return { ok: false, message: 'الوحدة مشغولة' };
-    if (!this.game.canAffordDispatch(unit))
-      return { ok: false, message: 'وقود أو ميزانية غير كافية' };
+    if (!this.game.canAffordDispatch(unit)) return { ok: false, message: 'وقود أو ميزانية غير كافية' };
 
     this.game.spendDispatch(unit);
     unit.assignedIncidentId = inc.id;
@@ -392,11 +388,7 @@ export class IncidentManager {
     if (!this.resolveTimers.has(inc.id)) {
       const choice = inc.decisions.find((d) => d.id === inc.selectedDecision);
       const timeMul = choice?.timeMul ?? 1;
-      const resolveMs = clamp(
-        (14000 / Math.max(0.5, power * travelFactor)) * timeMul,
-        12000,
-        28000
-      );
+      const resolveMs = clamp((14000 / Math.max(0.5, power * travelFactor)) * timeMul, 12000, 28000);
       this.scheduleStep(inc.id, resolveMs);
     }
 
@@ -419,9 +411,7 @@ export class IncidentManager {
   }
 
   private matchingOfficers(inc: Incident) {
-    return this.game.officers
-      .filter((o) => o.status === 'busy')
-      .slice(0, Math.max(1, inc.assignedUnitIds.length));
+    return this.game.officers.filter((o) => o.status === 'busy').slice(0, Math.max(1, inc.assignedUnitIds.length));
   }
 
   private advanceOrFinish(incidentId: string) {
@@ -451,16 +441,18 @@ export class IncidentManager {
     if (!inc || inc.status === 'resolved' || inc.status === 'failed') return;
     this.resolveTimers.delete(incidentId);
 
-    const units = inc.assignedUnitIds
-      .map((id) => this.game.units.find((u) => u.id === id))
-      .filter(Boolean);
+    const units = inc.assignedUnitIds.map((id) => this.game.units.find((u) => u.id === id)).filter(Boolean);
     const preferredHits = units.filter((u) => u && inc.preferredUnits.includes(u!.type)).length;
     const powerSum = units.reduce((s, u) => s + (u?.power || 0), 0);
     const choice = inc.decisions.find((d) => d.id === inc.selectedDecision);
 
     const chance = resolveOdds({
-      preferredHits, powerSum, equipment: this.game.state.equipment, successBonus: choice?.successBonus ?? 0,
-      techs: this.game.state.techs, swatBonus: this.game.state.swatBonus,
+      preferredHits,
+      powerSum,
+      equipment: this.game.state.equipment,
+      successBonus: choice?.successBonus ?? 0,
+      techs: this.game.state.techs,
+      swatBonus: this.game.state.swatBonus,
       breachOrSwat: inc.selectedDecision === 'breach' || units.some((u) => u?.type === UnitType.SWAT),
       labWithInvestigations: !!this.game.state.techs.lab && units.some((u) => u?.type === UnitType.Investigations)
     });
@@ -522,12 +514,17 @@ export class IncidentManager {
     this.emit();
     const choice = inc.decisions.find((d) => d.id === inc.selectedDecision);
     this.onReport?.(
-      this.makeReport(inc, {
-        success: false,
-        money: 0,
-        rep: -Math.max(2, Math.floor(inc.severity * 1.5)),
-        officerLine: 'الوحدات ما لحقتش توصل'
-      }, true, choice?.label || 'بدون قرار')
+      this.makeReport(
+        inc,
+        {
+          success: false,
+          money: 0,
+          rep: -Math.max(2, Math.floor(inc.severity * 1.5)),
+          officerLine: 'الوحدات ما لحقتش توصل'
+        },
+        true,
+        choice?.label || 'بدون قرار'
+      )
     );
   }
 
@@ -535,7 +532,10 @@ export class IncidentManager {
    * Decision click: lock the call, send the best free unit, and hand the
    * scene to the camera. Rewards wait until settle() after the action beat.
    */
-  arm(incidentId: string, decisionId: DecisionId): {
+  arm(
+    incidentId: string,
+    decisionId: DecisionId
+  ): {
     ok: boolean;
     message: string;
     x: number;
@@ -547,10 +547,27 @@ export class IncidentManager {
     const inc = this.incidents.find((i) => i.id === incidentId);
     if (!inc) return { ok: false, message: 'بلاغ غير موجود', x: 0, z: 0, district: '', heat: 'quiet', caption: '' };
     if (inc.status === 'resolved' || inc.status === 'failed' || inc.status === 'resolving') {
-      return { ok: false, message: 'القرار اتنفّذ خلاص', x: inc.x, z: inc.z, district: inc.districtName, heat: 'quiet', caption: '' };
+      return {
+        ok: false,
+        message: 'القرار اتنفّذ خلاص',
+        x: inc.x,
+        z: inc.z,
+        district: inc.districtName,
+        heat: 'quiet',
+        caption: ''
+      };
     }
     const choice = inc.decisions.find((d) => d.id === decisionId);
-    if (!choice) return { ok: false, message: 'قرار غير صالح', x: inc.x, z: inc.z, district: inc.districtName, heat: 'quiet', caption: '' };
+    if (!choice)
+      return {
+        ok: false,
+        message: 'قرار غير صالح',
+        x: inc.x,
+        z: inc.z,
+        district: inc.districtName,
+        heat: 'quiet',
+        caption: ''
+      };
 
     inc.selectedDecision = decisionId;
     inc.preferredUnits = [...choice.preferredUnits];
@@ -575,9 +592,7 @@ export class IncidentManager {
 
     const heat = heatForDecision(decisionId);
     const caption =
-      heat === 'quiet'
-        ? `الوحدات وصلت ${inc.districtName} — تفاوض هادئ`
-        : `تبادل إطلاق نار في ${inc.districtName}`;
+      heat === 'quiet' ? `الوحدات وصلت ${inc.districtName} — تفاوض هادئ` : `تبادل إطلاق نار في ${inc.districtName}`;
     this.game.pushLog(`${choice.label} → ${inc.title} / ${inc.districtName}`);
     audio.click();
     if (heat === 'hot') audio.sirenSting();
@@ -603,9 +618,14 @@ export class IncidentManager {
     const powerSum = units.reduce((s, u) => s + u.power, 0);
     const choice = inc.decisions.find((d) => d.id === inc.selectedDecision);
     const chance = resolveOdds({
-      quick: true, unitCount: units.length,
-      preferredHits, powerSum, equipment: this.game.state.equipment, successBonus: choice?.successBonus ?? 0,
-      techs: this.game.state.techs, swatBonus: this.game.state.swatBonus,
+      quick: true,
+      unitCount: units.length,
+      preferredHits,
+      powerSum,
+      equipment: this.game.state.equipment,
+      successBonus: choice?.successBonus ?? 0,
+      techs: this.game.state.techs,
+      swatBonus: this.game.state.swatBonus,
       breachOrSwat: inc.selectedDecision === 'breach' || units.some((u) => u.type === UnitType.SWAT),
       labWithInvestigations: false
     });
@@ -644,12 +664,7 @@ export class IncidentManager {
     return 'في وضح النهار';
   }
 
-  private makeReport(
-    inc: Incident,
-    outcome: MissionOutcome,
-    timedOut: boolean,
-    decisionLabel: string
-  ): MissionReport {
+  private makeReport(inc: Incident, outcome: MissionOutcome, timedOut: boolean, decisionLabel: string): MissionReport {
     const where = inc.districtName || 'المدينة';
     const when = this.whenPhrase(this.game.getDayPhase());
     const id = inc.selectedDecision;
