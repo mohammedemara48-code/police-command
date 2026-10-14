@@ -259,3 +259,36 @@ describe('chase fairness', () => {
     expect(stepLock(0.5, 4, false, 0.1)).toBeCloseTo(0.45);
   });
 });
+
+import { stepCar, driftOf, kmh, hitDamage, pullOver } from '../src/game/logic/driving';
+describe('arcade driving', () => {
+  const s0 = { speed: 0, yaw: 0, velYaw: 0 };
+  const run = (s: typeof s0, i: Parameters<typeof stepCar>[1], n: number) => { for (let k = 0; k < n; k++) s = stepCar(s, i, 0.05); return s; };
+  it('accelerates toward top speed and brakes hard', () => {
+    const s = run(s0, { throttle: 1, steer: 0, handbrake: false, max: 18 }, 100);
+    expect(s.speed).toBeGreaterThan(16);
+    expect(s.speed).toBeLessThanOrEqual(18);
+    const b = run(s, { throttle: -1, steer: 0, handbrake: false, max: 18 }, 10);
+    expect(b.speed).toBeLessThan(s.speed - 9);
+  });
+  it('cannot turn when parked', () => {
+    expect(run(s0, { throttle: 0, steer: 1, handbrake: false, max: 18 }, 20).yaw).toBe(0);
+  });
+  it('handbrake makes the car drift (heading lags the nose)', () => {
+    const fast = { speed: 15, yaw: 0, velYaw: 0 };
+    const grip = run(fast, { throttle: 1, steer: 1, handbrake: false, max: 18 }, 8);
+    const drift = run(fast, { throttle: 1, steer: 1, handbrake: true, max: 18 }, 8);
+    expect(driftOf(drift)).toBeGreaterThan(driftOf(grip) * 2);
+  });
+  it('damage lowers top speed', () => {
+    const s = run(s0, { throttle: 1, steer: 0, handbrake: false, max: 18, damage: 100 }, 200);
+    expect(s.speed).toBeLessThan(11);
+  });
+  it('helpers', () => {
+    expect(kmh(10)).toBe(36);
+    expect(hitDamage(2)).toBe(0);
+    expect(hitDamage(13)).toBe(22);
+    expect(pullOver(true, 20)).toBeGreaterThan(0);
+    expect(pullOver(false, 20)).toBe(0);
+  });
+});

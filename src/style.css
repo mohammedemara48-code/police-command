@@ -850,3 +850,13 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after{
 .cc-chip small{display:block;font-size:10px;opacity:.65;margin-inline-start:4px}
 .cc-chip.on{border-color:#7ec8ff;background:rgba(126,200,255,.22);box-shadow:0 0 0 2px rgba(126,200,255,.35)}
 .creator .menu-col{margin-top:10px}
+
+/* Driving HUD: speedometer + car damage, siren button (car only) */
+#street-speedo{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));display:none;flex-direction:column;align-items:center;gap:2px;padding:6px 14px 8px;border-radius:14px;background:rgba(8,14,24,.62);border:1px solid rgba(126,200,255,.3);pointer-events:none;min-width:92px;font-variant-numeric:tabular-nums}
+html:not(.onfoot) #street-speedo:not(:empty){display:flex}
+#street-speedo b{font-size:28px;line-height:1}
+#street-speedo small{font-size:10px;opacity:.7}
+#street-speedo i{display:block;width:72px;height:4px;border-radius:2px;background:linear-gradient(90deg,#ff4d6d var(--d),#38d39f var(--d))}
+#street-speedo span{font-size:10px;opacity:.8}
+html.onfoot .street-actions .incar{display:none}
+.street-actions [data-act="siren"].held{background:linear-gradient(90deg,#ff3d5a,#3d7bff);color:#fff}
