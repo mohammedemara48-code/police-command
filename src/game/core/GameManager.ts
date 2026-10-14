@@ -148,7 +148,7 @@ export class GameManager {
       timeSec: 0,
       day: 1,
       cityHour: 8.0,
-      dayCycleSec: 600,
+      dayCycleSec: 1440,
       score: 0,
       incidentsResolved: 0,
       incidentsFailed: 0,

@@ -40,6 +40,7 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 ## Environment
 
 - Road asphalt `Asphalt025C`, sidewalk paving `PavingStones092`, kerbs/sea wall `Concrete034`, beach sand `Ground054` and breakwater rocks `Rock030` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).
-- Sky lighting: "Venice Sunset" HDRI from Poly Haven (https://polyhaven.com/a/venice_sunset), CC0 (`sky_1k.hdr`).
+- Sky lighting: "Kloofendal 48d Partly Cloudy (Pure Sky)" HDRI from Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky), CC0 (`sky_1k.hdr`).
+- Egyptian street set (apartment blocks, road signs, striped kerbs, pyramids, microbus, Cairo taxi, plates, rolling wheels): drawn in code for this project (`src/game/world/Egypt.ts`), MIT like the rest of the code.
 - Water normal map `waternormals.jpg` and the `Water` shader from the three.js examples (https://github.com/mrdoob/three.js), MIT.
 - Shop windows and their goods, street lamps, palms, trees, benches, bins, signs and the corniche railing are built in code.

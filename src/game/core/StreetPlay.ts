@@ -45,6 +45,7 @@ import {
   followPath,
   nearestNode
 } from '../world/City';
+import { egyptBlock, gantry, kerbStripeMat, pyramids, makeMicrobus, makeTaxi, rollWheels, type SignDest } from '../world/Egypt';
 import {
   surface,
   worldUV,
@@ -375,8 +376,7 @@ export class StreetPlay {
 
     const walkMat = surface('paving', 0xd8d2c8);
     walkMat.userData.uvSize = 2;
-    const kerbMat = surface('concrete', 0xcfcac2);
-    kerbMat.userData.uvSize = 1.2;
+    const kerbMat = kerbStripeMat();
     for (const side of [-1, 1]) {
       for (const [a, b] of segments(-110, 230, CROSS_Z, ROAD_W / 2)) {
         const sw = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.14, b - a), walkMat);
@@ -387,10 +387,16 @@ export class StreetPlay {
       }
     }
 
+    for (const [a, b] of segments(-110, 230, CROSS_Z, ROAD_W / 2 + 1))
+      for (const x of [-0.13, 0.13]) this.group.add(this.box(0.1, 0.012, b - a, PROP_MATS.paint, x, 0.086, (a + b) / 2));
     for (let z = -90; z < 230; z += 8) {
       if (nearCross(z, 7)) continue;
-      this.group.add(this.box(0.14, 0.012, 3, PROP_MATS.paint, 0, 0.086, z));
+      for (const x of [-2.3, 2.3]) this.group.add(this.box(0.13, 0.012, 3, PROP_MATS.paint, x, 0.086, z));
     }
+    this.buildGantries();
+    this.pyramids = new THREE.Group();
+    pyramids(this.pyramids, 25, -350);
+    this.group.add(this.pyramids);
 
     this.buildStreetRows();
     for (const place of STREET_PLACES) {
@@ -416,6 +422,7 @@ export class StreetPlay {
     for (const h of corniche(this.group)) {
       const halo = new THREE.Object3D() as THREE.PointLight;
       (halo as unknown as { intensity: number }).intensity = 2.5;
+      this.halos.push(halo);
       halo.position.copy(h);
       this.group.add(halo);
       fx.glow(halo, 0xffc56a, 1.8);
@@ -534,6 +541,14 @@ export class StreetPlay {
         const seed = Math.abs(Math.floor(z * 7 + side * 13));
         const h = near.id === 'downtown' ? 9 + (seed % 12) : near.id === 'suburb' ? 4 + (seed % 3) : 5 + (seed % 7);
         const w = 6 + (seed % 3);
+        if (h <= 10 || near.id !== 'downtown') {
+          // Egyptian apartment block: plastered or bare red brick, balconies, AC units, dishes
+          const eb = egyptBlock(w, h, 8.4, side, seed);
+          eb.position.set(side * (8.4 + w / 2), 0, z);
+          this.group.add(eb);
+          if (near.id !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
+          continue;
+        }
         const bg = new THREE.Group();
         bg.position.set(side * (8.4 + w / 2), 0, z);
         bg.add(this.box(w, h, 8.4, this.mat(0x8a94a0), 0, h / 2, 0));
@@ -544,9 +559,35 @@ export class StreetPlay {
           noShadow: true
         });
         this.group.add(bg);
-        if (near.id !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
+        this.addShop(side, z, shops[n++ % shops.length]);
       }
     }
+  }
+
+  private pyramids: THREE.Group | null = null;
+  /** Blue overhead direction signs (Arabic + English, distance to the next places in that direction). */
+  private buildGantries() {
+    const places: { ar: string; en: string; z: number }[] = [
+      { ar: 'الأهرامات', en: 'Pyramids', z: -900 },
+      { ar: 'الضاحية', en: 'Suburb', z: -72 },
+      { ar: 'وسط البلد', en: 'Downtown', z: 0 },
+      { ar: 'قسم الشرطة', en: 'Police Station', z: STATION.z },
+      { ar: 'الميناء', en: 'Port', z: 100 },
+      { ar: 'الكورنيش', en: 'Corniche', z: 190 }
+    ];
+    const km = (d: number) => Math.round(d / 10) / 10 + 0.3; // map scale: 100 m on the avenue reads as ~1 km
+    const put = (z: number, dir: number) => {
+      const ahead = places
+        .filter((p) => (p.z - z) * dir > 25)
+        .sort((a, b) => Math.abs(a.z - z) - Math.abs(b.z - z));
+      if (!ahead.length) return;
+      const dests: SignDest[] = ahead.slice(0, 2).map((p) => ({ ar: p.ar, en: p.en, km: km(Math.abs(p.z - z)) }));
+      const g = gantry(z, dir, dests);
+      g.userData.static = true;
+      this.group.add(g);
+    };
+    for (const z of [-55, 35, 125]) put(z, 1);
+    for (const z of [-25, 75, 175]) put(z, -1);
   }
 
   // ---- traffic stop (siren pull-over)
@@ -1054,6 +1095,7 @@ export class StreetPlay {
     // No per-lamp PointLight (dozens of them break/slow mobile GPUs): glow halo + warm light pool on the ground.
     const halo = new THREE.Object3D() as THREE.PointLight;
     (halo as unknown as { intensity: number }).intensity = 2.5;
+    this.halos.push(halo);
     halo.position.copy(hp);
     this.group.add(halo);
     fx.glow(halo, 0xffc56a, 1.8);
@@ -1136,7 +1178,7 @@ export class StreetPlay {
         this.msIdx >= 0
           ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.msTime))}ث</span>`
           : '';
-      const html = `<small>${isPatrol(this.level.id) ? '🚨' : `مهمة ${this.level.id}/${LEVELS.length}`} · ${this.level.title} ${timer}</small><div class="now">➤ ${this.msText || '...'}${has ? ` <em>${Math.round(dist)} م</em>` : ''}</div>`;
+      const html = `<small>${isPatrol(this.level.id) ? '🚨' : `مهمة ${this.level.id}/${LEVELS.length}`} · ${this.level.title} ${timer}</small><div class="now">➤ ${this.msText || '...'}</div>${has ? `<em>${dist >= 1000 ? `${(dist / 1000).toFixed(1)} كم` : `${Math.round(dist)} م`}</em>` : ''}`;
       if (html !== this.objHtml) {
         this.objEl.innerHTML = html;
         this.objHtml = html;
@@ -1607,10 +1649,34 @@ export class StreetPlay {
     });
   }
 
+  private hemi: THREE.HemisphereLight | null = null;
+  private amb: THREE.AmbientLight | null = null;
+  private sunDir = new THREE.Vector3(0.45, 0.75, -0.35).normalize();
+  /** Called by the city scene with the time of day: strong sun and crisp shadows by day, lamps and cool fill at night. */
+  setDaylight(day: number, sunPos: THREE.Vector3, sunColor: THREE.Color, haze: THREE.Color) {
+    this.sunDir.copy(sunPos).normalize();
+    if (this.hemi) {
+      this.hemi.intensity = 0.45 + (1 - day) * 0.9;
+      this.hemi.groundColor.set(day > 0.5 ? 0x8a7a62 : 0x40464e);
+    }
+    if (this.amb) this.amb.intensity = 0.12 + (1 - day) * 0.35;
+    if (this.key) {
+      this.key.color.copy(sunColor);
+      this.key.intensity = 0.35 + day * 2.1;
+    }
+    void haze;
+    // street lamps only glow once the light drops
+    const lampOn = THREE.MathUtils.smoothstep(1 - day, 0.25, 0.7);
+    for (const h of this.halos) (h as unknown as { intensity: number }).intensity = 2.5 * lampOn;
+    this.poolMat().opacity = lampOn;
+  }
+  private halos: THREE.Object3D[] = [];
+
   private buildLights() {
-    this.group.add(new THREE.HemisphereLight(0xcfe0ff, 0x56606c, 1.7));
-    this.group.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const key = new THREE.DirectionalLight(0xffe2c0, 1.6);
+    this.hemi = new THREE.HemisphereLight(0xcfe0ff, 0x8a7a62, 0.6);
+    this.amb = new THREE.AmbientLight(0xffffff, 0.15);
+    this.group.add(this.hemi, this.amb);
+    const key = new THREE.DirectionalLight(0xfff2dc, 2.4);
     key.castShadow = Q.shadows;
     key.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
     const sc = key.shadow.camera;
@@ -1868,13 +1934,21 @@ export class StreetPlay {
 
   private spawnTraffic() {
     const colors = [0x2a2e33, 0x4a4038, 0x1a3348, 0x33302c, 0x20242a];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 9; i++) {
+      const laneX = (i % 2 === 0 ? -1 : 1) * (i % 4 < 2 ? 1.15 : 3.3);
+      const kind = i % 3 === 1 ? makeMicrobus() : i % 3 === 2 && i % 2 === 0 ? makeTaxi() : null;
+      if (kind) {
+        kind.position.set(laneX, 0, -60 + i * 30);
+        kind.rotation.y = i % 2 === 0 ? 0 : Math.PI;
+        this.group.add(kind);
+        this.traffic.push({ mesh: kind, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
+        continue;
+      }
       const mesh = new THREE.Group();
       const c = this.mat(colors[i % colors.length], { metalness: 0.45, roughness: 0.35 });
       mesh.add(this.box(1.5, 0.4, 3.4, c, 0, 0.48, 0));
       mesh.add(this.box(1.3, 0.32, 1.5, this.mat(0x0e1824, { roughness: 0.15 }), 0, 0.85, -0.1));
-      const laneX = i % 2 === 0 ? -1.7 : 1.7;
-      mesh.position.set(laneX, 0, -60 + i * 38);
+      mesh.position.set(laneX, 0, -60 + i * 30);
       mesh.rotation.y = i % 2 === 0 ? 0 : Math.PI;
       const tints = [0xffffff, 0x4a7bd6, 0xbfc4cc, 0x3a3a3a, 0x3f9a5a, 0xf2f2f2, 0xd9b44a];
       models.dress(mesh, CARS[i % CARS.length]!, {
@@ -2533,9 +2607,11 @@ export class StreetPlay {
     if (this.panicT > 0) this.panicT -= dt;
     this.stepRain(dt);
     this.stepLights();
+    rollWheels(this.car, this.speed * dt);
+    if (this.pyramids) this.pyramids.position.z = this.camera.position.z;
     if (this.key) {
       const a = this.inCar ? this.car.position : this.player.position;
-      this.key.position.set(a.x + 18, 30, a.z - 14);
+      this.key.position.set(a.x + this.sunDir.x * 40, Math.max(8, this.sunDir.y * 40), a.z + this.sunDir.z * 40);
       this.key.target.position.set(a.x, 0, a.z);
     }
     const ph = Math.floor(performance.now() / 420) % 2 === 0;
@@ -2820,7 +2896,10 @@ export class StreetPlay {
         t.bumpT -= dt;
         stop = true;
       }
-      if (!stop) t.mesh.position.x += t.speed * dt;
+      if (!stop) {
+        t.mesh.position.x += t.speed * dt;
+        rollWheels(t.mesh, Math.abs(t.speed) * dt);
+      }
       if (t.mesh.position.x > 122) t.mesh.position.x = -122;
       if (t.mesh.position.x < -122) t.mesh.position.x = 122;
     }
@@ -2861,7 +2940,10 @@ export class StreetPlay {
         stop = true;
         t.mesh.rotation.z = Math.sin(t.bumpT * 20) * 0.03 * t.bumpT;
       }
-      if (!stop) t.mesh.position.z += t.speed * dt;
+      if (!stop) {
+        t.mesh.position.z += t.speed * dt;
+        rollWheels(t.mesh, Math.abs(t.speed) * dt);
+      }
       if (t.mesh.position.z > 250) t.mesh.position.z = -110;
       if (t.mesh.position.z < -110) t.mesh.position.z = 250;
     }

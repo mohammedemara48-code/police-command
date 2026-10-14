@@ -117,6 +117,7 @@ export class CityScene {
     this.controls.target.set(0, 2, 0);
 
     this.scene.add(this.root);
+    this.scene.add(this.buildSkyDome());
     this.scene.add(this.markerRoot);
     this.scene.add(this.carRoot);
 
@@ -941,9 +942,31 @@ export class CityScene {
     }
   }
 
+  private sky!: THREE.Mesh;
+  private skyU = { top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() } };
+  /** Gradient sky dome that follows the camera (cheap on every quality level; the HDRI only lights the scene). */
+  private buildSkyDome() {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: this.skyU,
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+      vertexShader: `varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader: `uniform vec3 top; uniform vec3 horizon; varying vec3 vP;
+        void main(){ float t = pow(clamp(vP.y, 0.0, 1.0), 0.55); gl_FragColor = vec4(mix(horizon, top, t), 1.0);
+        #include <colorspace_fragment>
+        }`
+    });
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(360, 24, 12), mat);
+    this.sky.renderOrder = -10;
+    this.sky.frustumCulled = false;
+    this.sky.onBeforeRender = (_r, _s, cam) => this.sky.position.copy(cam.position);
+    return this.sky;
+  }
+
   /** Drive cinematic day→dusk→night→dawn from in-game city hour (0–24). */
   setTimeOfDay(hour: number) {
-    const h = this.street?.active ? 18.9 : hour;
+    const h = hour;
     this.cityHour = ((h % 24) + 24) % 24;
     this.applyTimeOfDay();
   }
@@ -973,9 +996,9 @@ export class CityScene {
     }> = [
       { h: 0, sky: 0x070e1c, fog: 0x0a1220, sun: 0xa8c0e8, hemiSky: 0x2a3a58, hemiGround: 0x0a1018 },
       { h: 5, sky: 0x2a3a68, fog: 0x3a4a70, sun: 0xffb070, hemiSky: 0x6a7aaa, hemiGround: 0x2a2830 },
-      { h: 6.5, sky: 0x7eb0e0, fog: 0x9ec4e8, sun: 0xffe0b0, hemiSky: 0xb0d0f0, hemiGround: 0x4a5a48 },
-      { h: 10, sky: 0x6aa8e0, fog: 0x8ebce8, sun: 0xfff2d8, hemiSky: 0xc0dcff, hemiGround: 0x4a5a42 },
-      { h: 13, sky: 0x5a9cd8, fog: 0x7eb0e0, sun: 0xfff8e8, hemiSky: 0xc8e0ff, hemiGround: 0x506048 },
+      { h: 6.5, sky: 0x6aa6e0, fog: 0xc8d6e4, sun: 0xffe0b0, hemiSky: 0xb0d0f0, hemiGround: 0x4a5a48 },
+      { h: 10, sky: 0x3d8ee6, fog: 0xc2d8ea, sun: 0xfff2d8, hemiSky: 0xc0dcff, hemiGround: 0x4a5a42 },
+      { h: 13, sky: 0x3a8ae4, fog: 0xbcd4e8, sun: 0xfff8e8, hemiSky: 0xc8e0ff, hemiGround: 0x506048 },
       { h: 17, sky: 0xc87850, fog: 0xb07060, sun: 0xff9050, hemiSky: 0xe09070, hemiGround: 0x3a3030 },
       { h: 18.5, sky: 0x4a3060, fog: 0x3a2848, sun: 0xff7040, hemiSky: 0x705080, hemiGround: 0x1a1820 },
       { h: 20, sky: 0x0c1830, fog: 0x0a1528, sun: 0xb0c8f0, hemiSky: 0x3a4a70, hemiGround: 0x0c1018 },
@@ -1005,9 +1028,11 @@ export class CityScene {
     const sample = this.sampleSky(hour);
 
     (this.scene.background as THREE.Color).copy(sample.sky);
+    this.skyU.top.value.copy(sample.sky);
+    this.skyU.horizon.value.copy(sample.fog).lerp(new THREE.Color(0xffffff), 0.15 * day);
     if (this.scene.fog && this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.color.copy(sample.fog);
-      this.scene.fog.density = 0.003 + this.nightFactor * 0.003;
+      this.scene.fog.density = 0.0022 + this.nightFactor * 0.0038;
     }
 
     this.hemi.color.copy(sample.hemiSky);
@@ -1019,10 +1044,16 @@ export class CityScene {
     const azim = ((hour - 6) / 24) * Math.PI * 2;
     const y = Math.max(6, 12 + elev * 62);
     this.sun.position.set(Math.cos(azim) * 55, y, Math.sin(azim) * 40);
-    this.sun.castShadow = elev > -0.15;
+    this.sun.castShadow = elev > -0.15 && !this.street?.active;
+    if (this.street?.active) {
+      // the street has its own sun that follows the player; keep only a soft share of the city lights
+      this.sun.intensity *= 0.15;
+      this.hemi.intensity *= 0.35;
+    }
+    this.street?.setDaylight(day, this.sun.position, sample.sun, sample.fog);
 
     this.ambient.color.set(day > 0.4 ? 0xd8e4f0 : 0x5a6e90);
-    this.ambient.intensity = 0.6 + day * 0.35 + this.nightFactor * 0.35;
+    this.ambient.intensity = (0.6 + day * 0.35 + this.nightFactor * 0.35) * (this.street?.active ? 0.3 : 1);
 
     this.renderer.toneMappingExposure = 1.15 + day * 0.15 + this.nightFactor * 0.3;
 
@@ -1247,7 +1278,7 @@ export class CityScene {
       if (!this.street?.active) this.placeLampLights();
     }
     if (this.street?.active) {
-      this.renderer.toneMappingExposure = 1.45;
+      this.renderer.toneMappingExposure = 1.0 + this.nightFactor * 0.45;
       this.street.update(dt);
       const c = this.bloom();
       if (c) c.render(dt);
