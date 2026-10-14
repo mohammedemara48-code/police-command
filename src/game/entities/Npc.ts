@@ -74,7 +74,7 @@ function iconTex(txt: string, bg: string) {
 
 export class Squad {
   hp = 100;
-  armor = 50;
+  armor = ARMOR_MAX;
   ammo = 12;
   mag = 12;
   /** spare rounds in the pouch (ammo pickups top this up) */
@@ -132,7 +132,7 @@ export class Squad {
     this.ammo = this.mag;
     this.reserve = AMMO_PACK;
     this.hp = 100;
-    this.armor = Math.min(50, ARMOR_MAX);
+    this.armor = ARMOR_MAX;
     this.reloadT = 0;
     this.failed = null;
   }
