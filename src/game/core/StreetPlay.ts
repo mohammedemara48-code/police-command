@@ -27,6 +27,7 @@ import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, S
 import { newCarAi, stepCarAi, carCmd, ramLanded, type CarSense, type CarCmd } from '../logic/suspectCar';
 import { character, onCharacter, setCharacter } from '../entities/Character';
 import { STATION, hubAllowed } from '../logic/station';
+import { ARMOR_MAX } from '../logic/combat';
 import { resolve as collide, type OBB } from '../logic/collide';
 import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from '../logic/missions';
 import { openCreator } from '../ui/CharacterCreator';
@@ -246,6 +247,11 @@ export class StreetPlay {
   private aimRay = new THREE.Raycaster();
   private aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private aimPt = new THREE.Vector3();
+  /** Mobile: second finger / drag on the 3D canvas aims without using the shoot button. */
+  private aimDragId: number | null = null;
+  private aimDragging = false;
+  /** Armory locker: free vest once per hub visit. */
+  private vestTaken = false;
   private distAcc = 0;
   private driver: THREE.Group | null = null;
   level: LevelDef = levelById(progress.current);
@@ -335,19 +341,60 @@ export class StreetPlay {
       (e.target as HTMLElement).id === 'street-mini'
     )
       return;
-    const r = (e.target as HTMLElement).getBoundingClientRect();
+    this.aimAtClient(e.clientX, e.clientY, e.target as HTMLElement);
+    this.firing = true;
+  };
+  private boundMouseUp = () => {
+    if (!this.hold.run) this.firing = false;
+  };
+
+  /** Aim yaw at a screen point over the ground plane (desktop click + mobile drag). */
+  private aimAtClient(clientX: number, clientY: number, target: HTMLElement) {
+    const r = target.getBoundingClientRect();
     this.aimRay.setFromCamera(
-      new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
+      new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1),
       this.camera
     );
     if (this.aimRay.ray.intersectPlane(this.aimPlane, this.aimPt)) {
       this.yaw = Math.atan2(this.aimPt.x - this.player.position.x, this.aimPt.z - this.player.position.z);
       this.player.rotation.y = this.yaw;
     }
-    this.firing = true;
+  }
+
+  private isHudChrome(el: EventTarget | null) {
+    const h = el as HTMLElement | null;
+    if (!h || !h.closest) return false;
+    return !!h.closest(
+      '#street-ui, #street-hub, #street-result, #street-map, [data-k], [data-act], .street-stick, #street-mini'
+    );
+  }
+
+  /** Touch / pen drag on the canvas (not HUD) to aim while on foot. */
+  private boundAimDown = (e: PointerEvent) => {
+    if (this.inCar || this.resultEl || this.hubEl || e.pointerType === 'mouse') return;
+    if (this.isHudChrome(e.target)) return;
+    const t = e.target as HTMLElement;
+    if (t.tagName !== 'CANVAS' || t.id === 'street-mini') return;
+    e.preventDefault();
+    this.aimDragId = e.pointerId;
+    this.aimDragging = true;
+    try {
+      t.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    this.aimAtClient(e.clientX, e.clientY, t);
   };
-  private boundMouseUp = () => {
-    if (!this.hold.run) this.firing = false;
+  private boundAimMove = (e: PointerEvent) => {
+    if (!this.aimDragging || e.pointerId !== this.aimDragId || this.inCar) return;
+    const t = e.target as HTMLElement;
+    if (t.tagName !== 'CANVAS') return;
+    this.aimAtClient(e.clientX, e.clientY, t);
+  };
+  private boundAimUp = (e: PointerEvent) => {
+    if (e.pointerId !== this.aimDragId) return;
+    this.aimDragId = null;
+    this.aimDragging = false;
   };
 
   constructor(
@@ -859,6 +906,7 @@ export class StreetPlay {
 
   /** Station hub: missions board, garage, armory, locker room. */
   private openHub(tab: 'main' | 'missions' | 'armory' = 'main') {
+    if (!this.hubEl && tab === 'main') this.vestTaken = false;
     if (this.hubEl) this.hubEl.remove();
     const el = document.createElement('div');
     el.id = 'street-hub';
@@ -878,7 +926,9 @@ export class StreetPlay {
                 (k) =>
                   `<button type="button" data-wp="${k}" class="${c.weapon === k ? 'on' : ''}">${WEAPONS[k].name} <small>${WEAPONS[k].desc}</small></button>`
               )
-              .join('')}</div>`
+              .join(
+                ''
+              )}<button type="button" data-vest="1" ${this.vestTaken ? 'disabled' : ''}>🛡 سترة واقية <small>${this.vestTaken ? 'أخذت واحدة هذه الزيارة' : 'درع كامل — مجاناً مرة كل زيارة'}</small></button><button type="button" data-ammo="1">📦 تعبئة ذخيرة <small>مخزن + احتياطي</small></button></div>`
           : `<h2>🏢 قسم الشرطة</h2><p class="hub-sub">رتبتك: ${rank().name} · الدورية ${100 - this.damage}%</p>
           <div class="hub-grid">
             <button type="button" data-hub="missions">📋<b>لوحة المهام</b><small>اختار مهمتك</small></button>
@@ -915,6 +965,24 @@ export class StreetPlay {
         setCharacter({ ...character(), weapon: b.dataset.wp as WeaponId });
         this.squad.resetPlayer();
         audio.sample('confirm', 0.7);
+        this.openHub('armory');
+      })
+    );
+    el.querySelectorAll<HTMLButtonElement>('[data-vest]').forEach((b) =>
+      b.addEventListener('click', () => {
+        if (this.vestTaken) return;
+        this.squad.equipVest();
+        this.vestTaken = true;
+        audio.sample('confirm', 0.7);
+        this.setStatus('🛡 لبست السترة الواقية — الدرع ممتلئ.');
+        this.openHub('armory');
+      })
+    );
+    el.querySelectorAll<HTMLButtonElement>('[data-ammo]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.squad.restockAmmo();
+        audio.sample('confirm', 0.7);
+        this.setStatus('📦 الذخيرة اتملت من المخزن.');
         this.openHub('armory');
       })
     );
@@ -1504,6 +1572,25 @@ export class StreetPlay {
     if (this.radioT <= 0) this.showRadio();
   }
 
+  /**
+   * Slight yaw pull toward the nearest hostile in a narrow cone while firing,
+   * only when the player is not manually dragging aim on the canvas.
+   */
+  private softAimAssist(dt: number) {
+    if (this.aimDragging || !this.firing) return;
+    const t = this.squad.target(this.player.position, this.yaw, 22, true);
+    if (!t) return;
+    const dx = t.g.position.x - this.player.position.x;
+    const dz = t.g.position.z - this.player.position.z;
+    const want = Math.atan2(dx, dz);
+    const err = wrapAngle(want - this.yaw);
+    // only a small cone — outside it the player is aiming elsewhere on purpose
+    if (Math.abs(err) > 0.55) return;
+    const k = Math.min(1, dt * 4.5);
+    this.yaw = wrapAngle(this.yaw + err * k * 0.55);
+    this.player.rotation.y = this.yaw;
+  }
+
   // ---- HUD: weapon, health, threat, rank (8 Hz, string-compared)
   private renderHud() {
     const q = this.squad;
@@ -1512,8 +1599,10 @@ export class StreetPlay {
       const v = Math.max(0, Math.min(100, Math.round(pct)));
       return `<div class="ring ${cls}${v <= 25 ? ' low' : ''}" role="meter" aria-label="${label}" aria-valuenow="${v}" aria-valuemin="0" aria-valuemax="100"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="15.5" pathLength="100"/><circle class="fg" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="${v} 100"/></svg><span>${icon}</span></div>`;
     };
-    const html = `<div class="hud-row">${ring('hp', q.hp, '❤', `الصحة ${Math.round(q.hp)}%`)}${ring('ar', q.armor * 2, '🛡', `الدرع ${Math.round(q.armor * 2)}%`)}
-      <div class="gun">🔫 <b>${q.reloading ? '…' : `${q.ammo}/${q.mag}`}</b></div></div>
+    const arPct = (q.armor / ARMOR_MAX) * 100;
+    const ammoLabel = q.reloading ? '…' : q.reserve > 0 ? `${q.ammo}/${q.mag}+${q.reserve}` : `${q.ammo}/${q.mag}`;
+    const html = `<div class="hud-row">${ring('hp', q.hp, '❤', `الصحة ${Math.round(q.hp)}%`)}${ring('ar', arPct, '🛡', `الدرع ${Math.round(arPct)}%`)}
+      <div class="gun">🔫 <b>${ammoLabel}</b></div></div>
       ${stars ? `<div class="threat">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</div>` : ''}`;
     if (this.hudEl && html !== this.hudHtml) {
       this.hudEl.innerHTML = html;
@@ -2100,6 +2189,12 @@ export class StreetPlay {
     window.removeEventListener('keydown', this.boundKeyDown);
     window.removeEventListener('mousedown', this.boundMouse);
     window.removeEventListener('mouseup', this.boundMouseUp);
+    window.removeEventListener('pointerdown', this.boundAimDown);
+    window.removeEventListener('pointermove', this.boundAimMove);
+    window.removeEventListener('pointerup', this.boundAimUp);
+    window.removeEventListener('pointercancel', this.boundAimUp);
+    this.aimDragging = false;
+    this.aimDragId = null;
     this.endGang();
     window.removeEventListener('keyup', this.boundKeyUp);
     this.keys.clear();
@@ -2120,7 +2215,13 @@ export class StreetPlay {
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('mousedown', this.boundMouse);
     window.addEventListener('mouseup', this.boundMouseUp);
+    window.addEventListener('pointerdown', this.boundAimDown, { passive: false });
+    window.addEventListener('pointermove', this.boundAimMove);
+    window.addEventListener('pointerup', this.boundAimUp);
+    window.addEventListener('pointercancel', this.boundAimUp);
     window.addEventListener('keyup', this.boundKeyUp);
+    // courtyard ammo crate by the station parking
+    this.squad.seedStationAmmo(STATION.parking.x + 2.4, STATION.parking.z - 1.2);
     this.snapCamera(1);
   }
 
@@ -2647,6 +2748,7 @@ export class StreetPlay {
     this.stepTraffic(dt);
     this.stepChase(dt);
     this.stepTutorial(dt);
+    if (!this.inCar && !this.resultEl && !this.hubEl) this.softAimAssist(dt);
     if (this.firing && !this.inCar && !this.resultEl) this.squad.shoot(this.player.position, this.yaw);
     this.squad.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
     this.tickMission(dt);

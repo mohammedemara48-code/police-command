@@ -26,8 +26,11 @@ Tone: a game about arresting people. Non-gory. Suspects drop their weapon and fa
 | `flee` | 50%: hands up, else runs | stops and surrenders after 1 hit | caught within 2.5 m → surrenders; escapes beyond 90 m → mission failed |
 | `fight` | ignores | 3 HP (boss 8). At ≤2 HP the boss surrenders | uses cover (see below). Hit chance 30% when peeking (12% if you are in the car), about half that while sidestepping, none while running between crates |
 
+**Hit model** (`src/game/logic/combat.ts`): shots resolve as **torso** or **limb** only (roughly 70% / 30%). Limbs take ~55% damage. There is **no headshot / insta-kill** zone. The officer's vest absorbs most of each hit until empty; a full vest is 100 on the HUD ring. Ground **ammo packs** near shootouts (and one by the precinct parking) refill the magazine and add reserve. The armory locker can put on a full vest once per visit and restock ammo.
+
 **Gunmen and cover** (`src/game/logic/cover.ts`): `advance → move → hide ↔ peek`, plus `flank`.
 - A crate only protects a gunman when it is between him and you. Work round the side of it and your shots land.
+- The officer can use the same crates: when you crouch behind a crate relative to a shooter, most of their round is blocked.
 - He hides 1.6–2.4 s, then peeks and shoots for 1.3 s. After two peeks he may run to another free crate (never one you're standing next to) or sidestep round you (flank). If you get round his crate, he runs to its other side or to another one.
 - Each shootout gets two spare crates at the sides of the group. Running and flanking gunmen are out in the open.
 - How often they move or flank grows through the story (mission 4 → 12) and with your rank on patrol. Hostage takers never leave their crate.
@@ -42,7 +45,8 @@ Hostage: stands next to the captors. When all captors are down or cuffed, the ho
 ## 4. Feedback
 - **Threat meter** (★ to ★★★★★): rises with the number of armed hostiles and shots fired, falls when the scene is safe.
 - **Reticle:** sits on the locked target. White means out of range, red means in range, a green ✓ means it can be cuffed.
-- **Gun:** a pistol is visible in the officer's hand. Firing adds camera recoil, a muzzle flash, a tracer and the gunshot sound. Hit targets flinch and flash red.
+- **Aim:** on desktop, click the 3D view to aim and fire. On a phone, drag a second finger on the canvas (not the HUD) to aim while holding **اضرب**; a light auto-aim assist gently pulls toward a nearby hostile in a small cone when you are not dragging.
+- **Gun:** a pistol is visible in the officer's hand. Firing adds camera recoil, a muzzle flash, a tracer and the gunshot sound. Hit targets flinch and flash red. Body-zone hits (torso / limbs) set the damage; there are no headshot kills.
 - **Pedestrians:** run away from gunfire (30 m radius, 6 s) and step around each other and the player.
 - **Traffic:** cars stop at red lights at the three avenue intersections. Cross traffic runs on the opposite phase.
 

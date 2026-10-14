@@ -21,6 +21,19 @@ import {
   type Gunman,
   type FootSense
 } from '../logic/cover';
+import {
+  rollHitZone,
+  zoneDamage,
+  applyArmor,
+  coverDamage,
+  officerCovered,
+  refillArmor,
+  takeAmmoPickup,
+  reloadFromReserve,
+  nearPickup,
+  ARMOR_MAX,
+  AMMO_PACK
+} from '../logic/combat';
 
 export type SState = 'idle' | 'flee' | 'fight' | 'hands' | 'cuffed' | 'down' | 'hostage' | 'free';
 export interface Suspect {
@@ -64,6 +77,8 @@ export class Squad {
   armor = 50;
   ammo = 12;
   mag = 12;
+  /** spare rounds in the pouch (ammo pickups top this up) */
+  reserve = AMMO_PACK;
   dmg = 1;
   list: Suspect[] = [];
   hostage: Suspect | null = null;
@@ -77,7 +92,15 @@ export class Squad {
   skill = 0;
   private crates: THREE.Object3D[] = [];
   private covers: Cover[] = [];
+  private pickups: { x: number; z: number; mesh: THREE.Object3D }[] = [];
   private crateGeo = new THREE.BoxGeometry(1.7, 1.15, 0.8);
+  private ammoGeo = new THREE.BoxGeometry(0.45, 0.28, 0.32);
+  private ammoMat = new THREE.MeshStandardMaterial({
+    color: 0x2d6a3e,
+    emissive: 0x1a5c2a,
+    emissiveIntensity: 0.45,
+    roughness: 0.55
+  });
   private sense: FootSense = { sx: 0, sz: 0, px: 0, pz: 0, skill: 0 };
   private next = { x: 0, z: 0 };
   private tracers: { line: THREE.Line; t: number }[] = [];
@@ -107,10 +130,23 @@ export class Squad {
     this.dmg = w.dmg;
     this.fireCool = w.cool;
     this.ammo = this.mag;
+    this.reserve = AMMO_PACK;
     this.hp = 100;
-    this.armor = 50;
+    this.armor = Math.min(50, ARMOR_MAX);
     this.reloadT = 0;
     this.failed = null;
+  }
+
+  /** Armory locker: put on a full vest. */
+  equipVest() {
+    this.armor = refillArmor(this.armor);
+  }
+
+  /** Armory / locker: fill mag + a spare pack. */
+  restockAmmo() {
+    this.ammo = this.mag;
+    this.reserve = Math.max(this.reserve, AMMO_PACK * 2);
+    this.reloadT = 0;
   }
 
   private make(spec: { b: Behaviour; boss?: boolean }, x: number, z: number, hostage = false, anchored = false): Suspect {
@@ -192,6 +228,40 @@ export class Squad {
       this.hostage.icon.material.map = this.icons.hostage;
       this.hostage.icon.visible = true;
     }
+    if (opts.cover) this.seedAmmoNearScene(x, z, dir);
+  }
+
+  /** A couple of ground ammo packs near a shootout / gang / hostage scene. */
+  private seedAmmoNearScene(x: number, z: number, dir: number) {
+    const spots = [
+      { x: x + 3.2, z: z + dir * 2.4 },
+      { x: x - 3.5, z: z + dir * 1.2 },
+      { x: x + 0.5, z: z - dir * 3.5 }
+    ];
+    for (const s of spots) {
+      if (onFoot(s.x, s.z)) this.addAmmoPickup(s.x, s.z);
+    }
+  }
+
+  /** Precinct courtyard pack (called from street mode near the station). */
+  seedStationAmmo(x: number, z: number) {
+    if (this.pickups.some((p) => Math.hypot(p.x - x, p.z - z) < 4)) return;
+    this.addAmmoPickup(x, z);
+  }
+
+  private addAmmoPickup(x: number, z: number) {
+    const mesh = new THREE.Mesh(this.ammoGeo, this.ammoMat);
+    mesh.position.set(x, 0.16, z);
+    mesh.rotation.y = 0.4;
+    // small marker pole so it's readable at a glance
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 0.55, 6),
+      new THREE.MeshStandardMaterial({ color: 0xe8c84a, emissive: 0x886600, emissiveIntensity: 0.35 })
+    );
+    pole.position.set(0, 0.45, 0);
+    mesh.add(pole);
+    this.group.add(mesh);
+    this.pickups.push({ x, z, mesh });
   }
 
   /** a single suspect (e.g. the driver after a chase) */
@@ -206,9 +276,11 @@ export class Squad {
     for (const s of this.list) s.g.removeFromParent();
     this.hostage?.g.removeFromParent();
     for (const c of this.crates) c.removeFromParent();
+    for (const p of this.pickups) p.mesh.removeFromParent();
     this.list = [];
     this.crates = [];
     this.covers = [];
+    this.pickups = [];
     this.hostage = null;
     this.threat = 0;
   }
@@ -291,7 +363,8 @@ export class Squad {
       this.failed = 'ضربت مشتبه به مستسلم — استخدام مفرط للقوة.';
       return;
     }
-    t.hp -= this.dmg;
+    // body-zone hit (torso / limbs only — no headshot insta-kill)
+    t.hp -= zoneDamage(this.dmg, rollHitZone());
     t.flash = 0.15;
     t.flinch = 0.25;
     addStat('hits');
@@ -380,8 +453,18 @@ export class Squad {
     this.cool = Math.max(0, this.cool - dt);
     if (this.reloadT > 0) {
       this.reloadT -= dt;
-      if (this.reloadT <= 0) this.ammo = this.mag;
+      if (this.reloadT <= 0) {
+        const r = reloadFromReserve(this.ammo, this.mag, this.reserve);
+        if (r) {
+          this.ammo = r.ammo;
+          this.reserve = r.reserve;
+        } else {
+          // no reserve left: same free mag chamber as before (pickups are a bonus, not a soft-lock)
+          this.ammo = this.mag;
+        }
+      }
     }
+    this.collectPickups(player);
     this.flashLight.intensity = Math.max(0, this.flashLight.intensity - dt * 70);
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
@@ -496,7 +579,7 @@ export class Squad {
             );
             audio.sample('gunshot', 0.35, 1.1);
             this.onGunfire?.(p.x, p.z);
-            if (hit) this.damage(inCar ? 5 : 9);
+            if (hit) this.damage(inCar ? 5 : 9, p.x, p.z, player);
           }
           break;
         }
@@ -524,11 +607,30 @@ export class Squad {
     if (this.hp <= 0 && !this.failed) this.failed = 'الضابط اتصاب.';
   }
 
-  private damage(n: number) {
-    const a = Math.min(this.armor, n * 0.7);
-    this.armor -= a;
-    this.hp = Math.max(0, this.hp - (n - a));
+  private damage(n: number, fromX?: number, fromZ?: number, player?: THREE.Vector3) {
+    let incoming = n;
+    if (player && fromX !== undefined && fromZ !== undefined) {
+      const covered = officerCovered(this.covers, player.x, player.z, fromX, fromZ);
+      incoming = coverDamage(incoming, covered);
+    }
+    const r = applyArmor(incoming, this.armor);
+    this.armor = r.armor;
+    this.hp = Math.max(0, this.hp - r.hp);
     document.body.classList.add('hurt');
     this.hurtT = 0.25;
+  }
+
+  private collectPickups(player: THREE.Vector3) {
+    for (let i = this.pickups.length - 1; i >= 0; i--) {
+      const p = this.pickups[i]!;
+      if (!nearPickup(player.x, player.z, p.x, p.z)) continue;
+      const got = takeAmmoPickup(this.ammo, this.mag, this.reserve);
+      if (!got) continue;
+      this.ammo = got.ammo;
+      this.reserve = got.reserve;
+      p.mesh.removeFromParent();
+      this.pickups.splice(i, 1);
+      audio.sample('confirm', 0.55);
+    }
   }
 }
