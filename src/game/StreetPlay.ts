@@ -8,7 +8,36 @@ import { resolve as collide, type OBB } from './logic/collide';
 import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from './logic/missions';
 import { openCreator } from './CharacterCreator';
 import { modelFor, recolorFor, WEAPONS, type WeaponId } from './logic/character';
-import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z, findPath, farNode, followPath } from './City';
+import {
+  buildCity,
+  onRoad,
+  onFoot,
+  nearCross,
+  drawCityMap,
+  CROSS_Z,
+  ROAD_W,
+  districtAt,
+  findPath,
+  farNode,
+  followPath
+} from './City';
+import {
+  surface,
+  worldUV,
+  segments,
+  Batch,
+  PROP_MATS,
+  lamp,
+  bin,
+  bench,
+  roadSign,
+  palm,
+  tree,
+  buildSea,
+  corniche,
+  CORNICHE,
+  type Sea
+} from './Environment';
 import { newCall, type Kind } from './Dispatch';
 import { Squad } from './Npc';
 import { addStat, checkAch } from './Achievements';
@@ -279,37 +308,31 @@ export class StreetPlay {
   }
 
   private buildWorld() {
-    const roadMat = this.mat(0x3b4048, { roughness: 0.82, metalness: 0.05 });
+    // main avenue: PBR asphalt, paved sidewalks broken at the cross streets, concrete kerbs and painted lines
+    const roadMat = surface('asphalt', Q.hdri ? 0x9a9a9a : 0xb8b8b8);
+    roadMat.userData.uvSize = 5;
     const road = new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.08, 340), roadMat);
     road.position.set(0, 0.04, 60);
     road.receiveShadow = true;
     this.group.add(road);
 
-    const wet = new THREE.Mesh(
-      new THREE.PlaneGeometry(8.4, 330),
-      new THREE.MeshStandardMaterial({
-        color: 0x6a8aa8,
-        roughness: 0.15,
-        metalness: 0.2,
-        transparent: true,
-        opacity: 0.12
-      })
-    );
-    wet.rotation.x = -Math.PI / 2;
-    wet.position.set(0, 0.09, 60);
-    this.group.add(wet);
-
-    const walkMat = this.mat(0x9a9ea4, { roughness: 0.8, metalness: 0.02 });
+    const walkMat = surface('paving', 0xd8d2c8);
+    walkMat.userData.uvSize = 2;
+    const kerbMat = surface('concrete', 0xcfcac2);
+    kerbMat.userData.uvSize = 1.2;
     for (const side of [-1, 1]) {
-      const sw = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.14, 340), walkMat);
-      sw.position.set(side * 6.4, 0.07, 60);
-      sw.receiveShadow = true;
-      this.group.add(sw);
+      for (const [a, b] of segments(-110, 230, CROSS_Z, ROAD_W / 2)) {
+        const sw = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.14, b - a), walkMat);
+        sw.position.set(side * 6.4, 0.07, (a + b) / 2);
+        this.group.add(sw);
+        this.group.add(this.box(0.22, 0.2, b - a, kerbMat, side * 4.62, 0.1, (a + b) / 2));
+        this.group.add(this.box(0.12, 0.012, b - a - 2, PROP_MATS.paint, side * 4.15, 0.086, (a + b) / 2));
+      }
     }
 
-    const line = this.mat(0xf0d060, { emissive: 0x886600, emissiveIntensity: 0.55, roughness: 0.4 });
     for (let z = -90; z < 230; z += 8) {
-      this.group.add(this.box(0.16, 0.02, 3.2, line, 0, 0.1, z));
+      if (nearCross(z, 7)) continue;
+      this.group.add(this.box(0.14, 0.012, 3, PROP_MATS.paint, 0, 0.086, z));
     }
 
     this.buildStreetRows();
@@ -317,11 +340,29 @@ export class StreetPlay {
       this.buildBlock(place);
       this.addCrosswalk(place.z + 12);
     }
+    const props = new Batch();
     for (let z = -90; z < 230; z += 20) {
-      this.addLamp(-5.2, z);
-      this.addLamp(5.2, z + 10);
+      this.addLamp(-5.0, z, props, 1);
+      this.addLamp(5.0, z + 10, props, -1);
     }
-    for (let z = -80; z < 220; z += 40) this.addProps(z);
+    for (let z = -80; z < 220; z += 40) this.addProps(z, props);
+    for (let z = -100; z < 232; z += 10) {
+      if (nearCross(z, 7) || Math.abs(z - STATION.z) < 8) continue;
+      for (const side of [-1, 1]) {
+        const zz = z + (side > 0 ? 5 : 0);
+        if (districtAt(zz) === 'corniche') palm(props, side * 5.1, zz + 2.5);
+        else if ((Math.floor(zz / 10) & 1) === 0) tree(props, side * 5.1, zz);
+      }
+    }
+    props.flush(this.group, Q.shadows);
+    this.sea = buildSea(this.group, new THREE.Vector3(-0.4, 0.35, 1));
+    for (const h of corniche(this.group)) {
+      const halo = new THREE.Object3D() as THREE.PointLight;
+      (halo as unknown as { intensity: number }).intensity = 2.5;
+      halo.position.copy(h);
+      this.group.add(halo);
+      fx.glow(halo, 0xffc56a, 1.8);
+    }
 
     this.buildLights();
     this.buildBeacon();
@@ -358,6 +399,7 @@ export class StreetPlay {
     this.buildGun();
     this.buildTrafficLights();
     this.spawnPeople();
+    this.spawnStrollers();
     this.spawnTraffic();
     this.buildRain();
   }
@@ -395,6 +437,7 @@ export class StreetPlay {
       const merged = mergeGeometries(geos, false);
       geos.forEach((g) => g.dispose());
       if (!merged) continue;
+      if (mat.userData.uvSize) worldUV(merged, mat.userData.uvSize as number);
       const mesh = new THREE.Mesh(merged, mat);
       mesh.receiveShadow = true;
       mesh.castShadow = false;
@@ -765,6 +808,107 @@ export class StreetPlay {
   }
 
   private shopMats = new Map<string, THREE.Material>();
+  private goods = new Map<number, THREE.Material>();
+  /** lit display goods: slightly emissive so they read as lit from inside at night */
+  private goodsMat(c: number) {
+    let m = this.goods.get(c);
+    if (!m) {
+      m = this.mat(c, { roughness: 0.55, metalness: 0.05, emissive: c, emissiveIntensity: 0.28 });
+      this.goods.set(c, m);
+    }
+    return m;
+  }
+  private _shopGlass: THREE.Material | null = null;
+  private shopGlass() {
+    return (this._shopGlass ??= new THREE.MeshStandardMaterial({
+      color: 0xa9c4d0,
+      roughness: 0.04,
+      metalness: 0.9,
+      transparent: true,
+      opacity: 0.16,
+      envMapIntensity: 2,
+      depthWrite: false
+    }));
+  }
+  private _shopIn: THREE.Material[] = [];
+  /** Display window with shelves, mannequins or fruit crates behind real glass, depending on the shop. */
+  private addDisplay(g: THREE.Group, name: string) {
+    const [back, ceil, frame, shelf] = this._shopIn.length
+      ? this._shopIn
+      : (this._shopIn = [
+          this.mat(0xf3e6cc, { emissive: 0xffe2b0, emissiveIntensity: 0.55, roughness: 0.8 }),
+          this.mat(0xffffff, { emissive: 0xfff4dc, emissiveIntensity: 2.2 }),
+          this.mat(0x23272d, { metalness: 0.7, roughness: 0.35 }),
+          this.mat(0xb08a62, { roughness: 0.6, emissive: 0x402a10, emissiveIntensity: 0.3 })
+        ]);
+    const D = 0.9; // depth of the display box in front of the facade
+    g.add(this.box(5.8, 2.5, 0.05, back, 0, 1.3, 0.02));
+    g.add(this.box(5.8, 0.05, D, ceil, 0, 2.5, D / 2));
+    g.add(this.box(5.8, 0.4, D, frame, 0, 0.2, D / 2));
+    for (const fx0 of [-2.95, 2.95]) g.add(this.box(0.12, 2.6, D + 0.05, frame, fx0, 1.3, D / 2));
+    g.add(this.box(0.08, 2.1, 0.06, frame, -0.9, 1.45, D));
+    g.add(this.box(6, 0.14, D + 0.1, frame, 0, 2.6, D / 2));
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 2.1), this.shopGlass());
+    glass.position.set(0, 1.45, D);
+    g.add(glass);
+    const rnd = (k: number) => Math.abs(Math.sin(k * 91.7 + name.length * 13.3)) % 1;
+    const palette = [0xd84a3a, 0x3a8ad8, 0xf0c040, 0x45b06a, 0xf2f2f2, 0x9b59b6, 0xe67e22];
+    if (name === 'ملابس') {
+      for (let i = 0; i < 3; i++) {
+        const x = -2 + i * 1.7;
+        g.add(this.box(0.05, 0.9, 0.05, frame, x, 0.85, 0.45));
+        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.55, 3, 8), this.goodsMat(palette[i * 2]));
+        body.position.set(x, 1.55, 0.45);
+        g.add(body);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), this.goodsMat(0xe8e2da));
+        head.position.set(x, 2.05, 0.45);
+        g.add(head);
+      }
+    } else if (name === 'سوبر ماركت' || name === 'حلويات' || name === 'مخبز') {
+      const fruit =
+        name === 'سوبر ماركت'
+          ? [0xf08a1a, 0xd8262a, 0x8cc63e, 0xf2d33a]
+          : name === 'حلويات'
+            ? [0xff8fb8, 0xc9873e, 0xfff0d0, 0x7a3a1a]
+            : [0xd9a35a, 0xb8793a, 0xf0d9a0, 0xc9873e];
+      const ball = new THREE.SphereGeometry(0.09, 6, 4);
+      for (let row = 0; row < 2; row++)
+        for (let c = 0; c < 4; c++) {
+          const x = -2.1 + c * 1.4,
+            y = 0.55 + row * 0.75,
+            z = 0.35 + row * 0.15;
+          g.add(this.box(1.2, 0.22, 0.5, shelf, x, y, z));
+          for (let k = 0; k < 10; k++) {
+            const m = new THREE.Mesh(ball, this.goodsMat(fruit[(c + row) % fruit.length]));
+            m.position.set(
+              x - 0.48 + (k % 5) * 0.24,
+              y + 0.18 + Math.floor(k / 5) * 0.1,
+              z - 0.1 + Math.floor(k / 5) * 0.12
+            );
+            g.add(m);
+          }
+        }
+    } else {
+      for (let row = 0; row < 3; row++) {
+        const y = 0.6 + row * 0.6;
+        g.add(this.box(5.4, 0.05, 0.4, shelf, 0, y, 0.25));
+        for (let k = 0; k < 9; k++) {
+          const h = 0.18 + rnd(row * 9 + k) * 0.25;
+          g.add(
+            this.box(
+              0.3,
+              h,
+              0.24,
+              this.goodsMat(palette[(row * 3 + k) % palette.length]),
+              -2.4 + k * 0.6,
+              y + h / 2 + 0.03,
+              0.25
+            )
+          );
+        }
+      }
+    }
+  }
   private addShop(side: number, z: number, [name, color]: [string, string]) {
     const fx0 = side * 8.25;
     const rot = side > 0 ? -Math.PI / 2 : Math.PI / 2;
@@ -772,13 +916,7 @@ export class StreetPlay {
     g.position.set(fx0, 0, z);
     g.rotation.y = rot;
     g.userData.static = true;
-    // lit shop window
-    const glass = new THREE.Mesh(
-      new THREE.PlaneGeometry(5.6, 2.2),
-      new THREE.MeshStandardMaterial({ color: 0xfff4dc, emissive: 0xffe2b0, emissiveIntensity: 0.9, roughness: 0.2 })
-    );
-    glass.position.set(0, 1.35, 0.06);
-    g.add(glass);
+    this.addDisplay(g, name);
     // awning
     let aw = this.shopMats.get(color);
     if (!aw) {
@@ -786,7 +924,7 @@ export class StreetPlay {
       this.shopMats.set(color, aw);
     }
     const awning = new THREE.Mesh(new THREE.BoxGeometry(6, 0.12, 1.4), aw);
-    awning.position.set(0, 2.75, 0.7);
+    awning.position.set(0, 2.85, 1.35);
     awning.rotation.x = 0.25;
     g.add(awning);
     // sign
@@ -812,7 +950,7 @@ export class StreetPlay {
       })
     );
     (sign.material as THREE.MeshStandardMaterial).emissiveMap = (sign.material as THREE.MeshStandardMaterial).map;
-    sign.position.set(0, 3.55, 0.1);
+    sign.position.set(0, 3.6, 0.1);
     g.add(sign);
     this.group.add(g);
   }
@@ -851,29 +989,18 @@ export class StreetPlay {
     }
   }
 
-  private addLamp(x: number, z: number) {
-    const pole = this.mat(0x2a2e34, { metalness: 0.6, roughness: 0.35 });
-    this.group.add(this.box(0.12, 4.4, 0.12, pole, x, 2.2, z));
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 10, 8),
-      new THREE.MeshStandardMaterial({
-        color: 0xfff1c4,
-        emissive: 0xffc56a,
-        emissiveIntensity: 2.2,
-        roughness: 0.3
-      })
-    );
-    head.position.set(x, 4.45, z);
-    this.group.add(head);
+  private addLamp(x: number, z: number, b: Batch, dir: number) {
+    const [hp] = lamp(b, x, z, dir);
+    const hx = hp.x;
     // No per-lamp PointLight (dozens of them break/slow mobile GPUs): glow halo + warm light pool on the ground.
     const halo = new THREE.Object3D() as THREE.PointLight;
     (halo as unknown as { intensity: number }).intensity = 2.5;
-    halo.position.set(x, 4.45, z);
+    halo.position.copy(hp);
     this.group.add(halo);
     fx.glow(halo, 0xffc56a, 1.8);
     const pool = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20), this.poolMat());
     pool.rotation.x = -Math.PI / 2;
-    pool.position.set(x * 0.7, 0.12, z);
+    pool.position.set(hx, 0.15, z);
     this.group.add(pool);
   }
 
@@ -1434,9 +1561,11 @@ export class StreetPlay {
     this.key = key;
   }
 
-  private addProps(z: number) {
-    const bin = this.mat(0x1e6b45, { roughness: 0.6 });
-    this.group.add(this.box(0.7, 1.0, 0.7, bin, 7.4, 0.5, z + 4));
+  private addProps(z: number, b: Batch) {
+    bin(b, 7.0, z + 4);
+    bench(b, 7.2, z - 10, -Math.PI / 2);
+    bench(b, -7.2, z + 12, Math.PI / 2);
+    roadSign(b, -5.0, z + 16, 0, (z / 40) % 2 === 0);
     const cone = new THREE.Mesh(
       new THREE.ConeGeometry(0.22, 0.55, 8),
       this.mat(0xff7a1a, { emissive: 0xff5500, emissiveIntensity: 0.25 })
@@ -1445,8 +1574,6 @@ export class StreetPlay {
     this.group.add(cone);
     const hydrant = this.mat(0xc42828, { roughness: 0.45 });
     this.group.add(this.box(0.28, 0.7, 0.28, hydrant, -7.2, 0.4, z + 14));
-    const bench = this.mat(0x6b4a32, { roughness: 0.7 });
-    this.group.add(this.box(1.4, 0.12, 0.45, bench, 7.1, 0.48, z - 10));
   }
 
   private makeOfficer() {
@@ -1530,6 +1657,34 @@ export class StreetPlay {
     const pick = pool[((hair >> 3) + (dress >> 5)) % pool.length]!;
     models.dress(g, pick, { height: female ? 1.68 : 1.8 });
     return { g, legL, legR, armL, armR };
+  }
+
+  private sea: Sea | null = null;
+  private strollers: Array<{ g: THREE.Object3D; v: number; z: number }> = [];
+  /** people walking along the corniche promenade */
+  private spawnStrollers() {
+    const cols = [0x8d2f45, 0x1f6f6a, 0xe7d7c1, 0x3d4d8a, 0x4a4038, 0x202228];
+    for (let i = 0; i < (Q.lowDetailPeople ? 6 : 12); i++) {
+      const female = i % 2 === 1;
+      const { g } = this.makePerson(female, cols[i % cols.length], 0x1a120e);
+      const v = (0.8 + Math.random() * 0.5) * (i % 3 === 0 ? -1 : 1);
+      const z = CORNICHE.z0 + 2.5 + (i % 4) * 1.6;
+      g.position.set(-110 + Math.random() * 220, 0.14, z);
+      g.rotation.y = v > 0 ? Math.PI / 2 : -Math.PI / 2;
+      models.setClip(g, 'walk');
+      this.group.add(g);
+      this.strollers.push({ g, v, z });
+    }
+  }
+  private stepStrollers(dt: number) {
+    for (const s of this.strollers) {
+      const p = s.g.position;
+      p.x += s.v * dt;
+      if (p.x > 120 || p.x < -120) {
+        s.v = -s.v;
+        s.g.rotation.y = s.v > 0 ? Math.PI / 2 : -Math.PI / 2;
+      }
+    }
   }
 
   private spawnPeople() {
@@ -2279,6 +2434,8 @@ export class StreetPlay {
     const input = this.wants();
     this.stepActor(dt, input);
     this.stepPeds(dt);
+    this.stepStrollers(dt);
+    this.sea?.update(dt);
     this.stepTraffic(dt);
     this.stepChase(dt);
     this.stepTutorial(dt);
@@ -2440,13 +2597,13 @@ export class StreetPlay {
       const P = this.player.position;
       const mx = lo.vx * dt,
         mz = lo.vz * dt;
-      if (onRoad(P.x + mx, P.z + mz, 3.6)) {
+      if (onFoot(P.x + mx, P.z + mz)) {
         P.x += mx;
         P.z += mz;
-      } else if (onRoad(P.x + mx, P.z, 3.6)) {
+      } else if (onFoot(P.x + mx, P.z)) {
         P.x += mx;
         this.vel.z *= 0.5;
-      } else if (onRoad(P.x, P.z + mz, 3.6)) {
+      } else if (onFoot(P.x, P.z + mz)) {
         P.z += mz;
         this.vel.x *= 0.5;
       } else {
@@ -2455,7 +2612,7 @@ export class StreetPlay {
       }
       // solid vehicles: push the officer out and let him slide along the body
       const hit = collide(P.x, P.z, 0.42, this.vehicleBoxes());
-      if (hit.hit && onRoad(hit.x, hit.z, 3.6)) {
+      if (hit.hit && onFoot(hit.x, hit.z)) {
         const nx = hit.x - P.x,
           nz = hit.z - P.z,
           nl = Math.hypot(nx, nz) || 1;

@@ -1,6 +1,8 @@
 /** Open city grid: avenues + cross streets, district blocks built from instanced boxes (one draw call per block, culled per chunk). */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Q } from './Quality';
+import { surface, worldUV, segments, PROP_MATS } from './Environment';
 
 export const AVENUES_X = [-120, -60, 0, 60, 120];
 export const CROSS_Z = [-96, -45, 50, 145, 236];
@@ -32,6 +34,10 @@ export const ROADS: Rect[] = [
 export function onRoad(x: number, z: number, pad = 0) {
   for (const r of ROADS) if (x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad) return true;
   return false;
+}
+/** walkable on foot: roads + sidewalks, plus the corniche promenade along the sea */
+export function onFoot(x: number, z: number) {
+  return onRoad(x, z, 3.6) || (x > CITY.x0 - 3 && x < CITY.x1 + 3 && z > CITY.z1 && z < 249.6);
 }
 /** cross streets cut through the main-avenue building rows */
 export const nearCross = (z: number, m = 8) => CROSS_Z.some((c) => Math.abs(c - z) < m);
@@ -73,38 +79,50 @@ export function buildCity(group: THREE.Group, low: boolean) {
     g.translate(x, y, z);
     arr.push(g);
   };
+  const kerbGeos: THREE.BufferGeometry[] = [];
+  const half = ROAD_W / 2;
   for (const x of AVENUES_X) {
     if (x === 0) continue;
     const L = CITY.z1 - CITY.z0;
     add(roadGeos, ROAD_W, 0.08, L, x, 0.04, (CITY.z0 + CITY.z1) / 2);
-    for (const s of [-1, 1]) add(walkGeos, 2.4, 0.14, L, x + s * (ROAD_W / 2 + 1.2), 0.07, (CITY.z0 + CITY.z1) / 2);
-    for (let z = CITY.z0 + 4; z < CITY.z1; z += 8) if (!nearCross(z, 6)) add(lineGeos, 0.16, 0.02, 3.2, x, 0.1, z);
+    for (const [a, b] of segments(CITY.z0, CITY.z1, CROSS_Z, half))
+      for (const s of [-1, 1]) {
+        add(walkGeos, 2.4, 0.14, b - a, x + s * (half + 1.2), 0.07, (a + b) / 2);
+        add(kerbGeos, 0.22, 0.2, b - a, x + s * (half + 0.02), 0.1, (a + b) / 2);
+      }
+    for (let z = CITY.z0 + 4; z < CITY.z1; z += 8) if (!nearCross(z, 7)) add(lineGeos, 0.14, 0.012, 3, x, 0.086, z);
   }
   for (const z of CROSS_Z) {
     const L = CITY.x1 - CITY.x0;
     add(roadGeos, L, 0.085, ROAD_W, 0, 0.045, z);
-    for (const s of [-1, 1]) add(walkGeos, L, 0.14, 2.4, 0, 0.07, z + s * (ROAD_W / 2 + 1.2));
+    for (const [a, b] of segments(CITY.x0, CITY.x1, AVENUES_X, half))
+      for (const s of [-1, 1]) {
+        add(walkGeos, b - a, 0.14, 2.4, (a + b) / 2, 0.07, z + s * (half + 1.2));
+        add(kerbGeos, b - a, 0.2, 0.22, (a + b) / 2, 0.1, z + s * (half + 0.02));
+      }
     for (let x = CITY.x0 + 4; x < CITY.x1; x += 8)
-      if (!AVENUES_X.some((a) => Math.abs(a - x) < 6)) add(lineGeos, 3.2, 0.02, 0.16, x, 0.1, z);
+      if (!AVENUES_X.some((a) => Math.abs(a - x) < 7)) add(lineGeos, 3, 0.012, 0.14, x, 0.086, z);
   }
-  const mk = (geos: THREE.BufferGeometry[], mat: THREE.Material) => {
+  const mk = (geos: THREE.BufferGeometry[], mat: THREE.Material, uv = 0) => {
+    if (uv) geos.forEach((g) => worldUV(g, uv));
     const m = new THREE.Mesh(mergeGeometries(geos, false)!, mat);
     m.receiveShadow = true;
     m.userData.city = true;
     group.add(m);
     geos.forEach((g) => g.dispose());
   };
-  mk(roadGeos, new THREE.MeshStandardMaterial({ color: 0x3b4048, roughness: 0.82, metalness: 0.05 }));
-  mk(walkGeos, new THREE.MeshStandardMaterial({ color: 0x9a9ea4, roughness: 0.8 }));
-  mk(lineGeos, new THREE.MeshStandardMaterial({ color: 0xf0d060, emissive: 0x886600, emissiveIntensity: 0.55 }));
+  mk(roadGeos, surface('asphalt', Q.hdri ? 0x9a9a9a : 0xb8b8b8), 5);
+  mk(walkGeos, surface('paving', 0xd8d2c8), 2);
+  mk(kerbGeos, surface('concrete', 0xcfcac2), 1.2);
+  mk(lineGeos, PROP_MATS.paint);
 
   // ground plane for block interiors
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(CITY.x1 - CITY.x0 + 60, CITY.z1 - CITY.z0 + 60),
+    new THREE.PlaneGeometry(CITY.x1 - CITY.x0 + 60, CITY.z1 - CITY.z0 + 40),
     new THREE.MeshStandardMaterial({ color: 0x4d5a48, roughness: 1 })
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, 0.005, (CITY.z0 + CITY.z1) / 2);
+  ground.position.set(0, 0.005, (CITY.z0 + CITY.z1) / 2 - 10);
   group.add(ground);
 
   // blocks: one InstancedMesh per block (a chunk), so off-screen blocks are culled as a unit
@@ -182,14 +200,6 @@ export function buildCity(group: THREE.Group, low: boolean) {
       }
     }
   }
-  // water along the corniche edge
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(400, 60),
-    new THREE.MeshStandardMaterial({ color: 0x1d4e6e, roughness: 0.2, metalness: 0.3 })
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.set(0, 0.02, CITY.z1 + 34);
-  group.add(water);
   return blocks;
 }
 

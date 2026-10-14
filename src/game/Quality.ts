@@ -40,5 +40,11 @@ export const Q = {
   lowDetailPeople: quality === 'low',
   /** real street-lamp PointLights in the command-center city */
   lampLights: quality === 'low' ? 0 : quality === 'medium' ? 3 : 6,
-  rain: quality === 'low' ? 120 : quality === 'medium' ? 450 : 700
+  rain: quality === 'low' ? 120 : quality === 'medium' ? 450 : 700,
+  /** image-based lighting from the sky HDRI */
+  hdri: quality !== 'low',
+  /** reflective sea shader (extra render pass) */
+  water: quality === 'high',
+  /** subtle bloom on lamps, signs and shop windows */
+  bloom: quality === 'high'
 };
