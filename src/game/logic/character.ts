@@ -54,16 +54,17 @@ export function newerChar(a: Character | null, b: Character | null) {
 }
 
 export function modelFor(c: Character) {
-  return c.body === 'female' ? 'officer-female' : 'officer';
+  return c.body === 'female' ? 'cop_f' : 'cop_m';
 }
 
-/** Material name → colour for the chosen model (names come from the Quaternius glTFs). */
+/** Multipliers over the photographed (light) skin / brown hair textures of the realistic officers. */
+export const SKIN_TINT = [0xffffff, 0xf0d2bc, 0xd6a684, 0xa47052, 0x74503c];
+export const HAIR_TINT = [0x3a302c, 0x86644f, 0xffffff, 0xffe2a0, 0xd0d0d0];
+
+/** Material name → colour multiplier for the chosen model (Suit / Skin / Hair materials of cop_m / cop_f). */
 export function recolorFor(c: Character): Record<string, number> {
   const u = UNIFORMS[c.uniform] ?? UNIFORMS[0]!;
-  const skin = SKINS[c.skin] ?? SKINS[1]!;
-  if (c.body === 'male') return { Swat: u.top, Swat_Black: u.gear, Skin: skin };
-  const hair = HAIRS[c.hair] ?? HAIRS[0]!;
-  return { White: u.top, Orange: u.top, Grey: u.gear, Brown: 0x15110e, Skin: skin, Hair_Blond: hair, Hair_Brown: hair };
+  return { Suit: u.top, Skin: SKIN_TINT[c.skin] ?? 0xffffff, Hair: HAIR_TINT[c.hair] ?? HAIR_TINT[0]! };
 }
 
 export function weaponStats(c: Character, rankMag: number, rankDmg: number) {

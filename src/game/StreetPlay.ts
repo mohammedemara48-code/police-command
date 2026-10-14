@@ -13,7 +13,7 @@ import { newCall, type Kind } from './Dispatch';
 import { Squad } from './Npc';
 import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
-import { models, CARS, LOW_CARS, REAL_PEOPLE, LOW_BUILDINGS, TOWERS, fx } from './Models';
+import { models, CARS, LOW_CARS, MEN, WOMEN, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
 import { Q } from './Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -1525,9 +1525,9 @@ export class StreetPlay {
       cap.position.set(0, 1.7, 0);
       g.add(cap);
     }
-    // always the realistic (Quaternius) set — the blocky Kenney people looked like toys on phones
-    const pool = REAL_PEOPLE;
-    const pick = female ? pool[1 + ((hair >> 4) % 2)] : pool[0];
+    // realistic MakeHuman people (CC0); pick a stable variant from the colours passed in
+    const pool = female ? WOMEN : MEN;
+    const pick = pool[((hair >> 3) + (dress >> 5)) % pool.length]!;
     models.dress(g, pick, { height: female ? 1.68 : 1.8 });
     return { g, legL, legR, armL, armR };
   }
