@@ -1,5 +1,6 @@
 import { reducedMotion } from './Motion';
 import { stepLoco, followCamYaw, wrapAngle } from './logic/locomotion';
+import { stepCar, driftOf, kmh, hitDamage, pullOver } from './logic/driving';
 import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from './logic/chase';
 import { character, onCharacter } from './Character';
 import { modelFor, recolorFor, WEAPONS } from './logic/character';
@@ -84,6 +85,9 @@ type Traffic = {
   mesh: THREE.Group;
   speed: number;
   laneX: number;
+  /** pull-over offset toward the kerb (siren) and knock-back after a hit */
+  side?: number;
+  bumpT?: number;
 };
 
 type Hold = { f: boolean; b: boolean; l: boolean; r: boolean; run: boolean };
@@ -167,6 +171,13 @@ export class StreetPlay {
   private chaseLock = 0;
   private chaseText = '';
   private camB = 7;
+  private velYaw = 0;
+  private siren = false;
+  private damage = 0;
+  private hitCool = 0;
+  private speedoEl: HTMLElement | null = null;
+  private speedoTxt = '';
+  private camFov = 48;
   private eventGroup = new THREE.Group();
   private travel: { z: number; fast: boolean } | null = null;
   private hold: Hold = { f: false, b: false, l: false, r: false, run: false };
@@ -567,6 +578,7 @@ export class StreetPlay {
     this.msIdx = 0;
     this.msTime = 0;
     this.squad.resetPlayer();
+    this.damage = 0;
     let seen = false;
     try { seen = !!localStorage.getItem(TUT_KEY); } catch { /* private mode */ }
     this.tutOn = this.level.id === 1 && !seen;
@@ -1194,10 +1206,12 @@ export class StreetPlay {
         </div>
         <button type="button" data-k="b">▼</button>
       </div>
+      <div id="street-speedo" aria-live="off"></div>
       <div class="street-actions">
         <button type="button" data-act="car">ركب الدورية</button>
         <button type="button" data-act="run">ركض</button>
         <button type="button" data-act="map">خريطة المهام</button>
+        <button type="button" data-act="siren" class="incar">🚨 سارينة</button>
         <button type="button" data-act="shoot">🔫<br>اضرب</button>
         <button type="button" data-act="order">📢 استسلم!</button>
         <button type="button" data-act="cuff">🔗 كلبش</button>
@@ -1243,6 +1257,8 @@ export class StreetPlay {
     });
     this.mountStick(ui.querySelector('.street-stick') as HTMLElement);
     holdBtn(ui.querySelector('[data-act="run"]') as HTMLElement, (v) => (this.hold.run = v));
+    ui.querySelector('[data-act="siren"]')!.addEventListener('click', () => this.toggleSiren());
+    this.speedoEl = ui.querySelector('#street-speedo');
     holdBtn(ui.querySelector('[data-act="shoot"]') as HTMLElement, (v) => (this.firing = v));
     this.hudEl = ui.querySelector('#street-hp');
     this.hudHtml = '';
@@ -1298,6 +1314,7 @@ export class StreetPlay {
     if (e.code === 'KeyF' || e.code === 'Space') this.firing = down;
     if (down && e.code === 'KeyQ') this.orderSurrender();
     if (down && e.code === 'KeyC') this.cuffNow();
+    if (down && e.code === 'KeyH' && this.inCar) this.toggleSiren();
     if (down && e.code === 'KeyM') {
       if (this.mapEl) this.closeMap();
       else this.openMap();
@@ -1312,6 +1329,15 @@ export class StreetPlay {
     const r = this.hold.r || this.keys.has('KeyD') || this.keys.has('ArrowRight');
     const run = this.hold.run || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     return { f, b, l, r, run };
+  }
+
+  private toggleSiren(on = !this.siren) {
+    this.siren = on;
+    if (!this.chasing) audio.sirenLoop(on);
+    document.documentElement.classList.toggle('siren-on', on);
+    const b = this.ui?.querySelector('[data-act="siren"]');
+    if (b) b.classList.toggle('held', on);
+    if (on) this.setStatus('🚨 السارينة شغالة — العربيات بتوسع لك.');
   }
 
   private toggleCar() {
@@ -1330,9 +1356,12 @@ export class StreetPlay {
       this.camYaw = cy;
       this.vel.x = 0; this.vel.z = 0;
       document.documentElement.classList.add('onfoot');
+      if (this.siren) this.toggleSiren(false);
       this.setStatus('نزلت من الدورية.');
       const btn = this.ui?.querySelector('[data-act="car"]');
       if (btn) btn.textContent = 'ركب الدورية';
+      const rb = this.ui?.querySelector('[data-act="run"]');
+      if (rb) rb.textContent = 'ركض';
       return;
     }
     const d = this.player.position.distanceTo(this.car.position);
@@ -1346,9 +1375,13 @@ export class StreetPlay {
     this.player.visible = false;
     if (this.driver) this.driver.visible = true;
     this.yaw = this.car.rotation.y;
+    this.velYaw = this.yaw;
+    this.speed = 0;
     this.setStatus('داخل الدورية. امشِ بالأسهم أو الأزرار. صفارة المطاردة لما توصل المهمة.');
     const btn = this.ui?.querySelector('[data-act="car"]');
     if (btn) btn.textContent = 'انزل';
+    const rb = this.ui?.querySelector('[data-act="run"]');
+    if (rb) rb.textContent = '🛞 فرامل يد';
   }
 
   private statusT = 0;
@@ -1568,7 +1601,7 @@ export class StreetPlay {
     const portrait = this.camera.aspect < 0.8 ? 1.35 : 1;
     const back = (this.inCar ? (this.chasing ? 9.4 : 8.2) : 5.2) * portrait;
     const up = (this.inCar ? (this.chasing ? 3.6 : 3.1) : 2.25) * (portrait > 1 ? 1.15 : 1);
-    const yaw = this.inCar ? this.car.rotation.y : this.camYaw;
+    const yaw = this.inCar ? this.velYaw + wrapAngle(this.car.rotation.y - this.velYaw) * 0.35 : this.camYaw;
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
     let b = back;
@@ -1590,7 +1623,8 @@ export class StreetPlay {
     if (!Number.isFinite(this.camPos.x + this.camPos.y + this.camPos.z)) this.camPos.copy(dest);
     this.camPos.lerp(dest, k);
     this.camera.position.copy(this.camPos);
-    this.look.set(target.position.x, this.inCar ? 1.1 : 1.3, target.position.z);
+    const ahead = this.inCar ? Math.min(6, Math.abs(this.speed) * 0.3) : 0;
+    this.look.set(target.position.x + sin * ahead, this.inCar ? 1.1 : 1.3, target.position.z + cos * ahead);
     this.camera.lookAt(this.look);
   }
 
@@ -1636,6 +1670,14 @@ export class StreetPlay {
     if (this.inCar && sp > 2 && Math.random() < dt * 30) {
       fx.smoke(this.group, this.car.position.x - Math.sin(this.yaw) * 2.1, 0.35, this.car.position.z - Math.cos(this.yaw) * 2.1);
     }
+    if (this.speedoEl) {
+      const txt = this.inCar ? `<b>${kmh(this.speed)}</b><small>كم/س</small><i style="--d:${this.damage}%"></i><span>🚓 ${100 - this.damage}%</span>` : '';
+      if (txt !== this.speedoTxt) { this.speedoEl.innerHTML = txt; this.speedoTxt = txt; }
+    }
+    // chase camera: widen the view with speed, smoothly
+    const fovT = 48 + (this.inCar ? Math.min(12, Math.abs(this.speed) * 0.5) : 0);
+    this.camFov += (fovT - this.camFov) * Math.min(1, dt * 3);
+    if (Math.abs(this.camera.fov - this.camFov) > 0.05) { this.camera.fov = this.camFov; this.camera.updateProjectionMatrix(); }
     this.snapCamera(1 - Math.pow(0.0008, dt));
     if (this.recoil > 0 && !reducedMotion) { this.camera.position.y += this.recoil * 0.05; this.camera.rotation.x += this.recoil * 0.012; }
     this.uiT += dt;
@@ -1669,12 +1711,20 @@ export class StreetPlay {
     }
 
     if (this.inCar) {
-      this.yaw += turn * dt * 1.5;
-      const max = (this.chasing ? 18 : 12) + rank().car;
-      const target = throttle * max;
-      this.speed += (target - this.speed) * Math.min(1, dt * 2.2);
+      // arcade handling: analog stick or keys, handbrake (run button / Space) drifts
+      const max = (this.chasing ? 20 : 16) + rank().car;
+      const thr = this.travel ? throttle : this.stick.y || throttle;
+      const steer = this.travel ? 0 : -this.stick.x || turn;
+      const hb = !this.travel && (this.hold.run || this.keys.has('Space'));
+      const cs = stepCar({ speed: this.speed, yaw: this.yaw, velYaw: this.velYaw }, { throttle: thr, steer, handbrake: hb, max, damage: this.damage }, dt);
+      if (this.travel) { cs.yaw = this.yaw; cs.velYaw = this.yaw; }
+      this.speed = cs.speed; this.yaw = cs.yaw; this.velYaw = cs.velYaw;
       this.car.rotation.y = this.yaw;
-      const cmx = Math.sin(this.yaw) * this.speed * dt, cmz = Math.cos(this.yaw) * this.speed * dt;
+      const drift = driftOf(cs);
+      if (drift > 0.3 && Math.abs(this.speed) > 6 && Math.random() < dt * 40) {
+        for (const sd of [-0.8, 0.8]) fx.smoke(this.group, this.car.position.x - Math.sin(this.yaw) * 1.8 + Math.cos(this.yaw) * sd, 0.15, this.car.position.z - Math.cos(this.yaw) * 1.8 - Math.sin(this.yaw) * sd);
+      }
+      const cmx = Math.sin(this.velYaw) * this.speed * dt, cmz = Math.cos(this.velYaw) * this.speed * dt;
       const C0 = this.car.position;
       // slide along kerbs/buildings instead of bouncing and getting stuck
       if (!onRoad(C0.x + cmx, C0.z + cmz, 0.4)) {
@@ -1764,6 +1814,7 @@ export class StreetPlay {
 
 
   private stepTraffic(dt: number) {
+    if (this.hitCool > 0) this.hitCool -= dt;
     const red = !this.avenueGreen;
     for (const t of this.cross) {
       const x = t.mesh.position.x;
@@ -1785,6 +1836,35 @@ export class StreetPlay {
       const me = this.inCar ? this.car.position : this.player.position;
       const dz = (me.z - z) * Math.sign(t.speed);
       if (Math.abs(me.x - t.mesh.position.x) < 1.8 && dz > 0 && dz < 6) stop = true;
+      // siren: cars nearby ease to the kerb and stop to let you through
+      const C = this.car.position;
+      const near = Math.hypot(C.x - t.mesh.position.x, C.z - z);
+      const want = this.inCar ? pullOver(this.siren || this.chasing, near) : 0;
+      t.side = (t.side ?? 0) + (want - (t.side ?? 0)) * Math.min(1, dt * 2);
+      if (want > 0 && near < 22) stop = true;
+      const kerb = t.laneX > 0 ? 1 : -1;
+      t.mesh.position.x = t.laneX + kerb * (t.side ?? 0);
+      // collisions with the patrol car: damage, knock-back, horn
+      if (this.inCar && Math.abs(C.x - t.mesh.position.x) < 2 && Math.abs(C.z - t.mesh.position.z) < 3.8) {
+        const rel = Math.abs(this.speed - (stop ? 0 : t.speed) * Math.cos(this.velYaw));
+        if (this.hitCool <= 0) {
+          const dmg = hitDamage(rel);
+          if (dmg > 0) {
+            this.damage = Math.min(100, this.damage + dmg);
+            this.hitCool = 0.6;
+            audio.sample('crash', Math.min(1, rel / 15));
+            this.recoil = Math.min(1, rel / 10);
+            this.setStatus(this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}%`);
+          }
+        }
+        // push both apart; the hit car gets shoved and stops a moment
+        const pz = Math.sign(C.z - t.mesh.position.z) || 1;
+        C.z = t.mesh.position.z + pz * 3.8;
+        t.mesh.position.z -= pz * Math.min(2, rel * 0.08);
+        t.bumpT = 1.5;
+        this.speed *= -0.25;
+      }
+      if (t.bumpT && t.bumpT > 0) { t.bumpT -= dt; stop = true; t.mesh.rotation.z = Math.sin(t.bumpT * 20) * 0.03 * t.bumpT; }
       if (!stop) t.mesh.position.z += t.speed * dt;
       if (t.mesh.position.z > 250) t.mesh.position.z = -110;
       if (t.mesh.position.z < -110) t.mesh.position.z = 250;
