@@ -340,10 +340,11 @@ class ModelLib {
       const m = new THREE.MeshPhysicalMaterial({
         name: n,
         color: src.color,
-        metalness: 0.45,
-        roughness: 0.32,
+        metalness: 0.55,
+        roughness: 0.38,
         clearcoat: 1,
-        clearcoatRoughness: 0.08
+        clearcoatRoughness: 0.06,
+        envMapIntensity: 1.5
       });
       return m;
     }
@@ -366,11 +367,15 @@ class ModelLib {
     } else if (n === 'Beacon') {
       src.emissive.setHex(0x2a6bff);
       src.emissiveIntensity = 0.6;
+    } else if (/rubber|black/i.test(n)) {
+      src.color.setHex(n.includes('rubber') ? 0x141414 : 0x101012);
+      src.roughness = 0.85;
+      src.metalness = 0.05;
     } else if (/glaz|glass/i.test(n)) {
       // tinted glass: readable cabin silhouette, not a hole in the car
-      src.color.setHex(0x1c262e);
+      src.color.setHex(0x0e1418);
       src.transparent = true;
-      src.opacity = 0.9;
+      src.opacity = 0.93;
       src.metalness = 0.6;
       src.roughness = 0.06;
       src.envMapIntensity = 1.6;
