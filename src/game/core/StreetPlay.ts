@@ -45,7 +45,7 @@ import {
   followPath,
   nearestNode
 } from '../world/City';
-import { egyptBlock, gantry, kerbStripeMat, pyramids, makeMicrobus, makeTaxi, rollWheels, type SignDest } from '../world/Egypt';
+import { egyptBlock, gantry, kerbStripeMat, roofRack, taxiSign, rollWheels, type SignDest } from '../world/Egypt';
 import {
   surface,
   worldUV,
@@ -170,6 +170,26 @@ type Hold = { f: boolean; b: boolean; l: boolean; r: boolean; run: boolean };
 /**
  * Wet night avenue: third-person walk/drive, mixed pedestrians, mission pins.
  */
+let decalMat: THREE.MeshStandardMaterial | null = null;
+function policeDecal() {
+  if (decalMat) return decalMat;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 68;
+  const x = c.getContext('2d')!;
+  x.fillStyle = '#1f4fa8';
+  x.fillRect(0, 22, 512, 26);
+  x.fillStyle = '#ffffff';
+  x.font = 'bold 22px Arial';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText('POLICE   الشرطة', 256, 36);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  decalMat = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -2 });
+  return decalMat;
+}
+
 export class StreetPlay {
   active = false;
   onReport: ((r: ChaseReport) => void) | null = null;
@@ -394,9 +414,7 @@ export class StreetPlay {
       for (const x of [-2.3, 2.3]) this.group.add(this.box(0.13, 0.012, 3, PROP_MATS.paint, x, 0.086, z));
     }
     this.buildGantries();
-    this.pyramids = new THREE.Group();
-    pyramids(this.pyramids, 25, -350);
-    this.group.add(this.pyramids);
+
 
     this.buildStreetRows();
     for (const place of STREET_PLACES) {
@@ -564,7 +582,6 @@ export class StreetPlay {
     }
   }
 
-  private pyramids: THREE.Group | null = null;
   /** Blue overhead direction signs (Arabic + English, distance to the next places in that direction). */
   private buildGantries() {
     const places: { ar: string; en: string; z: number }[] = [
@@ -1884,8 +1901,11 @@ export class StreetPlay {
         new THREE.BoxGeometry(0.28, 0.12, 0.18),
         new THREE.MeshStandardMaterial({ color: 0x2266ff, emissive: 0x0044ff, emissiveIntensity: 2 })
       );
-      red.position.set(-0.22, 1.22, -0.1);
-      blue.position.set(0.22, 1.22, -0.1);
+      red.position.set(-0.22, 1.5, -0.25);
+      blue.position.set(0.22, 1.5, -0.25);
+      const bar = this.box(0.95, 0.07, 0.24, this.mat(0x1a1a1a, { metalness: 0.5 }), 0, 1.43, -0.25);
+      bar.userData.keep = true;
+      g.add(bar);
       g.add(red, blue);
       const lr = new THREE.PointLight(0xff2244, 0, 10, 2);
       const lb = new THREE.PointLight(0x2266ff, 0, 10, 2);
@@ -1897,7 +1917,15 @@ export class StreetPlay {
       fx.glow(lr, 0xff2244);
       fx.glow(lb, 0x2266ff);
     }
-    models.dress(g, 'car-police', { length: 4.7 });
+    // Egyptian-style patrol car: realistic white sedan, blue band and "POLICE / الشرطة" on the doors, roof light bar
+    models.dress(g, 'car-sedan2', { length: 4.7, tint: 0xf6f7f8 });
+    for (const side of [-1, 1]) {
+      const d = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.34), policeDecal());
+      d.position.set(side * 0.915, 0.72, -0.05);
+      d.rotation.y = side * (Math.PI / 2);
+      d.userData.keep = true;
+      g.add(d);
+    }
     return g;
   }
 
@@ -1936,12 +1964,27 @@ export class StreetPlay {
     const colors = [0x2a2e33, 0x4a4038, 0x1a3348, 0x33302c, 0x20242a];
     for (let i = 0; i < 9; i++) {
       const laneX = (i % 2 === 0 ? -1 : 1) * (i % 4 < 2 ? 1.15 : 3.3);
-      const kind = i % 3 === 1 ? makeMicrobus() : i % 3 === 2 && i % 2 === 0 ? makeTaxi() : null;
-      if (kind) {
-        kind.position.set(laneX, 0, -60 + i * 30);
-        kind.rotation.y = i % 2 === 0 ? 0 : Math.PI;
-        this.group.add(kind);
-        this.traffic.push({ mesh: kind, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
+      const special = i % 3 === 1 ? 'microbus' : i % 3 === 2 && i % 2 === 0 ? 'taxi' : null;
+      if (special) {
+        // white microbus with a roof rack, or a white Cairo taxi with the chequered roof sign
+        const g = new THREE.Group();
+        g.userData.vehicle = special;
+        g.add(this.box(1.7, 1.2, special === 'microbus' ? 5.2 : 4.4, this.mat(0xeeeeee), 0, 0.9, 0));
+        const L = special === 'microbus' ? 5.3 : 4.5;
+        models.dress(g, special === 'microbus' ? 'car-van' : 'car-sedan2', { length: L, tint: 0xf4f4f0 });
+        if (special === 'microbus') {
+          const r = roofRack(L * 0.7, 1.55);
+          r.position.set(0, 2.17, -0.15);
+          g.add(r);
+        } else {
+          const t = taxiSign();
+          t.position.set(0, 1.42, -0.25);
+          g.add(t);
+        }
+        g.position.set(laneX, 0, -60 + i * 30);
+        g.rotation.y = i % 2 === 0 ? 0 : Math.PI;
+        this.group.add(g);
+        this.traffic.push({ mesh: g, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
         continue;
       }
       const mesh = new THREE.Group();
@@ -2608,7 +2651,6 @@ export class StreetPlay {
     this.stepRain(dt);
     this.stepLights();
     rollWheels(this.car, this.speed * dt);
-    if (this.pyramids) this.pyramids.position.z = this.camera.position.z;
     if (this.key) {
       const a = this.inCar ? this.car.position : this.player.position;
       this.key.position.set(a.x + this.sunDir.x * 40, Math.max(8, this.sunDir.y * 40), a.z + this.sunDir.z * 40);

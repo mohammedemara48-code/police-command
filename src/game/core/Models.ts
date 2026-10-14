@@ -38,7 +38,7 @@ export type ModelKind =
 
 /** Realistic MakeHuman (CC0) people, rigged + animated with the Universal Animation Library (CC0). */
 export type HumanKind =
-  'cop_m' | 'cop_f' | 'civ_m1' | 'civ_m2' | 'civ_m3' | 'civ_f1' | 'civ_f2' | 'car-sedan' | 'car-police';
+  'cop_m' | 'cop_f' | 'civ_m1' | 'civ_m2' | 'civ_m3' | 'civ_f1' | 'civ_f2' | 'car-sedan2' | 'car-hatch' | 'car-van' | 'car-police';
 const GLB = new Set<string>([
   'cop_m',
   'cop_f',
@@ -47,14 +47,18 @@ const GLB = new Set<string>([
   'civ_m3',
   'civ_f1',
   'civ_f2',
-  'car-sedan',
+  'car-sedan2',
+  'car-hatch',
+  'car-van',
   'car-police'
 ]);
-const CAR_GLB = new Set<string>(['car-sedan', 'car-police']);
+const CAR_GLB = new Set<string>(['car-sedan2', 'car-hatch', 'car-van', 'car-police']);
+/** Cars with a light `-lo.glb` version (fewer triangles, smaller textures) used on low quality. */
+const LOD = new Set<string>(['car-sedan2', 'car-hatch', 'car-van']);
 export const MEN: ModelKind[] = ['civ_m1', 'civ_m2', 'civ_m3'];
 export const WOMEN: ModelKind[] = ['civ_f1', 'civ_f2'];
 
-export const CARS: ModelKind[] = ['car-sedan', 'car-sedan', 'challenger', 'car-sedan', 'car-sedan'];
+export const CARS: ModelKind[] = ['car-sedan2', 'car-hatch', 'car-sedan2', 'car-hatch', 'challenger'];
 export const LOW_CARS: ModelKind[] = ['sedan', 'taxi', 'suv', 'van', 'sedan-sports'];
 export const REAL_PEOPLE: ModelKind[] = ['civ_m1', 'civ_f1', 'civ_m2', 'civ_f2', 'civ_m3'];
 export const PEOPLE: ModelKind[] = ['character-male-a', 'character-female-a', 'character-male-c', 'character-female-c'];
@@ -108,7 +112,7 @@ class ModelLib {
     let p = this.loading.get(kind);
     if (!p) {
       p = this.loader
-        .loadAsync(`/models/${kind}.${GLB.has(kind) ? 'glb' : 'gltf'}`)
+        .loadAsync(`/models/${kind}${LOD.has(kind) && !this.hiQuality ? '-lo' : ''}.${GLB.has(kind) ? 'glb' : 'gltf'}`)
         .then((g) => {
           const lights: THREE.Object3D[] = [];
           g.scene.traverse((o) => {
@@ -226,7 +230,17 @@ class ModelLib {
     }
     if (kind.startsWith('cop_')) this.policeGear(model);
     group.add(holder);
-    if (CAR_GLB.has(kind)) rigModelWheels(group, model);
+    if (LOD.has(kind)) {
+      // these models ship each wheel as its own node (wheel_*), pivoting on the axle
+      const wheels: THREE.Object3D[] = [];
+      model.traverse((o) => {
+        if (!o.name.startsWith('wheel_')) return;
+        o.userData.axis = 'z';
+        o.userData.r = ((o.userData.r as number) || 0.33) * model.scale.x;
+        wheels.push(o);
+      });
+      if (wheels.length) group.userData.wheels = wheels;
+    } else if (CAR_GLB.has(kind)) rigModelWheels(group, model);
     if (kind.startsWith('building')) this.decorate(group, holder, kind);
     if (l.clips.length) {
       const mixer = new THREE.AnimationMixer(model);
@@ -332,6 +346,16 @@ class ModelLib {
         clearcoatRoughness: 0.08
       });
       return m;
+    }
+    // paint colour comes from the per-car tint, not a baked texture
+    if (n === 'Paint' && src.map && src.name === 'Paint' && src.roughness < 0.5) {
+      src.map = null;
+      src.color.setHex(0xffffff);
+    }
+    // low quality has no environment map: fully metallic paint/chrome would render near-black
+    if (!this.hiQuality && src.metalness > 0.4) {
+      src.metalness = 0.35;
+      src.roughness = Math.max(src.roughness, 0.35);
     }
     if (n === 'Headlight') {
       src.emissive.setHex(0xfff1d6);

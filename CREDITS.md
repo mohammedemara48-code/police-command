@@ -33,14 +33,17 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 
 ## Realistic cars
 
-- `car-sedan.glb` is based on "Sedan car" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/sedan-car-42109739
-- `car-police.glb` is based on "Police SUV with generic livery" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/police-suv-with-generic-livery-76e4ca9b
+- `car-sedan2.glb` (traffic sedan, taxi and patrol car) is based on "White four-door sedan" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/white-four-door-sedan-1f271353
+- `car-hatch.glb` is based on "Silver five-door compact hatchback" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/silver-five-door-compact-hatchback-6bf4a878
+- `car-van.glb` (microbus) is based on "Passenger van with side windows" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/passenger-van-with-side-windows-474dd4a2
+- The three cars above were re-oriented with interiors removed. Each wheel is regrouped into its own `wheel_*` node so it can spin. They were simplified and compressed with glTF-Transform (meshopt, WebP), and each also has a lighter `-lo.glb` version for low quality.
+- `car-police.glb` (command-centre view) is based on "Police SUV with generic livery" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/police-suv-with-generic-livery-76e4ca9b
 - Re-oriented, materials renamed (paint tinted per car, emissive lamps), simplified and compressed with glTF-Transform.
 
 ## Environment
 
 - Road asphalt `Asphalt025C`, sidewalk paving `PavingStones092`, kerbs/sea wall `Concrete034`, beach sand `Ground054` and breakwater rocks `Rock030` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).
 - Sky lighting: "Kloofendal 48d Partly Cloudy (Pure Sky)" HDRI from Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky), CC0 (`sky_1k.hdr`).
-- Egyptian street set (apartment blocks, road signs, striped kerbs, pyramids, microbus, Cairo taxi, plates, rolling wheels): drawn in code for this project (`src/game/world/Egypt.ts`), MIT like the rest of the code.
+- Egyptian street set (apartment blocks, road signs, striped kerbs, taxi roof sign, microbus roof rack, patrol door decals): drawn in code for this project (`src/game/world/Egypt.ts`), MIT like the rest of the code.
 - Water normal map `waternormals.jpg` and the `Water` shader from the three.js examples (https://github.com/mrdoob/three.js), MIT.
 - Shop windows and their goods, street lamps, palms, trees, benches, bins, signs and the corniche railing are built in code.
