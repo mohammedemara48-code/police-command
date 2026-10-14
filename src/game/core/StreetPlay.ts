@@ -157,6 +157,7 @@ type Ped = {
 };
 
 type Traffic = {
+  waitT?: number;
   mesh: THREE.Group;
   speed: number;
   laneX: number;
@@ -738,7 +739,7 @@ export class StreetPlay {
           m.userData.solidMat = m.material;
           const c = (m.material as THREE.Material).clone();
           c.transparent = true;
-          c.opacity = 0.28;
+          c.opacity = 0.15;
           c.depthWrite = false;
           m.userData.fadeMat = c;
         }
@@ -748,6 +749,7 @@ export class StreetPlay {
     if (on) this.faded.add(g);
     else this.faded.delete(g);
   }
+  private hiddenOcc = new Set<THREE.Object3D>();
   private tickOcclusion(dt: number) {
     this.fadeT -= dt;
     if (this.fadeT > 0) return;
@@ -758,11 +760,13 @@ export class StreetPlay {
       sz = T.z - C.z,
       L2 = sx * sx + sz * sz || 1;
     const now = new Set<THREE.Object3D>();
+    const hide = new Set<THREE.Object3D>();
     const test = (g: THREE.Object3D | null | undefined) => {
-      if (!g || !g.visible || g === (this.inCar ? this.car : null)) return;
+      if (!g || (!g.visible && !this.hiddenOcc.has(g)) || g === (this.inCar ? this.car : null)) return;
       const t = ((g.position.x - C.x) * sx + (g.position.z - C.z) * sz) / L2;
-      if (Math.hypot(g.position.x - C.x, g.position.z - C.z) < 3.4) {
-        now.add(g);
+      // a car right at the lens would fill the screen even when faded: hide it outright
+      if (Math.hypot(g.position.x - C.x, g.position.z - C.z) < 4.6) {
+        hide.add(g);
         return;
       }
       if (t <= 0 || t >= 0.92) return;
@@ -777,6 +781,15 @@ export class StreetPlay {
     for (const t of this.cross) test(t.mesh);
     test(this.suspect);
     test(this.speeder);
+    for (const g of [...this.hiddenOcc])
+      if (!hide.has(g)) {
+        g.visible = true;
+        this.hiddenOcc.delete(g);
+      }
+    for (const g of hide) {
+      g.visible = false;
+      this.hiddenOcc.add(g);
+    }
     for (const g of [...this.faded]) if (!now.has(g)) this.setFade(g, false);
     for (const g of now) if (!this.faded.has(g)) this.setFade(g, true);
   }
@@ -1679,7 +1692,7 @@ export class StreetPlay {
     if (this.amb) this.amb.intensity = 0.12 + (1 - day) * 0.35;
     if (this.key) {
       this.key.color.copy(sunColor);
-      this.key.intensity = 0.35 + day * 2.1;
+      this.key.intensity = 0.35 + day * 1.75;
     }
     void haze;
     // street lamps only glow once the light drops
@@ -1943,7 +1956,7 @@ export class StreetPlay {
 
   private cross: { mesh: THREE.Group; speed: number; bumpT?: number }[] = [];
   private spawnCrossTraffic() {
-    const tints = [0xd94a4a, 0xffffff, 0x4a7bd6, 0x3a3a3a, 0xd9b44a, 0x3f9a5a];
+    const tints = [0xa52a2a, 0x2a4a8a, 0x8a9098, 0x1b1c1e, 0xb08a3a, 0x2e5a3a];
     CROSS_Z.slice(1, 4).forEach((z, i) => {
       for (let k = 0; k < 2; k++) {
         const mesh = new THREE.Group();
@@ -1993,7 +2006,7 @@ export class StreetPlay {
       mesh.add(this.box(1.3, 0.32, 1.5, this.mat(0x0e1824, { roughness: 0.15 }), 0, 0.85, -0.1));
       mesh.position.set(laneX, 0, -60 + i * 30);
       mesh.rotation.y = i % 2 === 0 ? 0 : Math.PI;
-      const tints = [0xffffff, 0x4a7bd6, 0xbfc4cc, 0x3a3a3a, 0x3f9a5a, 0xf2f2f2, 0xd9b44a];
+      const tints = [0x8c1c1c, 0x1f3f7a, 0x9aa0a8, 0x1b1c1e, 0x6b5a45, 0x2e5a3a, 0x5a1e2e];
       models.dress(mesh, CARS[i % CARS.length]!, {
         length: 4.5,
         tint: tints[i % tints.length]
@@ -2960,14 +2973,24 @@ export class StreetPlay {
       const me = this.inCar ? this.car.position : this.player.position;
       const dz = (me.z - z) * Math.sign(t.speed);
       // only brake for someone actually in front (not alongside), so cars never park beside the officer
-      if (Math.abs(me.x - t.mesh.position.x) < 1.4 && dz > 2.6 && dz < 7.5) stop = true;
+      if (Math.abs(me.x - t.mesh.position.x) < 1.4 && dz > 2.6 && dz < 7.5) {
+        stop = true;
+        // don't queue behind the officer / patrol car (that parks a car right in the chase camera): change lane
+        t.waitT = (t.waitT ?? 0) + dt;
+        if (t.waitT > 0.8) {
+          t.waitT = 0;
+          const sgn = Math.sign(t.laneX);
+          t.laneX = sgn * (Math.abs(t.laneX) < 2 ? 3.3 : 1.15);
+        }
+      }
       // siren: cars nearby ease to the kerb and stop to let you through
       const near = Math.hypot(C.x - t.mesh.position.x, C.z - z);
       const want = this.inCar ? pullOver(this.siren || this.chasing, near) : 0;
       t.side = (t.side ?? 0) + (want - (t.side ?? 0)) * Math.min(1, dt * 2);
       if (want > 0 && near < 22) stop = true;
       const kerb = t.laneX > 0 ? 1 : -1;
-      t.mesh.position.x = t.laneX + kerb * (t.side ?? 0);
+      const wantX = t.laneX + kerb * (t.side ?? 0);
+      t.mesh.position.x += (wantX - t.mesh.position.x) * Math.min(1, dt * 2.5);
       // collisions with the patrol car: both cars get shoved, the patrol car takes damage
       if (this.inCar) {
         const share = 0.6;
