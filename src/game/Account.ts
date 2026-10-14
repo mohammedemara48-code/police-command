@@ -12,7 +12,11 @@ const AUTH = 'https://ep-calm-hill-b4a4ddw6.neonauth.c-6.us-east-2.aws.neon.tech
 const API = 'https://ep-calm-hill-b4a4ddw6.apirest.c-6.us-east-2.aws.neon.tech/game/rest/v1';
 const META_KEY = 'pc.save.v1';
 
-export interface User { id: string; email: string; name?: string }
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+}
 export const account: { user: User | null; status: string; lastSync: number } = { user: null, status: '', lastSync: 0 };
 let jwt = '';
 let jwtExp = 0;
@@ -38,22 +42,40 @@ async function token() {
   if (jwt && Date.now() < jwtExp - 30000) return jwt;
   const j = await auth('/token');
   jwt = j.token;
-  try { jwtExp = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch { jwtExp = Date.now() + 5 * 60000; }
+  try {
+    jwtExp = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000;
+  } catch {
+    jwtExp = Date.now() + 5 * 60000;
+  }
   return jwt;
 }
 
 /** fetch against the Data API with the signed-in user's JWT */
 export async function authedFetch(path: string, init: RequestInit = {}) {
   const t = await token();
-  const r = await fetch(API + path, { ...init, headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${t}` } });
+  const r = await fetch(API + path, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${t}` }
+  });
   if (!r.ok) throw new Error(`api ${r.status}`);
   return r;
 }
 
-function readMeta() { try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); } catch { return {}; } }
+function readMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(META_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
 
 function snapshot() {
-  return { levels: { ...progress, stars: { ...progress.stars } }, ach: { stats: { ...ach.stats }, unlocked: { ...ach.unlocked } }, meta: readMeta(), char: storedCharacter() };
+  return {
+    levels: { ...progress, stars: { ...progress.stars } },
+    ach: { stats: { ...ach.stats }, unlocked: { ...ach.unlocked } },
+    meta: readMeta(),
+    char: storedCharacter()
+  };
 }
 type Snap = ReturnType<typeof snapshot>;
 
@@ -65,17 +87,24 @@ function merge(a: Snap, b: Partial<Snap>): Snap {
     out.levels.unlocked = Math.max(a.levels.unlocked, L.unlocked || 1);
     out.levels.current = Math.max(a.levels.current, L.current || 1);
     out.levels.xp = Math.max(a.levels.xp ?? 0, L.xp ?? 0);
-    for (const [k, v] of Object.entries(L.stars || {})) out.levels.stars[+k] = Math.max(a.levels.stars[+k] ?? 0, v as number);
+    for (const [k, v] of Object.entries(L.stars || {}))
+      out.levels.stars[+k] = Math.max(a.levels.stars[+k] ?? 0, v as number);
   }
   const A = b.ach;
   if (A) {
-    for (const [k, v] of Object.entries(A.stats || {})) (out.ach.stats as Record<string, number>)[k] = Math.max((a.ach.stats as Record<string, number>)[k] ?? 0, v as number);
-    for (const [k, v] of Object.entries(A.unlocked || {})) out.ach.unlocked[k] = Math.min(a.ach.unlocked[k] ?? Infinity, v as number);
+    for (const [k, v] of Object.entries(A.stats || {}))
+      (out.ach.stats as Record<string, number>)[k] = Math.max(
+        (a.ach.stats as Record<string, number>)[k] ?? 0,
+        v as number
+      );
+    for (const [k, v] of Object.entries(A.unlocked || {}))
+      out.ach.unlocked[k] = Math.min(a.ach.unlocked[k] ?? Infinity, v as number);
   }
   // character: the newer edit wins (never overwritten by a device that has none)
   out.char = newerChar(a.char, b.char ? sanitizeChar(b.char) : null);
   const M = b.meta || {};
-  for (const k of ['best', 'shifts', 'resolved', 'level']) if (typeof M[k] === 'number') out.meta[k] = Math.max(a.meta[k] ?? 0, M[k]);
+  for (const k of ['best', 'shifts', 'resolved', 'level'])
+    if (typeof M[k] === 'number') out.meta[k] = Math.max(a.meta[k] ?? 0, M[k]);
   return out;
 }
 
@@ -86,7 +115,11 @@ function apply(s: Snap) {
   Object.assign(ach.unlocked, s.ach.unlocked);
   saveAch();
   if (s.char && s.char !== storedCharacter()) setCharacter(s.char, false);
-  try { localStorage.setItem(META_KEY, JSON.stringify({ ...readMeta(), ...s.meta })); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(META_KEY, JSON.stringify({ ...readMeta(), ...s.meta }));
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function sync() {
@@ -101,7 +134,11 @@ export async function sync() {
     if (body !== lastPushed) {
       const w = await fetch(`${API}/progress?on_conflict=user_id`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${t}`, 'content-type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+        headers: {
+          Authorization: `Bearer ${t}`,
+          'content-type': 'application/json',
+          Prefer: 'resolution=merge-duplicates'
+        },
         body
       });
       if (!w.ok) throw new Error(`sync ${w.status}`);
@@ -120,7 +157,9 @@ export async function restore() {
   try {
     const j = await auth('/get-session');
     account.user = j?.user ? { id: j.user.id, email: j.user.email, name: j.user.name } : null;
-  } catch { account.user = null; }
+  } catch {
+    account.user = null;
+  }
   emit();
   if (account.user) await sync();
 }
@@ -140,7 +179,11 @@ export async function google() {
 }
 
 export async function signOut() {
-  try { await auth('/sign-out', {}); } catch { /* ignore */ }
+  try {
+    await auth('/sign-out', {});
+  } catch {
+    /* ignore */
+  }
   account.user = null;
   jwt = '';
   account.status = '';
@@ -168,21 +211,35 @@ export function accountHtml() {
 }
 
 export function bindAccount(root: HTMLElement, rerender: () => void) {
-  const msg = (t: string) => { const m = root.querySelector('.acc-msg'); if (m) m.textContent = t; };
-  root.querySelectorAll<HTMLButtonElement>('[data-acc]').forEach((b) => b.addEventListener('click', async () => {
-    const a = b.dataset.acc;
-    try {
-      if (a === 'out') { await signOut(); return rerender(); }
-      if (a === 'sync') { await sync(); return rerender(); }
-      if (a === 'google') { msg('جاري التحويل لجوجل…'); return void (await google()); }
-      const email = (root.querySelector('#acc-email') as HTMLInputElement).value.trim();
-      const pass = (root.querySelector('#acc-pass') as HTMLInputElement).value;
-      if (!/^\S+@\S+\.\S+$/.test(email) || pass.length < 8) return msg('اكتب إيميل صحيح وكلمة سر 8 حروف على الأقل.');
-      msg('لحظة…');
-      await signIn(email, pass, a === 'up');
-      rerender();
-    } catch (e) {
-      msg('مقدرناش ندخلك: ' + ((e as Error).message || 'خطأ'));
-    }
-  }));
+  const msg = (t: string) => {
+    const m = root.querySelector('.acc-msg');
+    if (m) m.textContent = t;
+  };
+  root.querySelectorAll<HTMLButtonElement>('[data-acc]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const a = b.dataset.acc;
+      try {
+        if (a === 'out') {
+          await signOut();
+          return rerender();
+        }
+        if (a === 'sync') {
+          await sync();
+          return rerender();
+        }
+        if (a === 'google') {
+          msg('جاري التحويل لجوجل…');
+          return void (await google());
+        }
+        const email = (root.querySelector('#acc-email') as HTMLInputElement).value.trim();
+        const pass = (root.querySelector('#acc-pass') as HTMLInputElement).value;
+        if (!/^\S+@\S+\.\S+$/.test(email) || pass.length < 8) return msg('اكتب إيميل صحيح وكلمة سر 8 حروف على الأقل.');
+        msg('لحظة…');
+        await signIn(email, pass, a === 'up');
+        rerender();
+      } catch (e) {
+        msg('مقدرناش ندخلك: ' + ((e as Error).message || 'خطأ'));
+      }
+    })
+  );
 }

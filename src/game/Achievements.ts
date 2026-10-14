@@ -1,8 +1,22 @@
 /** Achievements: stats + unlocks saved on the device (and synced to the account when signed in). */
 import { LEVELS, progress } from './Levels';
 
-export interface Stats { arrests: number; gang: number; distance: number; shots: number; hits: number; missions: number; deaths: number }
-interface Ach { id: string; icon: string; title: string; desc: string; test: (s: Stats) => boolean }
+export interface Stats {
+  arrests: number;
+  gang: number;
+  distance: number;
+  shots: number;
+  hits: number;
+  missions: number;
+  deaths: number;
+}
+interface Ach {
+  id: string;
+  icon: string;
+  title: string;
+  desc: string;
+  test: (s: Stats) => boolean;
+}
 
 const KEY = 'pc.ach.v1';
 const allStars = () => LEVELS.every((l) => (progress.stars[l.id] ?? 0) >= 3);
@@ -22,19 +36,35 @@ export const ACHIEVEMENTS: Ach[] = [
   { id: 'stars', icon: '🌟', title: 'كامل النجوم', desc: '3 نجوم في كل المستويات', test: allStars }
 ];
 
-interface Save { stats: Stats; unlocked: Record<string, number> }
+interface Save {
+  stats: Stats;
+  unlocked: Record<string, number>;
+}
 function load(): Save {
-  const base: Save = { stats: { arrests: 0, gang: 0, distance: 0, shots: 0, hits: 0, missions: 0, deaths: 0 }, unlocked: {} };
-  try { const s = JSON.parse(localStorage.getItem(KEY) || '{}'); return { stats: { ...base.stats, ...s.stats }, unlocked: { ...s.unlocked } }; }
-  catch { return base; }
+  const base: Save = {
+    stats: { arrests: 0, gang: 0, distance: 0, shots: 0, hits: 0, missions: 0, deaths: 0 },
+    unlocked: {}
+  };
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || '{}');
+    return { stats: { ...base.stats, ...s.stats }, unlocked: { ...s.unlocked } };
+  } catch {
+    return base;
+  }
 }
 export const ach = load();
 let dirty = false;
 let saveT = 0;
 const listeners: (() => void)[] = [];
-export function onAchChange(f: () => void) { listeners.push(f); }
+export function onAchChange(f: () => void) {
+  listeners.push(f);
+}
 export function saveAch() {
-  try { localStorage.setItem(KEY, JSON.stringify(ach)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(KEY, JSON.stringify(ach));
+  } catch {
+    /* ignore */
+  }
   dirty = false;
   listeners.forEach((f) => f());
 }
@@ -50,7 +80,11 @@ function toast(a: Ach) {
 
 export function checkAch() {
   for (const a of ACHIEVEMENTS) {
-    if (!ach.unlocked[a.id] && a.test(ach.stats)) { ach.unlocked[a.id] = Date.now(); toast(a); dirty = true; }
+    if (!ach.unlocked[a.id] && a.test(ach.stats)) {
+      ach.unlocked[a.id] = Date.now();
+      toast(a);
+      dirty = true;
+    }
   }
   if (dirty) saveAch();
 }
