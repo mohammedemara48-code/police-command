@@ -19,7 +19,13 @@ const TITLES: Record<Kind, string[]> = {
 
 let seq = 0;
 function mulberry(a: number) {
-  return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 /** Generate a call near (px,pz) but not on top of it. Difficulty scales with rank. */
@@ -29,7 +35,8 @@ export function newCall(px: number, pz: number, seed = Date.now(), force?: Kind)
   const lvl = Math.max(1, ['مستجد', 'شرطي', 'رقيب', 'ملازم', 'نقيب', 'رائد'].indexOf(rank().name) + 1);
   const kind = force ?? pick(KINDS);
   // location: on an avenue, between two cross streets, 60–200 m from the player
-  let x = 0, z = 0;
+  let x = 0,
+    z = 0;
   for (let i = 0; i < 20; i++) {
     x = pick(AVENUES_X);
     const j = Math.floor(r() * (CROSS_Z.length - 1));
@@ -42,50 +49,99 @@ export function newCall(px: number, pz: number, seed = Date.now(), force?: Kind)
   const gz = z + dir * 14;
   const n = Math.min(5, 1 + Math.floor(r() * (1 + lvl * 0.7)));
   const list: SuspectSpec[] = [];
-  const mk = (b: Behaviour, i: number): SuspectSpec => ({ b, dx: (i % 2 ? 3 : -3) + (r() - 0.5), dz: -dir * (2 + i * 3) });
+  const mk = (b: Behaviour, i: number): SuspectSpec => ({
+    b,
+    dx: (i % 2 ? 3 : -3) + (r() - 0.5),
+    dz: -dir * (2 + i * 3)
+  });
   let steps: Step[];
   const radio = (text: string): Step => ({ t: 'radio', lines: [{ who: 'mona', text }] });
   switch (kind) {
     case 'chase':
-      steps = [radio(`كل الوحدات: ${pick(TITLES.chase)} في ${where}. الحقها!`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },
-        { t: 'chase', speed: 0.85 + lvl * 0.07, limit: 50, then: r() < 0.5 ? 'surrender' : r() < 0.5 ? 'flee' : 'fight', text: 'الحق العربية' }];
+      steps = [
+        radio(`كل الوحدات: ${pick(TITLES.chase)} في ${where}. الحقها!`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح ${where}` },
+        {
+          t: 'chase',
+          speed: 0.85 + lvl * 0.07,
+          limit: 50,
+          then: r() < 0.5 ? 'surrender' : r() < 0.5 ? 'flee' : 'fight',
+          text: 'الحق العربية'
+        }
+      ];
       break;
     case 'speeder':
-      steps = [radio(`عربية مسرعة جدًا في ${where}. شغّل السارينة ووقّفها على جنب.`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },
-        { t: 'pullover', text: 'شغّل السارينة وخليك وراها' }];
+      steps = [
+        radio(`عربية مسرعة جدًا في ${where}. شغّل السارينة ووقّفها على جنب.`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح ${where}` },
+        { t: 'pullover', text: 'شغّل السارينة وخليك وراها' }
+      ];
       break;
     case 'route': {
       // 4 intersections in a loop near the call
       const ax = AVENUES_X.filter((a) => Math.abs(a - x) <= 60);
-      const pts = [0, 1, 2, 3].map((i) => ({ x: ax[i % ax.length]!, z: CROSS_Z[Math.min(CROSS_Z.length - 1, Math.max(0, CROSS_Z.findIndex((c) => c > z - 1) - 1 + (i >> 1)))]! }));
-      steps = [radio(`العمليات: لف دورية تفقدية على ${pts.length} تقاطعات في ${where}.`), { t: 'car' }, { t: 'checkpoints', pts, text: 'عدّي على نقط التفتيش' }];
+      const pts = [0, 1, 2, 3].map((i) => ({
+        x: ax[i % ax.length]!,
+        z: CROSS_Z[Math.min(CROSS_Z.length - 1, Math.max(0, CROSS_Z.findIndex((c) => c > z - 1) - 1 + (i >> 1)))]!
+      }));
+      steps = [
+        radio(`العمليات: لف دورية تفقدية على ${pts.length} تقاطعات في ${where}.`),
+        { t: 'car' },
+        { t: 'checkpoints', pts, text: 'عدّي على نقط التفتيش' }
+      ];
       break;
     }
     case 'gang':
       for (let i = 0; i < Math.max(2, n); i++) list.push(mk(i === n - 1 && r() < 0.3 ? 'flee' : 'fight', i));
-      steps = [radio(`طلقات نار في ${where}! ${list.length} مسلحين. اتحامى.`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },
-        { t: 'suspects', x, z, cover: true, list, text: 'حيّد المسلحين' }];
+      steps = [
+        radio(`طلقات نار في ${where}! ${list.length} مسلحين. اتحامى.`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح ${where}` },
+        { t: 'suspects', x, z, cover: true, list, text: 'حيّد المسلحين' }
+      ];
       break;
     case 'hostage':
       for (let i = 0; i < Math.max(2, Math.min(3, n)); i++) list.push(mk('fight', i));
-      steps = [radio(`${pick(TITLES.hostage)} في ${where}. خلي بالك من الرهينة.`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },
-        { t: 'suspects', x, z, cover: true, hostage: true, list, text: 'حرّر الرهينة' }];
+      steps = [
+        radio(`${pick(TITLES.hostage)} في ${where}. خلي بالك من الرهينة.`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح ${where}` },
+        { t: 'suspects', x, z, cover: true, hostage: true, list, text: 'حرّر الرهينة' }
+      ];
       break;
     case 'runner':
       list.push(mk('flee', 0));
-      steps = [radio(`${pick(TITLES.runner)} في ${where}.`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },
-        { t: 'suspects', x, z, list, text: 'امسك الهارب' }];
+      steps = [
+        radio(`${pick(TITLES.runner)} في ${where}.`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح ${where}` },
+        { t: 'suspects', x, z, list, text: 'امسك الهارب' }
+      ];
       break;
     default:
       for (let i = 0; i < Math.min(3, n); i++) list.push(mk(i === 0 ? 'surrender' : r() < 0.5 ? 'flee' : 'fight', i));
-      steps = [radio(`${pick(TITLES.robbery)} في ${where} دلوقتي!`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },
-        { t: 'suspects', x, z, list, cover: list.some((s) => s.b === 'fight'), text: 'اقبض على الحرامية' }];
+      steps = [
+        radio(`${pick(TITLES.robbery)} في ${where} دلوقتي!`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح ${where}` },
+        { t: 'suspects', x, z, list, cover: list.some((s) => s.b === 'fight'), text: 'اقبض على الحرامية' }
+      ];
   }
   const id = 100 + ++seq;
   const title = pick(TITLES[kind]);
   const def: LevelDef = {
-    id, placeId: districtAt(z), title: `بلاغ: ${title}`, brief: `بلاغ من العمليات في ${where}.`,
-    limit: 150 + list.length * 15, reward: 1200 + lvl * 400 + list.length * 300, rep: 3 + lvl, stars: [60, 100], speed: 1, steps
+    id,
+    placeId: districtAt(z),
+    title: `بلاغ: ${title}`,
+    brief: `بلاغ من العمليات في ${where}.`,
+    limit: 150 + list.length * 15,
+    reward: 1200 + lvl * 400 + list.length * 300,
+    rep: 3 + lvl,
+    stars: [60, 100],
+    speed: 1,
+    steps
   };
   patrolCalls.set(id, def);
   return def;
