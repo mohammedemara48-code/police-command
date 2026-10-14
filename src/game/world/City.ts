@@ -1,7 +1,7 @@
 /** Open city grid: avenues + cross streets, district blocks built from instanced boxes (one draw call per block, culled per chunk). */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { Q } from './Quality';
+import { Q } from '../config/Quality';
 import { surface, worldUV, segments, PROP_MATS } from './Environment';
 
 export const AVENUES_X = [-120, -60, 0, 60, 120];

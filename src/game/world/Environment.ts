@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Water } from 'three/examples/jsm/objects/Water.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { Q } from './Quality';
+import { Q } from '../config/Quality';
 
 const BASE = (import.meta.env?.BASE_URL ?? '/') + 'textures/';
 const loader = new THREE.TextureLoader();

@@ -1,16 +1,16 @@
-import { boardHtml, recordWeekly } from './Leaderboard';
+import { boardHtml, recordWeekly } from '../services/Leaderboard';
 import { openCreator } from './CharacterCreator';
-import { needsCharacter } from './Character';
-import { models } from './Models';
-import { accountHtml, bindAccount, onAccount, restore, account } from './Account';
-import { achHtml } from './Achievements';
+import { needsCharacter } from '../entities/Character';
+import { models } from '../core/Models';
+import { accountHtml, bindAccount, onAccount, restore, account } from '../services/Account';
+import { achHtml } from '../systems/Achievements';
 // @source-complete
-import { GameManager } from './GameManager';
-import { IncidentManager } from './IncidentManager';
-import { CityScene } from './CityScene';
+import { GameManager } from '../core/GameManager';
+import { IncidentManager } from '../missions/IncidentManager';
+import { CityScene } from '../core/CityScene';
 import { CCTVFeed } from './CCTVFeed';
-import { audio } from './AudioManager';
-import { LEVELS, levelById, progress, setMissionXpHook } from './Levels';
+import { audio } from '../systems/AudioManager';
+import { LEVELS, levelById, progress, setMissionXpHook } from '../missions/Levels';
 setMissionXpHook(recordWeekly);
 import { settingsHtml, bindSettings } from './Meta';
 import {
@@ -26,7 +26,7 @@ import {
   type DecisionChoice,
   type MissionReport,
   type ActionHeat
-} from './types';
+} from '../core/types';
 
 type Tab = 'units' | 'officers' | 'investigations' | 'buildings' | 'analytics' | 'settings' | null;
 

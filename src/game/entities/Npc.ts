@@ -4,11 +4,11 @@
  */
 import * as THREE from 'three';
 import { character } from './Character';
-import { weaponStats } from './logic/character';
-import { audio } from './AudioManager';
-import { addStat } from './Achievements';
-import { rank, type Behaviour, type SuspectSpec } from './Levels';
-import { findPath, farNode, followPath } from './City';
+import { weaponStats } from '../logic/character';
+import { audio } from '../systems/AudioManager';
+import { addStat } from '../systems/Achievements';
+import { rank, type Behaviour, type SuspectSpec } from '../missions/Levels';
+import { findPath, farNode, followPath } from '../world/City';
 
 export type SState = 'idle' | 'flee' | 'fight' | 'hands' | 'cuffed' | 'down' | 'hostage' | 'free';
 export interface Suspect {

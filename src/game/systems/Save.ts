@@ -1,6 +1,6 @@
 /** Autosave/resume of the command center, plus save export/import (all `pc.*` localStorage keys). */
-import type { GameManager } from './GameManager';
-import { COMMAND_KEY, SAVE_PREFIX, buildSaveFile, mergePersisted, parseSaveFile, pickPersisted } from './logic/save';
+import type { GameManager } from '../core/GameManager';
+import { COMMAND_KEY, SAVE_PREFIX, buildSaveFile, mergePersisted, parseSaveFile, pickPersisted } from '../logic/save';
 
 export function restoreCommand(game: GameManager) {
   try {

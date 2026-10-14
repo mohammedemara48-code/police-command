@@ -1,5 +1,5 @@
 /** Achievements: stats + unlocks saved on the device (and synced to the account when signed in). */
-import { LEVELS, progress } from './Levels';
+import { LEVELS, progress } from '../missions/Levels';
 
 export interface Stats {
   arrests: number;

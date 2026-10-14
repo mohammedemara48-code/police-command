@@ -3,10 +3,10 @@
  * (levels/stars, achievements, career level, best score) is merged with the server copy and synced.
  * Only public endpoints live here: data access is enforced server-side by row-level security (user_id = auth.user_id()).
  */
-import { progress, saveProgress } from './Levels';
-import { ach, saveAch } from './Achievements';
-import { storedCharacter, setCharacter } from './Character';
-import { sanitizeChar, newerChar } from './logic/character';
+import { progress, saveProgress } from '../missions/Levels';
+import { ach, saveAch } from '../systems/Achievements';
+import { storedCharacter, setCharacter } from '../entities/Character';
+import { sanitizeChar, newerChar } from '../logic/character';
 
 const AUTH = 'https://ep-calm-hill-b4a4ddw6.neonauth.c-6.us-east-2.aws.neon.tech/game/auth';
 const API = 'https://ep-calm-hill-b4a4ddw6.apirest.c-6.us-east-2.aws.neon.tech/game/rest/v1';

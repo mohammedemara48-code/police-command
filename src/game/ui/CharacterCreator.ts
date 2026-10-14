@@ -1,7 +1,7 @@
 /** "Your officer" screen: body, skin, hair, uniform, weapon with a rotating 3D preview. */
 import * as THREE from 'three';
-import { models } from './Models';
-import { character, setCharacter } from './Character';
+import { models } from '../core/Models';
+import { character, setCharacter } from '../entities/Character';
 import {
   SKINS,
   HAIRS,
@@ -11,7 +11,7 @@ import {
   recolorFor,
   type Character,
   type WeaponId
-} from './logic/character';
+} from '../logic/character';
 
 const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
 

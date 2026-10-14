@@ -1,5 +1,5 @@
 /** Runtime store for the officer's look + weapon: localStorage, change listeners, account sync hooks. */
-import { CHAR_KEY, sanitizeChar, type Character } from './logic/character';
+import { CHAR_KEY, sanitizeChar, type Character } from '../logic/character';
 
 function read(): Character | null {
   try {

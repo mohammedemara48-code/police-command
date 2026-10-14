@@ -1,5 +1,5 @@
 /** Story campaign: 12 scripted missions (see docs/GAME_DESIGN.md). Unlocks, stars, XP/rank saved locally (and synced when signed in). */
-import { rankForXp, starsFor, xpFor } from './logic/rewards';
+import { rankForXp, starsFor, xpFor } from '../logic/rewards';
 export type Who = 'mona' | 'hamed' | 'yasser' | 'suspect' | 'informant' | 'boss';
 export interface Line {
   who: Who;
@@ -375,7 +375,7 @@ export function levelById(id: number) {
   return patrolCalls.get(id) ?? LEVELS.find((l) => l.id === id) ?? LEVELS[0];
 }
 
-export { RANKS } from './logic/rewards';
+export { RANKS } from '../logic/rewards';
 export function rank() {
   return rankForXp(progress.xp ?? 0);
 }

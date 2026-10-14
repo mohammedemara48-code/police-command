@@ -1,5 +1,5 @@
 /** Weekly leaderboard on Neon (table weekly_scores, RLS + anti-cheat trigger server-side). Signed-in players only. */
-import { addWeekly, boardName, weekStart, type Weekly } from './logic/weekly';
+import { addWeekly, boardName, weekStart, type Weekly } from '../logic/weekly';
 import { account, authedFetch } from './Account';
 
 const KEY = 'pc.week.v1';
