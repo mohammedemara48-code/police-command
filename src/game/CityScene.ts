@@ -1,6 +1,11 @@
 import { reducedMotion } from './Motion';
 // @source-complete
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { loadEnvironment } from './Environment';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
 import type { StreetPlay } from './StreetPlay';
@@ -117,6 +122,7 @@ export class CityScene {
 
     this.windowMats.push(models.windowMat);
     this.buildLighting();
+    void loadEnvironment(this.renderer, this.scene)?.catch(() => undefined);
     this.buildCity();
     this.spawnFleetCars();
     this.setTimeOfDay(8);
@@ -1243,7 +1249,9 @@ export class CityScene {
     if (this.street?.active) {
       this.renderer.toneMappingExposure = 1.45;
       this.street.update(dt);
-      this.renderer.render(this.scene, this.camera);
+      const c = this.bloom();
+      if (c) c.render(dt);
+      else this.renderer.render(this.scene, this.camera);
       return;
     }
     this.stepFly();
@@ -1287,7 +1295,23 @@ export class CityScene {
     this.renderer.render(this.scene, this.camera);
   }
 
+  private composer: EffectComposer | null = null;
+  /** Subtle bloom for lamps, signs and lit shop windows (high quality only; street mode). */
+  private bloom() {
+    if (!Q.bloom || document.documentElement.classList.contains('gl-lost')) return null;
+    if (!this.composer) {
+      const size = this.renderer.getSize(new THREE.Vector2());
+      const c = new EffectComposer(this.renderer);
+      c.addPass(new RenderPass(this.scene, this.camera));
+      c.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.32, 0.45, 0.9));
+      c.addPass(new OutputPass());
+      this.composer = c;
+    }
+    return this.composer;
+  }
+
   onResize() {
+    this.composer?.setSize(window.innerWidth, window.innerHeight);
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);

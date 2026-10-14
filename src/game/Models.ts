@@ -341,6 +341,12 @@ class ModelLib {
       src.emissive.setHex(0x2a6bff);
       src.emissiveIntensity = 0.6;
     } else if (/glaz|glass/i.test(n)) {
+      // tinted glass: readable cabin silhouette, not a hole in the car
+      src.color.setHex(0x1c262e);
+      src.transparent = true;
+      src.opacity = 0.9;
+      src.metalness = 0.6;
+      src.roughness = 0.06;
       src.envMapIntensity = 1.6;
       src.depthWrite = false;
     }

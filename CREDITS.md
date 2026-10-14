@@ -32,3 +32,10 @@
 - `car-sedan.glb` is based on "Sedan car" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/sedan-car-42109739
 - `car-police.glb` is based on "Police SUV with generic livery" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/police-suv-with-generic-livery-76e4ca9b
 - Re-oriented, materials renamed (paint tinted per car, emissive lamps), simplified and compressed with glTF-Transform.
+
+## Environment
+
+- Road asphalt `Asphalt025C`, sidewalk paving `PavingStones092`, kerbs/sea wall `Concrete034`, beach sand `Ground054` and breakwater rocks `Rock030` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).
+- Sky lighting: "Venice Sunset" HDRI from Poly Haven (https://polyhaven.com/a/venice_sunset), CC0 (`sky_1k.hdr`).
+- Water normal map `waternormals.jpg` and the `Water` shader from the three.js examples (https://github.com/mrdoob/three.js), MIT.
+- Shop windows and their goods, street lamps, palms, trees, benches, bins, signs and the corniche railing are built in code.
