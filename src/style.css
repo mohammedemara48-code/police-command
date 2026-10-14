@@ -860,3 +860,21 @@ html:not(.onfoot) #street-speedo:not(:empty){display:flex}
 #street-speedo span{font-size:10px;opacity:.8}
 html.onfoot .street-actions .incar{display:none}
 .street-actions [data-act="siren"].held{background:linear-gradient(90deg,#ff3d5a,#3d7bff);color:#fff}
+
+/* Police station hub */
+.street-actions button[data-act="hub"]{display:none}
+html.onfoot.can-hub .street-actions button[data-act="hub"]{display:block;background:linear-gradient(90deg,#1d4fa3,#3d7bff);color:#fff}
+#street-hub{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:30;background:rgba(4,8,16,.55);padding:16px}
+#street-hub .start-screen{position:static;background:none}
+.hub-card{max-width:440px;width:100%;max-height:88vh;overflow:auto}
+.hub-sub{opacity:.75;font-size:13px;margin:0 0 10px}
+.hub-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hub-grid button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px 8px;border-radius:14px;border:1px solid rgba(126,200,255,.35);background:rgba(255,255,255,.05);color:inherit;font:inherit;font-size:26px;cursor:pointer}
+.hub-grid b{font-size:15px}
+.hub-grid small{font-size:11px;opacity:.7}
+.hub-list{display:flex;flex-direction:column;gap:8px;text-align:right}
+.hub-list button{padding:12px 14px;border-radius:12px;border:1px solid rgba(126,200,255,.3);background:rgba(255,255,255,.04);color:inherit;font:inherit;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.hub-list button.on{border-color:#7ec8ff;background:rgba(126,200,255,.2)}
+.hub-list button:disabled{opacity:.45}
+.hub-list small{opacity:.7}
+.hub-close{margin-top:14px;width:100%}

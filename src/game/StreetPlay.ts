@@ -2,8 +2,10 @@ import { reducedMotion } from './Motion';
 import { stepLoco, followCamYaw, wrapAngle } from './logic/locomotion';
 import { stepCar, driftOf, kmh, hitDamage, pullOver } from './logic/driving';
 import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from './logic/chase';
-import { character, onCharacter } from './Character';
-import { modelFor, recolorFor, WEAPONS } from './logic/character';
+import { character, onCharacter, setCharacter } from './Character';
+import { STATION, hubAllowed } from './logic/station';
+import { openCreator } from './CharacterCreator';
+import { modelFor, recolorFor, WEAPONS, type WeaponId } from './logic/character';
 import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z, findPath, farNode, followPath } from './City';
 import { newCall } from './Dispatch';
 import { Squad } from './Npc';
@@ -380,6 +382,7 @@ export class StreetPlay {
     for (const side of [-1, 1]) {
       for (let z = -96; z <= 232; z += 9) {
         if (nearCross(z, 8)) continue;
+        if (side > 0 && Math.abs(z - STATION.z) < 5) { if (!this.stationBuilt) this.buildStation(); continue; }
         const near = STREET_PLACES.reduce((a, p) => (Math.abs(p.z - z) < Math.abs(a.z - z) ? p : a));
         const seed = Math.abs(Math.floor(z * 7 + side * 13));
         const h = near.id === 'downtown' ? 9 + (seed % 12) : near.id === 'suburb' ? 4 + (seed % 3) : 5 + (seed % 7);
@@ -393,6 +396,103 @@ export class StreetPlay {
         if (near.id !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
       }
     }
+  }
+
+  private stationBuilt = false;
+  private canHub = false;
+  /** The police station (hub): blue-white facade, lit sign, beacon lights and a glowing door ring. */
+  private buildStation() {
+    this.stationBuilt = true;
+    const g = new THREE.Group();
+    g.position.set(STATION.x, 0, STATION.z);
+    const w = 8, h = 8, d = 8.4;
+    g.add(this.box(d, h, w, this.mat(0xe8edf3, { roughness: 0.7 }), 0, h / 2, 0));
+    g.add(this.box(d + 0.1, 1.1, w + 0.1, this.mat(0x1d4fa3), 0, 2.9, 0));
+    g.add(this.box(0.2, 2.6, 2.4, this.mat(0x1b2230, { roughness: 0.3, metalness: 0.4 }), -d / 2 - 0.05, 1.3, 0));
+    // lit sign
+    const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+    const x = c.getContext('2d')!;
+    x.fillStyle = '#0d2c66'; x.fillRect(0, 0, 512, 128);
+    x.fillStyle = '#fff'; x.font = 'bold 54px Cairo, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('قسم الشرطة  POLICE', 256, 66);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.6 }));
+    sign.position.set(-d / 2 - 0.12, 4.4, 0); sign.rotation.y = -Math.PI / 2;
+    g.add(sign);
+    for (const s of [-1, 1]) {
+      const l = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: s > 0 ? 0xff3355 : 0x3377ff, emissive: s > 0 ? 0xff3355 : 0x3377ff, emissiveIntensity: 2 }));
+      l.position.set(-d / 2 - 0.2, 3.1, s * 1.6);
+      l.userData.blink = s;
+      g.add(l);
+      this.stationLights.push(l);
+    }
+    this.group.add(g);
+    // door ring on the sidewalk
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.45, 36), new THREE.MeshBasicMaterial({ color: 0x5ab0ff, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(STATION.door.x, 0.04, STATION.door.z);
+    this.stationRing = ring;
+    this.group.add(ring);
+  }
+  private stationLights: THREE.Mesh[] = [];
+  private stationRing: THREE.Mesh | null = null;
+  private hubEl: HTMLElement | null = null;
+
+  /** Station hub: missions board, garage, armory, locker room. */
+  private openHub(tab: 'main' | 'missions' | 'armory' = 'main') {
+    if (this.hubEl) this.hubEl.remove();
+    const el = document.createElement('div');
+    el.id = 'street-hub';
+    const c = character();
+    const body = tab === 'missions'
+      ? `<h2>📋 لوحة المهام</h2><div class="hub-list">${LEVELS.map((l) => {
+          const locked = l.id > progress.unlocked, st = progress.stars[l.id] ?? 0;
+          return `<button type="button" data-lv="${l.id}" ${locked ? 'disabled' : ''}>${locked ? '🔒' : '▶'} ${l.id}. ${l.title} <small>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</small></button>`;
+        }).join('')}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية)</button></div>`
+      : tab === 'armory'
+        ? `<h2>🔫 مخزن السلاح</h2><div class="hub-list">${(Object.keys(WEAPONS) as WeaponId[]).map((k) =>
+            `<button type="button" data-wp="${k}" class="${c.weapon === k ? 'on' : ''}">${WEAPONS[k].name} <small>${WEAPONS[k].desc}</small></button>`).join('')}</div>`
+        : `<h2>🏢 قسم الشرطة</h2><p class="hub-sub">رتبتك: ${rank().name} · الدورية ${100 - this.damage}%</p>
+          <div class="hub-grid">
+            <button type="button" data-hub="missions">📋<b>لوحة المهام</b><small>اختار مهمتك</small></button>
+            <button type="button" data-hub="garage">🔧<b>الجراج</b><small>${this.damage ? 'صلّح الدورية' : 'الدورية سليمة'}</small></button>
+            <button type="button" data-hub="armory">🔫<b>مخزن السلاح</b><small>${WEAPONS[c.weapon].name} · ذخيرة كاملة</small></button>
+            <button type="button" data-hub="locker">👮<b>غرفة الملابس</b><small>غيّر شكلك</small></button>
+          </div>`;
+    el.innerHTML = `<div class="street-result-card hub-card">${body}<button type="button" class="hub-close" data-hub="${tab === 'main' ? 'close' : 'main'}">${tab === 'main' ? 'اطلع للشارع' : 'رجوع'}</button></div>`;
+    document.getElementById('app')!.appendChild(el);
+    this.hubEl = el;
+    audio.sample('door', 0.6);
+    el.querySelectorAll<HTMLButtonElement>('[data-hub]').forEach((b) => b.addEventListener('click', () => {
+      audio.click();
+      const a = b.dataset.hub!;
+      if (a === 'close') this.closeHub();
+      else if (a === 'main' || a === 'missions' || a === 'armory') this.openHub(a);
+      else if (a === 'garage') {
+        this.damage = 0;
+        this.car.position.set(STATION.parking.x, 0, STATION.parking.z);
+        this.car.rotation.y = 0; this.speed = 0;
+        this.squad.resetPlayer();
+        this.setStatus('🔧 الدورية اتصلحت ومركونة قدام القسم.');
+        this.openHub('main');
+      } else if (a === 'locker') {
+        el.innerHTML = '';
+        openCreator(el, { first: false, done: () => this.openHub('main') });
+      }
+    }));
+    el.querySelectorAll<HTMLButtonElement>('[data-wp]').forEach((b) => b.addEventListener('click', () => {
+      setCharacter({ ...character(), weapon: b.dataset.wp as WeaponId });
+      this.squad.resetPlayer();
+      audio.sample('confirm', 0.7);
+      this.openHub('armory');
+    }));
+    el.querySelectorAll<HTMLButtonElement>('[data-lv]').forEach((b) => b.addEventListener('click', () => {
+      this.closeHub();
+      this.setLevel(Number(b.dataset.lv));
+    }));
+  }
+  private closeHub() {
+    this.hubEl?.remove();
+    this.hubEl = null;
   }
 
   private shopMats = new Map<string, THREE.Material>();
@@ -660,7 +760,7 @@ export class StreetPlay {
     if (this.msIdx < 0 || this.resultEl) return;
     const st = this.level.steps[this.msIdx];
     if (!st) return;
-    this.msTime += dt;
+    if (!this.hubEl) this.msTime += dt; // the clock stops inside the station
     const pos = this.inCar ? this.car.position : this.player.position;
     switch (st.t) {
       case 'car':
@@ -749,6 +849,9 @@ export class StreetPlay {
       document.documentElement.classList.toggle('can-order', can.includes('o'));
       document.documentElement.classList.toggle('can-cuff', can.includes('c'));
     }
+    const hub = hubAllowed({ inCar: this.inCar, chasing: this.chasing, hostiles: q.list.filter((s) => s.b === 'fight' && s.state !== 'cuffed' && s.state !== 'down').length, x: me.x, z: me.z });
+    if (hub !== this.canHub) { this.canHub = hub; document.documentElement.classList.toggle('can-hub', hub); }
+    if (this.stationRing) (this.stationRing.material as THREE.MeshBasicMaterial).opacity = hub ? 1 : 0.55;
   }
 
   /** reticle on the locked target (per frame, one projection) */
@@ -1215,6 +1318,7 @@ export class StreetPlay {
         <button type="button" data-act="shoot">🔫<br>اضرب</button>
         <button type="button" data-act="order">📢 استسلم!</button>
         <button type="button" data-act="cuff">🔗 كلبش</button>
+        <button type="button" data-act="hub">🏢 ادخل القسم</button>
       </div>
       <div id="street-radio"></div>
       <div id="street-ret"></div>
@@ -1267,6 +1371,7 @@ export class StreetPlay {
     this.radioEl!.addEventListener('click', () => { this.radioT = 0; this.showRadio(); });
     ui.querySelector('[data-act="order"]')!.addEventListener('click', () => this.orderSurrender());
     ui.querySelector('[data-act="cuff"]')!.addEventListener('click', () => this.cuffNow());
+    ui.querySelector('[data-act="hub"]')!.addEventListener('click', () => { if (this.canHub) this.openHub(); });
     // Stop the browser from turning touches on the controls into scroll/zoom/long-press.
     ui.addEventListener('touchstart', (e) => { if ((e.target as HTMLElement).closest('[data-k], [data-act="run"], [data-act="shoot"], .street-stick')) e.preventDefault(); }, { passive: false });
     ui.querySelector('[data-act="car"]')!.addEventListener('click', () => this.toggleCar());
@@ -1315,6 +1420,7 @@ export class StreetPlay {
     if (down && e.code === 'KeyQ') this.orderSurrender();
     if (down && e.code === 'KeyC') this.cuffNow();
     if (down && e.code === 'KeyH' && this.inCar) this.toggleSiren();
+    if (down && e.code === 'KeyB' && this.canHub) this.openHub();
     if (down && e.code === 'KeyM') {
       if (this.mapEl) this.closeMap();
       else this.openMap();
@@ -1665,6 +1771,8 @@ export class StreetPlay {
       this.key.position.set(a.x + 18, 30, a.z - 14);
       this.key.target.position.set(a.x, 0, a.z);
     }
+    const ph = Math.floor(performance.now() / 420) % 2 === 0;
+    for (const l of this.stationLights) l.visible = ph === (l.userData.blink > 0);
     const sp = Math.abs(this.speed);
     audio.engine(this.inCar, Math.min(1, sp / 18));
     if (this.inCar && sp > 2 && Math.random() < dt * 30) {
@@ -1690,7 +1798,7 @@ export class StreetPlay {
   }
 
   private stepActor(dt: number, input: { f: boolean; b: boolean; l: boolean; r: boolean; run: boolean }) {
-    if (this.resultEl) return;
+    if (this.resultEl || this.hubEl) return;
     let turn = (input.l ? 1 : 0) - (input.r ? 1 : 0);
     let throttle = (input.f ? 1 : 0) - (input.b ? 1 : 0);
 
