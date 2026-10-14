@@ -1,6 +1,28 @@
 import { reducedMotion } from '../config/Motion';
 import { stepLoco, followCamYaw, wrapAngle } from '../logic/locomotion';
-import { stepCar, driftOf, kmh, hitDamage, pullOver } from '../logic/driving';
+import {
+  stepCar,
+  driftOf,
+  kmh,
+  hitDamage,
+  pullOver,
+  smoothSteer,
+  camRig,
+  topSpeed,
+  smokeLevel,
+  type CamRig
+} from '../logic/driving';
+import {
+  overlap,
+  bounce,
+  pitSpin,
+  spinRate,
+  SPIN_T,
+  type CarBox,
+  type Contact,
+  type Motion,
+  type PitInput
+} from '../logic/crash';
 import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from '../logic/chase';
 import { character, onCharacter, setCharacter } from '../entities/Character';
 import { STATION, hubAllowed } from '../logic/station';
@@ -19,7 +41,8 @@ import {
   districtAt,
   findPath,
   farNode,
-  followPath
+  followPath,
+  nearestNode
 } from '../world/City';
 import {
   surface,
@@ -224,6 +247,22 @@ export class StreetPlay {
   private siren = false;
   private damage = 0;
   private hitCool = 0;
+  /** smoothed steering wheel, -1..1 */
+  private steerCur = 0;
+  private carMax = 16;
+  private offRoadT = 0;
+  private rig: CamRig = { lag: 0.0008, ahead: 0, fov: 0 };
+  // scratch objects for car contacts (reused every frame)
+  private myBox: CarBox = { x: 0, z: 0, yaw: 0, hw: 0.95, hl: 2.35 };
+  private otherBox: CarBox = { x: 0, z: 0, yaw: 0, hw: 0.95, hl: 2.25 };
+  private contact: Contact = { nx: 0, nz: 0, depth: 0 };
+  private motion: Motion = { speed: 0, velYaw: 0 };
+  /** PIT spin-out of the suspect car */
+  private spinT = 0;
+  private spinDir = 0;
+  private pitCool = 0;
+  private pitHead = 0;
+  private pitIn: PitInput = { px: 0, pz: 0, pVelYaw: 0, pSpeed: 0, sx: 0, sz: 0, sYaw: 0, sSpeed: 0, sHl: 2.35 };
   private speedoEl: HTMLElement | null = null;
   private speedoTxt = '';
   private camFov = 48;
@@ -541,6 +580,7 @@ export class StreetPlay {
         this.spTurn = wrapAngle(head - g.rotation.y);
         g.rotation.y = approachAngle(g.rotation.y, head, dt * 5);
       }
+      if (this.inCar) this.carVsCar(g, Math.sin(g.rotation.y) * v, Math.cos(g.rotation.y) * v, 1, 2.35);
       this.pullM = stepPull(this.pullM, { siren: this.siren, inCar: this.inCar, dist }, dt);
       if (this.pullM >= PULL_T) {
         this.pullStopped = true;
@@ -558,6 +598,7 @@ export class StreetPlay {
             ? `🚨 خليك وراها… ${pct}%`
             : text;
     } else {
+      if (this.inCar) this.carVsCar(g, 0, 0, 1, 2.35);
       this.msText = this.inCar ? 'انزل واكتب المخالفة' : 'روح للسواق واكتب المخالفة';
       if (!this.inCar && dist < TICKET_R) {
         audio.sample('success', 0.6);
@@ -1783,7 +1824,7 @@ export class StreetPlay {
     return g;
   }
 
-  private cross: { mesh: THREE.Group; speed: number }[] = [];
+  private cross: { mesh: THREE.Group; speed: number; bumpT?: number }[] = [];
   private spawnCrossTraffic() {
     const tints = [0xd94a4a, 0xffffff, 0x4a7bd6, 0x3a3a3a, 0xd9b44a, 0x3f9a5a];
     CROSS_Z.slice(1, 4).forEach((z, i) => {
@@ -2223,6 +2264,8 @@ export class StreetPlay {
 
   private beginChase() {
     this.chasing = true;
+    this.spinT = 0;
+    this.pitCool = 0;
     this.chaseTime = 0;
     this.chaseClock = 0;
     this.chaseTurn = 0;
@@ -2414,7 +2457,7 @@ export class StreetPlay {
     if (!Number.isFinite(this.camPos.x + this.camPos.y + this.camPos.z)) this.camPos.copy(dest);
     this.camPos.lerp(dest, k);
     this.camera.position.copy(this.camPos);
-    const ahead = this.inCar ? Math.min(6, Math.abs(this.speed) * 0.3) : 0;
+    const ahead = this.inCar ? this.rig.ahead * (this.speed < 0 ? -0.5 : 1) : 0;
     this.look.set(target.position.x + sin * ahead, this.inCar ? 1.1 : 1.3, target.position.z + cos * ahead);
     this.camera.lookAt(this.look);
   }
@@ -2481,14 +2524,15 @@ export class StreetPlay {
         this.speedoTxt = txt;
       }
     }
-    // chase camera: widen the view with speed, smoothly
-    const fovT = 48 + (this.inCar ? Math.min(12, Math.abs(this.speed) * 0.5) : 0);
-    this.camFov += (fovT - this.camFov) * Math.min(1, dt * 3);
+    // chase camera: trails a touch and widens the view with speed (rigid and fixed with reduced motion)
+    const rig = camRig(this.inCar ? this.speed : 0, this.carMax, reducedMotion, this.rig);
+    const fovT = 48 + (this.inCar ? rig.fov : 0);
+    this.camFov = reducedMotion ? fovT : this.camFov + (fovT - this.camFov) * Math.min(1, dt * 3);
     if (Math.abs(this.camera.fov - this.camFov) > 0.05) {
       this.camera.fov = this.camFov;
       this.camera.updateProjectionMatrix();
     }
-    this.snapCamera(1 - Math.pow(0.0008, dt));
+    this.snapCamera(this.inCar ? (rig.lag > 0 ? 1 - Math.pow(rig.lag, dt) : 1) : 1 - Math.pow(0.0008, dt));
     this.tickOcclusion(dt);
     if (this.recoil > 0 && !reducedMotion) {
       this.camera.position.y += this.recoil * 0.05;
@@ -2529,8 +2573,10 @@ export class StreetPlay {
     if (this.inCar) {
       // arcade handling: analog stick or keys, handbrake (run button / Space) drifts
       const max = (this.chasing ? 20 : 16) + rank().car;
+      this.carMax = max;
       const thr = this.travel ? throttle : this.stick.y || throttle;
-      const steer = this.travel ? 0 : -this.stick.x || turn;
+      this.steerCur = this.travel ? 0 : smoothSteer(this.steerCur, -this.stick.x || turn, this.speed, dt);
+      const steer = this.steerCur;
       const hb = !this.travel && (this.hold.run || this.keys.has('Space'));
       const cs = stepCar(
         { speed: this.speed, yaw: this.yaw, velYaw: this.velYaw },
@@ -2560,13 +2606,19 @@ export class StreetPlay {
       const C0 = this.car.position;
       // slide along kerbs/buildings instead of bouncing and getting stuck
       if (!onRoad(C0.x + cmx, C0.z + cmz, 0.4)) {
+        // kerb/building: lose the speed going into it, keep sliding along it
         if (onRoad(C0.x + cmx, C0.z, 0.4)) {
           C0.x += cmx;
+          this.wallHit(0, -Math.sign(cmz));
           this.speed *= 1 - Math.min(0.9, dt * 2.5);
         } else if (onRoad(C0.x, C0.z + cmz, 0.4)) {
           C0.z += cmz;
+          this.wallHit(-Math.sign(cmx), 0);
           this.speed *= 1 - Math.min(0.9, dt * 2.5);
-        } else this.speed *= -0.2;
+        } else {
+          if (Math.abs(this.speed) > 6) this.crash(Math.abs(this.speed) * 0.6);
+          this.speed *= -0.2;
+        }
       } else {
         C0.x += cmx;
         C0.z += cmz;
@@ -2582,6 +2634,18 @@ export class StreetPlay {
         this.car.position.z -= Math.cos(this.yaw) * this.speed * dt * 1.5;
         this.speed *= -0.25;
       }
+      // never stay wedged off the road (pushed by traffic into a block): back to the nearest junction
+      this.offRoadT = onRoad(this.car.position.x, this.car.position.z, 0.4) ? 0 : this.offRoadT + dt;
+      if (this.offRoadT > 1.5) {
+        const n = nearestNode(this.car.position.x, this.car.position.z);
+        this.car.position.set(n.x, 0, n.z);
+        this.speed = 0;
+        this.offRoadT = 0;
+      }
+      // badly damaged: smoke from under the bonnet
+      const sm = smokeLevel(this.damage);
+      if (sm > 0 && Math.random() < dt * (3 + 12 * sm))
+        fx.smoke(this.group, C0.x + Math.sin(this.yaw) * 1.7, 0.95, C0.z + Math.cos(this.yaw) * 1.7);
     } else {
       // camera-relative third-person movement with acceleration, turning and wall sliding
       let ix = this.stick.x,
@@ -2684,11 +2748,27 @@ export class StreetPlay {
   private stepTraffic(dt: number) {
     if (this.hitCool > 0) this.hitCool -= dt;
     const red = !this.avenueGreen;
+    const C = this.car.position;
+    const loud = this.inCar && (this.siren || this.chasing);
     for (const t of this.cross) {
       const x = t.mesh.position.x;
       // cross traffic waits while the avenue is green
       const ahead = t.speed > 0 ? -8 - x : x - 8;
-      const stop = this.avenueGreen && ahead > 0 && ahead < 6;
+      let stop = this.avenueGreen && ahead > 0 && ahead < 6;
+      // siren close by: give way
+      if (loud && Math.abs(C.x - x) < 20 && Math.abs(C.z - t.mesh.position.z) < 20) stop = true;
+      if (this.inCar) {
+        const share = 0.6;
+        const closing = this.carVsCar(t.mesh, stop ? 0 : t.speed, 0, share);
+        if (closing >= 0) {
+          t.mesh.position.x -= this.contact.nx * this.contact.depth * (1 - share);
+          if (closing > 1) t.bumpT = 1.5;
+        }
+      }
+      if (t.bumpT && t.bumpT > 0) {
+        t.bumpT -= dt;
+        stop = true;
+      }
       if (!stop) t.mesh.position.x += t.speed * dt;
       if (t.mesh.position.x > 122) t.mesh.position.x = -122;
       if (t.mesh.position.x < -122) t.mesh.position.x = 122;
@@ -2710,34 +2790,20 @@ export class StreetPlay {
       // only brake for someone actually in front (not alongside), so cars never park beside the officer
       if (Math.abs(me.x - t.mesh.position.x) < 1.4 && dz > 2.6 && dz < 7.5) stop = true;
       // siren: cars nearby ease to the kerb and stop to let you through
-      const C = this.car.position;
       const near = Math.hypot(C.x - t.mesh.position.x, C.z - z);
       const want = this.inCar ? pullOver(this.siren || this.chasing, near) : 0;
       t.side = (t.side ?? 0) + (want - (t.side ?? 0)) * Math.min(1, dt * 2);
       if (want > 0 && near < 22) stop = true;
       const kerb = t.laneX > 0 ? 1 : -1;
       t.mesh.position.x = t.laneX + kerb * (t.side ?? 0);
-      // collisions with the patrol car: damage, knock-back, horn
-      if (this.inCar && Math.abs(C.x - t.mesh.position.x) < 2 && Math.abs(C.z - t.mesh.position.z) < 3.8) {
-        const rel = Math.abs(this.speed - (stop ? 0 : t.speed) * Math.cos(this.velYaw));
-        if (this.hitCool <= 0) {
-          const dmg = hitDamage(rel);
-          if (dmg > 0) {
-            this.damage = Math.min(100, this.damage + dmg);
-            this.hitCool = 0.6;
-            audio.sample('crash', Math.min(1, rel / 15));
-            this.recoil = Math.min(1, rel / 10);
-            this.setStatus(
-              this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}%`
-            );
-          }
+      // collisions with the patrol car: both cars get shoved, the patrol car takes damage
+      if (this.inCar) {
+        const share = 0.6;
+        const closing = this.carVsCar(t.mesh, 0, stop ? 0 : t.speed, share);
+        if (closing >= 0) {
+          t.mesh.position.z -= this.contact.nz * this.contact.depth * (1 - share);
+          if (closing > 1) t.bumpT = 1.5;
         }
-        // push both apart; the hit car gets shoved and stops a moment
-        const pz = Math.sign(C.z - t.mesh.position.z) || 1;
-        C.z = t.mesh.position.z + pz * 3.8;
-        t.mesh.position.z -= pz * Math.min(2, rel * 0.08);
-        t.bumpT = 1.5;
-        this.speed *= -0.25;
       }
       if (t.bumpT && t.bumpT > 0) {
         t.bumpT -= dt;
@@ -2750,6 +2816,63 @@ export class StreetPlay {
     }
   }
 
+  /**
+   * Patrol car against another car: pushes the patrol car out by `share` of the overlap and bounces its
+   * velocity. Returns the closing speed (0 if just touching) or -1 when not in contact; `this.contact`
+   * then holds the push direction for the patrol car so the caller can shove the other one the opposite way.
+   */
+  private carVsCar(g: THREE.Object3D, ovx: number, ovz: number, share: number, hl = 2.25): number {
+    if (!g.visible) return -1;
+    const C = this.car.position;
+    const a = this.myBox,
+      b = this.otherBox;
+    a.x = C.x;
+    a.z = C.z;
+    a.yaw = this.car.rotation.y;
+    b.x = g.position.x;
+    b.z = g.position.z;
+    b.yaw = g.rotation.y;
+    b.hl = hl;
+    const n = this.contact;
+    if (!overlap(a, b, n)) return -1;
+    const nx = C.x + n.nx * n.depth * share,
+      nz = C.z + n.nz * n.depth * share;
+    if (onRoad(nx, nz, 0.4)) C.set(nx, 0, nz);
+    this.motion.speed = this.speed;
+    this.motion.velYaw = this.velYaw;
+    const closing = bounce(this.motion, this.yaw, n, ovx, ovz, share);
+    this.speed = this.motion.speed;
+    this.velYaw = this.motion.velYaw;
+    if (closing > 0) this.crash(closing);
+    return closing;
+  }
+
+  /** Bounce off a kerb or wall whose normal (pointing back onto the road) is (nx, nz). */
+  private wallHit(nx: number, nz: number) {
+    const n = this.contact;
+    n.nx = nx;
+    n.nz = nz;
+    n.depth = 0;
+    this.motion.speed = this.speed;
+    this.motion.velYaw = this.velYaw;
+    const closing = bounce(this.motion, this.yaw, n, 0, 0, 1, 0);
+    this.speed = this.motion.speed;
+    this.velYaw = this.motion.velYaw;
+    if (closing > 6) this.crash(closing * 0.6);
+  }
+
+  /** Hit feedback and damage; small taps are free. */
+  private crash(v: number) {
+    if (this.hitCool > 0) return;
+    const dmg = hitDamage(v);
+    if (dmg <= 0) return;
+    this.damage = Math.min(100, this.damage + dmg);
+    this.hitCool = 0.6;
+    audio.sample('crash', Math.min(1, v / 15));
+    this.recoil = Math.min(1, v / 10);
+    this.setStatus(this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}%`);
+  }
+
   private stepChase(dt: number) {
     if (!this.chasing || !this.suspect) return;
     this.chaseTime += dt;
@@ -2760,32 +2883,59 @@ export class StreetPlay {
     const flee = fleeSpeed({
       t: this.chaseClock,
       k: this.chaseSpeed,
-      playerMax: 18 + rank().car,
+      playerMax: topSpeed(18 + rank().car, this.damage),
       dist,
       turn: this.chaseTurn
     });
     // waits for the player to get in the car (no escape while they're running to it)
-    const step = this.inCar || this.chaseTime > GRACE ? flee * dt : flee * dt * 0.35;
-    let head = followPath(sp, this.chasePath, step);
-    if (head === null) {
+    if (this.pitCool > 0) this.pitCool -= dt;
+    if (this.spinT > 0) {
+      // spun out by a PIT: slides to a stop while it turns, then drives off again
+      this.spinT -= dt;
+      this.suspect.rotation.y = wrapAngle(this.suspect.rotation.y + this.spinDir * spinRate(this.spinT) * dt);
+      const v = flee * Math.max(0, this.spinT / SPIN_T) ** 2 * dt;
+      const nx = sp.x + Math.sin(this.pitHead) * v,
+        nz = sp.z + Math.cos(this.pitHead) * v;
+      if (onRoad(nx, nz, 1)) sp.set(nx, 0, nz);
+    }
+    const moving = this.spinT <= 0;
+    const step = !moving ? 0 : this.inCar || this.chaseTime > GRACE ? flee * dt : flee * dt * 0.35;
+    let head = moving ? followPath(sp, this.chasePath, step) : null;
+    if (head === null && moving) {
       const far = farNode(sp.x, sp.z);
       this.chasePath = trimBehind(findPath(sp.x, sp.z, far.x, far.z), sp.x, sp.z, this.suspect.rotation.y);
       head = followPath(sp, this.chasePath, step);
     }
-    if (head !== null) {
+    if (head !== null && moving) {
       this.chaseTurn = wrapAngle(head - this.suspect.rotation.y);
       this.suspect.rotation.y = approachAngle(this.suspect.rotation.y, head, dt * 5);
     }
-    // solid cars: you can't drive through the suspect, you bump and stay on its bumper
-    if (this.inCar && dist < 4.2) {
-      const C = this.car.position;
-      const dx = C.x - sp.x,
-        dz = C.z - sp.z,
-        L = Math.hypot(dx, dz) || 1;
-      C.x = sp.x + (dx / L) * 4.2;
-      C.z = sp.z + (dz / L) * 4.2;
-      this.speed = Math.min(this.speed, flee * 0.95);
-      if (this.chaseLock < 0.05) audio.click();
+    // solid cars: you can't drive through the suspect; a nudge on its rear quarter (PIT) spins it out
+    if (this.inCar) {
+      const sv = moving ? flee : 0,
+        sy = this.suspect.rotation.y;
+      const closing = this.carVsCar(this.suspect, Math.sin(sy) * sv, Math.cos(sy) * sv, 1, 2.35);
+      if (closing >= 0 && this.spinT <= 0 && this.pitCool <= 0) {
+        const q = this.pitIn;
+        q.px = this.car.position.x;
+        q.pz = this.car.position.z;
+        q.pVelYaw = this.velYaw;
+        q.pSpeed = this.speed;
+        q.sx = sp.x;
+        q.sz = sp.z;
+        q.sYaw = sy;
+        q.sSpeed = sv;
+        const spin = pitSpin(q);
+        if (spin) {
+          this.spinT = SPIN_T;
+          this.spinDir = spin;
+          this.pitHead = sy;
+          this.pitCool = 6;
+          this.chaseLock = Math.max(this.chaseLock, LOCK_T * 0.4);
+          audio.sample('crash', 0.8);
+          this.setStatus('💥 PIT! العربية لفّت — قرّب منها واقفلها.');
+        } else if (closing > 0 && this.chaseLock < 0.05) audio.click();
+      }
     }
     this.chaseLock = stepLock(this.chaseLock, dist, this.inCar, dt);
     const r = chaseOutcome({
@@ -2835,10 +2985,11 @@ export class StreetPlay {
   }
 
   private stepLights() {
+    const lit = this.siren || this.chasing;
     const pulse = (Math.sin(performance.now() / 90) + 1) * 0.5;
     this.flash.forEach((L, i) => {
-      const on = i % 2 === 0 ? pulse > 0.5 : pulse <= 0.5;
-      L.intensity = on ? 4.5 : 0.05;
+      const on = lit && (i % 2 === 0 ? pulse > 0.5 : pulse <= 0.5);
+      L.intensity = on ? 4.5 : lit ? 0.05 : 0;
     });
   }
 
