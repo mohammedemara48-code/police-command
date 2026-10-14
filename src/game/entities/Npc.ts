@@ -1,6 +1,7 @@
 /**
  * Scripted suspects + officer weapon. Suspect state machine (docs/GAME_DESIGN.md §3):
  * idle → (alerted) → surrender | flee | fight(cover) ; ordered → hands ; cuffed ; down. Non-gory: suspects tip over.
+ * Inside `fight`, the gunman's cover/flank behaviour comes from logic/cover.ts.
  */
 import * as THREE from 'three';
 import { character } from './Character';
@@ -8,7 +9,18 @@ import { weaponStats } from '../logic/character';
 import { audio } from '../systems/AudioManager';
 import { addStat } from '../systems/Achievements';
 import { rank, type Behaviour, type SuspectSpec } from '../missions/Levels';
-import { findPath, farNode, followPath } from '../world/City';
+import { findPath, farNode, followPath, onFoot } from '../world/City';
+import {
+  newGunman,
+  stepGunman,
+  footStep,
+  isHidden,
+  pushFromCrate,
+  aimFactor,
+  type Cover,
+  type Gunman,
+  type FootSense
+} from '../logic/cover';
 
 export type SState = 'idle' | 'flee' | 'fight' | 'hands' | 'cuffed' | 'down' | 'hostage' | 'free';
 export interface Suspect {
@@ -18,9 +30,8 @@ export interface Suspect {
   hp: number;
   boss: boolean;
   cd: number;
-  hide: number;
   hidden: boolean;
-  cover: THREE.Vector3 | null;
+  ai: Gunman;
   flash: number;
   down: number;
   mats: THREE.MeshStandardMaterial[];
@@ -62,7 +73,13 @@ export class Squad {
   private reloadT = 0;
   private fireCool = 0.3;
   private hurtT = 0;
-  private covers: THREE.Object3D[] = [];
+  /** difficulty 0..1: how often gunmen change cover and flank */
+  skill = 0;
+  private crates: THREE.Object3D[] = [];
+  private covers: Cover[] = [];
+  private crateGeo = new THREE.BoxGeometry(1.7, 1.15, 0.8);
+  private sense: FootSense = { sx: 0, sz: 0, px: 0, pz: 0, skill: 0 };
+  private next = { x: 0, z: 0 };
   private tracers: { line: THREE.Line; t: number }[] = [];
   private tracerMat = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true });
   private flashLight = new THREE.PointLight(0xffc860, 0, 7, 2);
@@ -96,7 +113,7 @@ export class Squad {
     this.failed = null;
   }
 
-  private make(spec: { b: Behaviour; boss?: boolean }, x: number, z: number, hostage = false): Suspect {
+  private make(spec: { b: Behaviour; boss?: boolean }, x: number, z: number, hostage = false, anchored = false): Suspect {
     const g = this.makePerson(hostage);
     if (spec.boss) g.scale.setScalar(1.12);
     g.position.set(x, 0, z);
@@ -121,9 +138,8 @@ export class Squad {
       hp: spec.boss ? 8 : 3,
       boss: !!spec.boss,
       cd: 1 + Math.random() * 1.5,
-      hide: 0,
       hidden: false,
-      cover: null,
+      ai: newGunman(anchored),
       flash: 0,
       down: 0,
       mats,
@@ -134,20 +150,42 @@ export class Squad {
     };
   }
 
+  private addCrate(x: number, z: number) {
+    const crate = new THREE.Mesh(this.crateGeo, this.crateMat);
+    crate.position.set(x, 0.575, z);
+    crate.castShadow = false;
+    this.group.add(crate);
+    this.crates.push(crate);
+    this.covers.push({ x, z, by: -1 });
+    return this.covers.length - 1;
+  }
+
   spawn(x: number, z: number, specs: SuspectSpec[], opts: { cover?: boolean; hostage?: boolean; approachZ: number }) {
     const dir = Math.sign(opts.approachZ - z) || -1;
+    // hostage takers stay with the hostage: they hide and peek but never leave their crate
+    const anchored = !!opts.hostage;
     for (const sp of specs) {
-      const s = this.make(sp, x + sp.dx, z + sp.dz);
+      const s = this.make(sp, x + sp.dx, z + sp.dz, false, anchored);
       s.g.rotation.y = dir > 0 ? 0 : Math.PI;
       if (opts.cover && sp.b === 'fight') {
-        const crate = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.15, 0.8), this.crateMat);
-        crate.position.set(s.g.position.x, 0.575, s.g.position.z + dir * 1.3);
-        crate.castShadow = false;
-        this.group.add(crate);
-        this.covers.push(crate);
-        s.cover = s.g.position.clone();
+        const i = this.addCrate(s.g.position.x, s.g.position.z + dir * 1.3);
+        this.covers[i]!.by = this.list.length;
+        s.ai.cover = i;
+        s.ai.mode = 'hide';
+        s.ai.t = 0.6 + Math.random();
       }
       this.list.push(s);
+    }
+    const armed = this.list.filter((s) => s.b === 'fight' && s.ai.cover !== -1);
+    if (!anchored && armed.length) {
+      // two spare crates out to the sides of the group, so gunmen have somewhere to move to
+      const mx = armed.reduce((a, s) => a + s.g.position.x, 0) / armed.length,
+        mz = armed.reduce((a, s) => a + s.g.position.z, 0) / armed.length;
+      for (const k of [-1, 1]) {
+        const cx = mx + k * 6.5,
+          cz = mz;
+        if (onFoot(cx, cz) && this.covers.every((c) => Math.hypot(c.x - cx, c.z - cz) > 3)) this.addCrate(cx, cz);
+      }
     }
     if (opts.hostage) {
       this.hostage = this.make({ b: 'surrender' }, x, z + dir * 0.6, true);
@@ -167,8 +205,9 @@ export class Squad {
   clear() {
     for (const s of this.list) s.g.removeFromParent();
     this.hostage?.g.removeFromParent();
-    for (const c of this.covers) c.removeFromParent();
+    for (const c of this.crates) c.removeFromParent();
     this.list = [];
+    this.crates = [];
     this.covers = [];
     this.hostage = null;
     this.threat = 0;
@@ -242,7 +281,8 @@ export class Squad {
     }
     if (t.hidden) {
       // bullet hits the cover
-      this.tracer(tA, tB.set(t.g.position.x, 0.9, t.g.position.z + (from.z > t.g.position.z ? 1.3 : -1.3)));
+      const c = this.covers[t.ai.cover]!;
+      this.tracer(tA, tB.set(c.x, 0.9, c.z));
       return;
     }
     this.tracer(tA, tB.set(t.g.position.x, 1.2, t.g.position.z));
@@ -264,6 +304,7 @@ export class Squad {
       return;
     }
     if (t.hp <= 0) {
+      this.release(t);
       t.state = 'down';
       t.down = 0.001;
       t.icon.visible = false;
@@ -271,9 +312,16 @@ export class Squad {
     } else if (t.state === 'idle') t.state = t.b === 'fight' ? 'fight' : t.b === 'flee' ? 'flee' : 'hands';
   }
 
-  private surrender(s: Suspect) {
-    s.state = 'hands';
+  /** frees the gunman's crate for the others */
+  private release(s: Suspect) {
+    if (s.ai.cover !== -1) this.covers[s.ai.cover]!.by = -1;
+    s.ai.cover = -1;
     s.hidden = false;
+  }
+
+  private surrender(s: Suspect) {
+    this.release(s);
+    s.state = 'hands';
     s.g.position.y = 0;
     s.icon.material.map = this.icons.hands;
     s.icon.material.needsUpdate = true;
@@ -350,7 +398,8 @@ export class Squad {
       if (this.hurtT <= 0) document.body.classList.remove('hurt');
     }
     let armed = 0;
-    for (const s of this.list) {
+    for (let i = 0; i < this.list.length; i++) {
+      const s = this.list[i];
       const p = s.g.position;
       if (s.flash > 0) {
         s.flash -= dt;
@@ -406,24 +455,36 @@ export class Squad {
         }
         case 'fight': {
           armed++;
-          s.g.rotation.y = Math.atan2(dx, dz);
-          if (!s.cover && d > 9 && d < 40) {
-            p.x += (dx / d) * dt * 1.1;
-            p.z += (dz / d) * dt * 1.1;
+          const ai = s.ai,
+            fs = this.sense;
+          fs.sx = p.x;
+          fs.sz = p.z;
+          fs.px = player.x;
+          fs.pz = player.z;
+          fs.skill = this.skill;
+          stepGunman(ai, i, this.covers, fs, dt);
+          const q = footStep(ai, this.covers, fs, d, dt, this.next);
+          if (q.x !== p.x || q.z !== p.z) {
+            for (const c of this.covers) pushFromCrate(q, c);
+            if (onFoot(q.x, q.z)) {
+              if (ai.mode === 'move') s.g.rotation.y = Math.atan2(q.x - p.x, q.z - p.z);
+              p.x = q.x;
+              p.z = q.z;
+            } else if (ai.mode === 'flank') ai.side = -ai.side; // ran into a wall: sidestep the other way
           }
-          if (s.cover) {
-            s.hide -= dt;
-            if (s.hide <= 0) {
-              s.hidden = !s.hidden;
-              s.hide = s.hidden ? 1.6 + Math.random() * 0.8 : 1.3;
-            }
-            p.y += ((s.hidden ? -0.75 : 0) - p.y) * Math.min(1, dt * 10);
-          }
-          s.g.userData.forceClip = s.flinch > 0 ? 'hit' : s.hidden ? 'idle' : 'gun';
+          if (ai.mode !== 'move') s.g.rotation.y = Math.atan2(dx, dz);
+          fs.sx = p.x;
+          fs.sz = p.z;
+          s.hidden = isHidden(ai, this.covers, fs);
+          const crouch = ai.mode === 'hide' && ai.cover !== -1;
+          p.y += ((crouch ? -0.75 : 0) - p.y) * Math.min(1, dt * 10);
+          const running = ai.mode === 'move' || ai.mode === 'flank';
+          s.g.userData.forceClip = s.flinch > 0 ? 'hit' : running ? null : crouch ? 'idle' : 'gun';
           s.cd -= dt;
-          if (!s.hidden && s.cd <= 0 && d < 24) {
+          const aim = aimFactor(ai.mode);
+          if (aim > 0 && !s.hidden && s.cd <= 0 && d < 24) {
             s.cd = 1.2 + Math.random() * 1.3;
-            const hit = Math.random() < (inCar ? 0.12 : 0.3);
+            const hit = Math.random() < (inCar ? 0.12 : 0.3) * aim;
             tA.set(p.x, 1.35 + p.y, p.z);
             this.tracer(
               tA,

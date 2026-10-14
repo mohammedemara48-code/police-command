@@ -53,7 +53,9 @@ export const ramCooldown = (skill: number) => 13 - 6 * clamp01(skill);
 /** Chance per second of taking a ram opportunity once the cooldown is over. */
 export const ramRate = (skill: number) => 0.5 + clamp01(skill);
 /** Side swipe speed, m/s: hard enough to shove you, small enough to cost only a few % damage. */
-export const swipeSpeed = (skill: number) => 3.2 + 2 * clamp01(skill);
+export const swipeSpeed = (skill: number) => 2.8 + 1.6 * clamp01(skill);
+/** How far the car turns into the swipe, rad (its forward speed adds to the hit, so keep it small). */
+export const SWIPE_YAW = 0.1;
 
 function clamp01(v: number) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -111,11 +113,12 @@ export function carCmd(ai: CarAi, skill: number, out: CarCmd): CarCmd {
       else {
         const k = Math.min(1, ai.t / SWIPE_T) * 2; // quick jab that fades out
         out.lat = ai.side * swipeSpeed(skill) * Math.min(1, k);
-        out.yawOff = ai.side * 0.22 * Math.min(1, k);
+        out.yawOff = ai.side * SWIPE_YAW * Math.min(1, k);
       }
       break;
     case 'evade':
       out.lat = Math.sin(ai.phase) * 1.4;
+      out.yawOff = Math.sin(ai.phase) * 0.08;
       break;
     case 'boxed':
       out.speedMul = 0.92;

@@ -121,9 +121,11 @@ describe('suspect car', () => {
   it('a swipe costs only a few percent of damage', () => {
     const ai = Object.assign(newCarAi(), { cool: 0 });
     stepCarAi(ai, sense({ skill: 1 }), 1 / 60, always);
-    const lat = Math.abs(carCmd(ai, 1, cmd).lat);
-    expect(hitDamage(lat)).toBeLessThanOrEqual(8);
-    expect(lat).toBeGreaterThan(3);
+    carCmd(ai, 1, cmd);
+    // sideways jab plus the bit of its forward speed that turns into you (fast chase, 14 m/s)
+    const closing = Math.abs(cmd.lat) + 14 * Math.sin(Math.abs(cmd.yawOff));
+    expect(hitDamage(closing)).toBeLessThanOrEqual(8);
+    expect(closing).toBeGreaterThan(3.5);
   });
 });
 
