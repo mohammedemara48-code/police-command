@@ -918,3 +918,37 @@ body[data-play="street"] #street-obj{padding:6px 9px!important;font-size:11px!im
   body[data-play="street"] #street-status{top:auto!important;bottom:calc(98px + env(safe-area-inset-bottom))!important;font-size:11px!important;max-width:40vw!important;padding:5px 10px!important}
   body[data-play="street"] #street-speedo i{width:56px}
 }
+
+/* ===== Round action cluster (arc around the fire button) ===== */
+html body[data-play="street"] .street-actions{position:fixed!important;display:block!important;right:calc(0px + env(safe-area-inset-right))!important;bottom:calc(0px + env(safe-area-inset-bottom))!important;top:auto!important;left:auto!important;width:240px!important;height:250px!important;max-height:none!important;pointer-events:none;gap:0!important}
+html body[data-play="street"] .street-actions button{position:absolute!important;pointer-events:auto;width:52px!important;min-width:0!important;height:52px!important;min-height:0!important;padding:0!important;border-radius:50%!important;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:10px!important;line-height:1;background:rgba(10,22,40,.72);border:1px solid rgba(126,200,255,.45);box-shadow:0 2px 8px rgba(0,0,0,.35);margin:0!important}
+html body[data-play="street"] .street-actions button i{font-style:normal;font-size:20px;line-height:1}
+html body[data-play="street"] .street-actions button span{font-size:9px;opacity:.9;white-space:nowrap}
+html body[data-play="street"] .street-actions button[data-act="shoot"]{right:14px;bottom:22px;width:74px!important;height:74px!important;background:rgba(229,72,77,.85)!important}
+html body[data-play="street"] .street-actions button[data-act="shoot"] i{font-size:26px}
+html body[data-play="street"] .street-actions button[data-act="shoot"] span{font-size:11px;font-weight:700}
+html body[data-play="street"] .street-actions [data-act="car"]{right:111px;bottom:33px}
+html body[data-play="street"] .street-actions [data-act="run"]{right:86px;bottom:94px}
+html body[data-play="street"] .street-actions [data-act="map"]{right:25px;bottom:119px}
+html body[data-play="street"] .street-actions [data-act="hub"],html body[data-play="street"] .street-actions [data-act="siren"]{right:175px;bottom:61px;width:48px!important;height:48px!important}
+html body[data-play="street"] .street-actions [data-act="order"]{right:142px;bottom:131px;width:48px!important;height:48px!important}
+html body[data-play="street"] .street-actions [data-act="cuff"]{right:78px;bottom:176px;width:48px!important;height:48px!important}
+/* in the car the siren takes the big slot (no gun while driving) */
+html:not(.onfoot) body[data-play="street"] .street-actions [data-act="siren"]{right:14px;bottom:22px;width:74px!important;height:74px!important}
+html:not(.onfoot) body[data-play="street"] .street-actions [data-act="siren"] i{font-size:26px}
+/* tidy stats: one compact pill under the objective */
+body[data-play="street"] #street-hp{top:calc(112px + env(safe-area-inset-top))!important;right:10px!important}
+#street-hp .hud-row{background:rgba(6,14,26,.62);border:1px solid rgba(126,200,255,.22);border-radius:22px;padding:3px 5px;gap:4px!important;display:inline-flex!important}
+#street-hp .gun{background:none!important}
+#street-hp .threat{margin-top:3px}
+body[data-play="street"] #street-obj{left:auto!important;max-width:min(62vw,300px)!important;width:max-content}
+body[data-play="street"] .meta-pause-btn{top:calc(178px + env(safe-area-inset-top))!important}
+@media (orientation:landscape) and (max-height:540px){
+  html body[data-play="street"] .street-actions{width:230px!important;height:230px!important}
+  body[data-play="street"] #street-hp{top:calc(40px + env(safe-area-inset-top))!important}
+  body[data-play="street"] #street-obj{left:calc(94px + env(safe-area-inset-left))!important;max-width:min(44vw,340px)!important}
+  body[data-play="street"] .meta-pause-btn{top:calc(124px + env(safe-area-inset-top))!important}
+}
+html body[data-play="street"] .street-actions [data-act="order"],html body[data-play="street"] .street-actions [data-act="cuff"],html body[data-play="street"] .street-actions [data-act="hub"],html body[data-play="street"] .street-actions [data-act="shoot"]{display:none!important}
+html.onfoot.can-order body[data-play="street"] .street-actions [data-act="order"],html.onfoot.can-cuff body[data-play="street"] .street-actions [data-act="cuff"],html.onfoot.can-hub body[data-play="street"] .street-actions [data-act="hub"],html.onfoot body[data-play="street"] .street-actions [data-act="shoot"],html.armed body[data-play="street"] .street-actions [data-act="shoot"]{display:flex!important}
+html.onfoot body[data-play="street"] .street-actions [data-act="siren"]{display:none!important}
