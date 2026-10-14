@@ -333,3 +333,27 @@ describe('new mission types', () => {
     expect(passCheckpoint(2, pts, 0, 50, true)).toBe(2);
   });
 });
+
+import { pushOut, resolve } from '../src/game/logic/collide';
+describe('on-foot collision vs cars', () => {
+  const car = { x: 0, z: 0, yaw: 0, hw: 1, hl: 2.2 };
+  it('pushes out of the side and leaves free space alone', () => {
+    const o = pushOut(1.2, 0, 0.45, car);
+    expect(o.hit).toBe(true);
+    expect(o.x).toBeCloseTo(1.45);
+    expect(o.z).toBeCloseTo(0);
+    expect(pushOut(3, 0, 0.45, car).hit).toBe(false);
+  });
+  it('works for rotated cars and centres inside', () => {
+    const rot = { ...car, yaw: Math.PI / 2 }; // long axis now along x
+    const o = pushOut(0, 1.2, 0.45, rot);
+    expect(Math.abs(o.z)).toBeCloseTo(1.45);
+    const inside = pushOut(0.2, 0, 0.45, car);
+    expect(inside.x).toBeGreaterThan(1.4);
+  });
+  it('slides: tangential motion is kept', () => {
+    const r = resolve(1.3, 0.5, 0.45, [car]);
+    expect(r.z).toBeCloseTo(0.5);
+    expect(r.x).toBeCloseTo(1.45);
+  });
+});

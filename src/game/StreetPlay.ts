@@ -4,6 +4,7 @@ import { stepCar, driftOf, kmh, hitDamage, pullOver } from './logic/driving';
 import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from './logic/chase';
 import { character, onCharacter, setCharacter } from './Character';
 import { STATION, hubAllowed } from './logic/station';
+import { resolve as collide, type OBB } from './logic/collide';
 import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from './logic/missions';
 import { openCreator } from './CharacterCreator';
 import { modelFor, recolorFor, WEAPONS, type WeaponId } from './logic/character';
@@ -302,7 +303,7 @@ export class StreetPlay {
     this.player.position.set(0.9, 0, 0);
     this.group.add(this.player);
     this.car = this.makePoliceCar(true);
-    this.car.position.set(-1.4, 0, 2);
+    this.car.position.set(-2.6, 0, 11);
     this.group.add(this.car);
     this.driver = this.makeOfficer();
     this.driver.scale.setScalar(0.62);
@@ -471,6 +472,55 @@ export class StreetPlay {
     this.cpRing.visible = true;
   }
   private clearCheckpoint() { if (this.cpRing) this.cpRing.visible = false; }
+
+  private boxes: OBB[] = [];
+  /** oriented boxes of every vehicle the officer can bump into */
+  private vehicleBoxes() {
+    const b = this.boxes; b.length = 0;
+    const add = (g: THREE.Object3D | null | undefined, hw = 1.0, hl = 2.3) => { if (g && g.visible) b.push({ x: g.position.x, z: g.position.z, yaw: g.rotation.y, hw, hl }); };
+    if (!this.inCar) add(this.car, 1.05, 2.4);
+    for (const t of this.traffic) add(t.mesh);
+    for (const t of this.cross) add(t.mesh);
+    add(this.suspect); add(this.speeder);
+    return b;
+  }
+
+  private faded = new Set<THREE.Object3D>();
+  private fadeT = 0;
+  /** make a vehicle see-through while it sits between the camera and the officer */
+  private setFade(g: THREE.Object3D, on: boolean) {
+    g.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      if (on) {
+        if (!m.userData.solidMat) { m.userData.solidMat = m.material; const c = (m.material as THREE.Material).clone(); c.transparent = true; c.opacity = 0.28; c.depthWrite = false; m.userData.fadeMat = c; }
+        m.material = m.userData.fadeMat as THREE.Material;
+      } else if (m.userData.solidMat) m.material = m.userData.solidMat as THREE.Material;
+    });
+    if (on) this.faded.add(g); else this.faded.delete(g);
+  }
+  private tickOcclusion(dt: number) {
+    this.fadeT -= dt;
+    if (this.fadeT > 0) return;
+    this.fadeT = 0.1;
+    const T = this.inCar ? this.car.position : this.player.position;
+    const C = this.camera.position;
+    const sx = T.x - C.x, sz = T.z - C.z, L2 = sx * sx + sz * sz || 1;
+    const now = new Set<THREE.Object3D>();
+    const test = (g: THREE.Object3D | null | undefined) => {
+      if (!g || !g.visible || g === (this.inCar ? this.car : null)) return;
+      const t = ((g.position.x - C.x) * sx + (g.position.z - C.z) * sz) / L2;
+      if (t <= 0 || t >= 0.92) return;
+      const px = C.x + sx * t - g.position.x, pz = C.z + sz * t - g.position.z;
+      if (px * px + pz * pz < 2.6 * 2.6) now.add(g);
+    };
+    test(this.car);
+    for (const t of this.traffic) test(t.mesh);
+    for (const t of this.cross) test(t.mesh);
+    test(this.suspect); test(this.speeder);
+    for (const g of [...this.faded]) if (!now.has(g)) this.setFade(g, false);
+    for (const g of now) if (!this.faded.has(g)) this.setFade(g, true);
+  }
 
   private stationBuilt = false;
   private canHub = false;
@@ -932,7 +982,7 @@ export class StreetPlay {
     };
     const html = `<div class="hud-row">${ring('hp', q.hp, '❤', `الصحة ${Math.round(q.hp)}%`)}${ring('ar', q.armor * 2, '🛡', `الدرع ${Math.round(q.armor * 2)}%`)}
       <div class="gun">🔫 <b>${q.reloading ? '…' : `${q.ammo}/${q.mag}`}</b></div></div>
-      <div class="threat">${stars ? 'تهديد ' + '★'.repeat(stars) + '☆'.repeat(5 - stars) : `رتبة: ${rank().name}`}</div>`;
+      ${stars ? `<div class="threat">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</div>` : ''}`;
     if (this.hudEl && html !== this.hudHtml) { this.hudEl.innerHTML = html; this.hudHtml = html; }
     // contextual buttons
     const me = this.player.position;
@@ -1329,7 +1379,7 @@ export class StreetPlay {
     const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
     const startZ = place.z - 48 < -95 ? place.z + 48 : place.z - 48;
     if (keep) { this.setStatus(this.level.brief); this.briefing(); return; }
-    this.car.position.set(-1.4, 0, startZ);
+    this.car.position.set(-2.6, 0, startZ + 11);
     this.car.rotation.y = startZ < place.z ? 0 : Math.PI;
     this.player.position.set(0.9, 0, startZ);
     if (this.inCar) this.toggleCar();
@@ -1407,14 +1457,14 @@ export class StreetPlay {
       </div>
       <div id="street-speedo" aria-live="off"></div>
       <div class="street-actions">
-        <button type="button" data-act="car">ركب الدورية</button>
-        <button type="button" data-act="run">ركض</button>
-        <button type="button" data-act="map">خريطة المهام</button>
-        <button type="button" data-act="siren" class="incar">🚨 سارينة</button>
-        <button type="button" data-act="shoot">🔫<br>اضرب</button>
-        <button type="button" data-act="order">📢 استسلم!</button>
-        <button type="button" data-act="cuff">🔗 كلبش</button>
-        <button type="button" data-act="hub">🏢 ادخل القسم</button>
+        <button type="button" data-act="car" aria-label="ركب الدورية"><i>🚓</i><span>اركب</span></button>
+        <button type="button" data-act="run" aria-label="ركض"><i>🏃</i><span>ركض</span></button>
+        <button type="button" data-act="map" aria-label="خريطة المهام"><i>🗺</i><span>الخريطة</span></button>
+        <button type="button" data-act="siren" class="incar" aria-label="سارينة"><i>🚨</i><span>سارينة</span></button>
+        <button type="button" data-act="shoot" aria-label="اضرب"><i>🔫</i><span>اضرب</span></button>
+        <button type="button" data-act="order" aria-label="استسلم"><i>📢</i><span>استسلم</span></button>
+        <button type="button" data-act="cuff" aria-label="كلبش"><i>🔗</i><span>كلبش</span></button>
+        <button type="button" data-act="hub" aria-label="ادخل القسم"><i>🏢</i><span>القسم</span></button>
       </div>
       <div id="street-radio"></div>
       <div id="street-ret"></div>
@@ -1561,9 +1611,9 @@ export class StreetPlay {
       if (this.siren) this.toggleSiren(false);
       this.setStatus('نزلت من الدورية.');
       const btn = this.ui?.querySelector('[data-act="car"]');
-      if (btn) btn.textContent = 'ركب الدورية';
+      if (btn) btn.innerHTML = '<i>🚓</i><span>اركب</span>';
       const rb = this.ui?.querySelector('[data-act="run"]');
-      if (rb) rb.textContent = 'ركض';
+      if (rb) rb.innerHTML = '<i>🏃</i><span>ركض</span>';
       return;
     }
     const d = this.player.position.distanceTo(this.car.position);
@@ -1581,9 +1631,9 @@ export class StreetPlay {
     this.speed = 0;
     this.setStatus('داخل الدورية. امشِ بالأسهم أو الأزرار. صفارة المطاردة لما توصل المهمة.');
     const btn = this.ui?.querySelector('[data-act="car"]');
-    if (btn) btn.textContent = 'انزل';
+    if (btn) btn.innerHTML = '<i>🚪</i><span>انزل</span>';
     const rb = this.ui?.querySelector('[data-act="run"]');
-    if (rb) rb.textContent = '🛞 فرامل يد';
+    if (rb) rb.innerHTML = '<i>🛞</i><span>فرامل</span>';
   }
 
   private statusT = 0;
@@ -1621,7 +1671,7 @@ export class StreetPlay {
     this.closeMap();
     if (fast || !this.inCar) {
       const z = place.z + 2;
-      this.car.position.set(-1.4, 0, z);
+      this.car.position.set(-2.6, 0, z + 11);
       this.player.position.set(this.inCar ? -1.4 : 0.9, 0, z);
       this.yaw = 0;
       this.car.rotation.y = 0;
@@ -1885,6 +1935,7 @@ export class StreetPlay {
     this.camFov += (fovT - this.camFov) * Math.min(1, dt * 3);
     if (Math.abs(this.camera.fov - this.camFov) > 0.05) { this.camera.fov = this.camFov; this.camera.updateProjectionMatrix(); }
     this.snapCamera(1 - Math.pow(0.0008, dt));
+    this.tickOcclusion(dt);
     if (this.recoil > 0 && !reducedMotion) { this.camera.position.y += this.recoil * 0.05; this.camera.rotation.x += this.recoil * 0.012; }
     this.uiT += dt;
     if (this.uiT > 0.12) { this.uiT = 0; this.drawMini(); this.objective(); }
@@ -1959,6 +2010,14 @@ export class StreetPlay {
       else if (onRoad(P.x + mx, P.z, 3.6)) { P.x += mx; this.vel.z *= 0.5; }
       else if (onRoad(P.x, P.z + mz, 3.6)) { P.z += mz; this.vel.x *= 0.5; }
       else { this.vel.x = 0; this.vel.z = 0; }
+      // solid vehicles: push the officer out and let him slide along the body
+      const hit = collide(P.x, P.z, 0.42, this.vehicleBoxes());
+      if (hit.hit && onRoad(hit.x, hit.z, 3.6)) {
+        const nx = hit.x - P.x, nz = hit.z - P.z, nl = Math.hypot(nx, nz) || 1;
+        const vn = (this.vel.x * nx + this.vel.z * nz) / nl;
+        if (vn < 0) { this.vel.x -= (vn * nx) / nl; this.vel.z -= (vn * nz) / nl; }
+        P.x = hit.x; P.z = hit.z;
+      }
       this.player.rotation.y = this.yaw;
       const spd = Math.hypot(this.vel.x, this.vel.z);
       this.camYaw = followCamYaw(this.camYaw, this.yaw, spd, dt);

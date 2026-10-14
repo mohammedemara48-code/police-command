@@ -1,5 +1,5 @@
 /** Police station hub: where it is and what it offers (pure, unit-tested). */
-export const STATION = { x: 12.4, z: 3, door: { x: 6.2, z: 3 }, parking: { x: 2.6, z: -4 }, r: 2.2 } as const;
+export const STATION = { x: 12.4, z: 3, door: { x: 6.2, z: 3 }, parking: { x: -2.6, z: 11 }, r: 2.2 } as const;
 
 export const nearDoor = (x: number, z: number) => Math.hypot(x - STATION.door.x, z - STATION.door.z) < STATION.r;
 
