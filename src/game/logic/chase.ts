@@ -13,7 +13,8 @@ export const GRACE = 6; // s on foot before the chase clock starts
 export function fleeSpeed(o: { t: number; k: number; playerMax: number; dist: number; turn: number }) {
   const base = (9.5 + Math.min(4, o.t * 0.15)) * o.k;
   let v = Math.min(base, o.playerMax * 0.84);
-  if (o.dist > 70) v *= 0.8; // rubber band: never just vanish
+  if (o.dist > 70)
+    v *= 0.8; // rubber band: never just vanish
   else if (o.dist < 14) v = Math.min(v * 1.06, o.playerMax * 0.88); // panic burst when you're on the bumper
   const sharp = Math.min(1, Math.abs(o.turn) / 1.2);
   return v * (1 - 0.45 * sharp);
@@ -21,11 +22,13 @@ export function fleeSpeed(o: { t: number; k: number; playerMax: number; dist: nu
 
 /** Drop waypoints that lie behind the car at the start (stops the U-turn straight through the player). */
 export function trimBehind(path: { x: number; z: number }[], x: number, z: number, heading: number) {
-  const fx = Math.sin(heading), fz = Math.cos(heading);
+  const fx = Math.sin(heading),
+    fz = Math.cos(heading);
   while (path.length > 1) {
     const p = path[0]!;
     const dot = (p.x - x) * fx + (p.z - z) * fz;
-    if (dot < 2) path.shift(); else break;
+    if (dot < 2) path.shift();
+    else break;
   }
   return path;
 }
@@ -36,7 +39,13 @@ export function stepLock(lock: number, dist: number, inCar: boolean, dt: number)
   return inCar && dist < CATCH_R ? Math.min(LOCK_T, lock + dt) : Math.max(0, lock - dt * 0.5);
 }
 
-export function chaseOutcome(o: { dist: number; inCar: boolean; clock: number; limit: number; lock: number }): ChaseResult {
+export function chaseOutcome(o: {
+  dist: number;
+  inCar: boolean;
+  clock: number;
+  limit: number;
+  lock: number;
+}): ChaseResult {
   if (o.inCar && o.lock >= LOCK_T) return 'caught';
   if (o.dist > ESCAPE_R) return 'escaped';
   if (o.clock > o.limit) return 'timeout';
