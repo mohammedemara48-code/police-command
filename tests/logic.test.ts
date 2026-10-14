@@ -292,3 +292,20 @@ describe('arcade driving', () => {
     expect(pullOver(false, 20)).toBe(0);
   });
 });
+
+import { hubAllowed, nearDoor, repairTime, STATION } from '../src/game/logic/station';
+describe('police station hub', () => {
+  const at = { x: STATION.door.x, z: STATION.door.z };
+  it('opens only on foot, calm, at the door', () => {
+    expect(nearDoor(at.x, at.z)).toBe(true);
+    expect(hubAllowed({ inCar: false, chasing: false, hostiles: 0, ...at })).toBe(true);
+    expect(hubAllowed({ inCar: true, chasing: false, hostiles: 0, ...at })).toBe(false);
+    expect(hubAllowed({ inCar: false, chasing: true, hostiles: 0, ...at })).toBe(false);
+    expect(hubAllowed({ inCar: false, chasing: false, hostiles: 2, ...at })).toBe(false);
+    expect(hubAllowed({ inCar: false, chasing: false, hostiles: 0, x: 0, z: 40 })).toBe(false);
+  });
+  it('repair time scales with damage', () => {
+    expect(repairTime(0)).toBe(0);
+    expect(repairTime(100)).toBe(4);
+  });
+});
