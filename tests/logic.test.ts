@@ -323,6 +323,7 @@ describe('new mission types', () => {
   it('speeder is catchable', () => {
     expect(speederSpeed(18, 0)).toBeLessThan(18 * 0.7);
     expect(speederSpeed(18, 1.5)).toBeLessThan(speederSpeed(18, 0));
+    expect(speederSpeed(18, 0, 80)).toBeLessThan(speederSpeed(18, 0, 10) * 0.5);
   });
   it('checkpoints advance only in the car and in range', () => {
     const pts = [{ x: 0, z: 0 }, { x: 0, z: 50 }];

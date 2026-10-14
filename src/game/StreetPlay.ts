@@ -430,7 +430,7 @@ export class StreetPlay {
     const dist = Math.hypot(g.position.x - me.x, g.position.z - me.z);
     this.msTarget.copy(g.position); this.msHasTarget = true;
     if (!this.pullStopped) {
-      const v = speederSpeed(18 + rank().car, this.spTurn) * (this.inCar ? 1 : 0.3);
+      const v = speederSpeed(18 + rank().car, this.spTurn, dist) * (this.inCar ? 1 : 0.3);
       let head = followPath(g.position, this.spPath, v * dt);
       if (head === null) { const f = farNode(g.position.x, g.position.z); this.spPath = findPath(g.position.x, g.position.z, f.x, f.z); head = followPath(g.position, this.spPath, v * dt); }
       if (head !== null) { this.spTurn = wrapAngle(head - g.rotation.y); g.rotation.y = approachAngle(g.rotation.y, head, dt * 5); }
@@ -441,7 +441,7 @@ export class StreetPlay {
         g.position.x += Math.cos(g.rotation.y) * 1.2;
         audio.sample('confirm', 0.6);
         this.setStatus('العربية وقفت على جنب. انزل واكتب المخالفة 📝');
-      } else if (dist > 170) { this.endPullover(); this.finishMission(false, 'العربية المسرعة هربت.'); return; }
+      }
       const pct = Math.round((this.pullM / PULL_T) * 100);
       this.msText = !this.inCar ? 'اركب الدورية' : !this.siren ? '🚨 شغّل السارينة!' : pct > 0 ? `🚨 خليك وراها… ${pct}%` : text;
     } else {
