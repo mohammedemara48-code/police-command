@@ -201,7 +201,7 @@ describe('on-foot locomotion', () => {
   });
 });
 
-import { sanitizeChar, newerChar, recolorFor, weaponStats, DEFAULT_CHAR } from '../src/game/logic/character';
+import { sanitizeChar, newerChar, recolorFor, weaponStats, modelFor, DEFAULT_CHAR } from '../src/game/logic/character';
 describe('character profile', () => {
   it('sanitizes bad data to defaults', () => {
     expect(sanitizeChar(null)).toEqual(DEFAULT_CHAR);
@@ -216,8 +216,9 @@ describe('character profile', () => {
     expect(newerChar(null, a)).toBe(a);
   });
   it('recolors the right materials per body', () => {
-    expect(Object.keys(recolorFor(DEFAULT_CHAR))).toContain('Swat');
-    expect(Object.keys(recolorFor({ ...DEFAULT_CHAR, body: 'female' }))).toContain('Hair_Brown');
+    expect(Object.keys(recolorFor(DEFAULT_CHAR))).toEqual(['Suit', 'Skin', 'Hair']);
+    expect(recolorFor({ ...DEFAULT_CHAR, uniform: 2 }).Suit).toBe(0x3b6fb6);
+    expect(modelFor({ ...DEFAULT_CHAR, body: 'female' })).toBe('cop_f');
   });
   it('weapons trade magazine size for damage fairly', () => {
     const p = weaponStats(DEFAULT_CHAR, 12, 1),
