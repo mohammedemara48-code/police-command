@@ -1,4 +1,3 @@
-# Copy to .github/workflows/ci.yml (the automation token can't create workflow files).
 name: CI
 on:
   push:

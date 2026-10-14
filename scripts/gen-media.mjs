@@ -1,5 +1,5 @@
 // Rebuilds binary assets (README GIF, realistic GLB models) from base64 text parts:
-// the repo tooling can only commit text. Each folder in assets-b64/ is named after its target
+// Binary assets are stored as base64 text parts to keep the repo diff-friendly. Each folder in assets-b64/ is named after its target
 // path with "/" written as "__", e.g. assets-b64/public__models__cop_m.glb/part-00.
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';

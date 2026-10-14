@@ -1757,7 +1757,7 @@ export class StreetPlay {
   }
 
   engage() {
-    // test hook for headless play-throughs (only with ?autotest)
+    // test hook for automated play-throughs (only with ?autotest)
     if (location.search.includes('autotest')) (window as unknown as { __sp: unknown }).__sp = this;
     this.active = true;
     this.group.visible = true;

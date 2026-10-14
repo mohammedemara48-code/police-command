@@ -7,7 +7,7 @@ Tone: a game about arresting people. Non-gory. Suspects drop their weapon and fa
 
 ## 2. Core loop
 1. **Radio dispatch:** dialogue lines, with who is speaking and portrait colour, set the situation.
-2. **Drive with GPS:** the objective names a destination. The yellow beacon, the edge arrow plus distance and the minimap route all point to it. The step finishes on arrival (within a radius, measured in 2D, on foot or in the car). This fixes the old "1 m" bug.
+2. **Drive with GPS:** the objective names a destination. The yellow beacon, the edge arrow plus distance and the minimap route all point to it. The step finishes on arrival (within a radius, measured in 2D, on foot or in the car).
 3. **Scripted scenario** (one or more steps):
    - **Arrest:** aim at a suspect, press **«استسلم!»** to order him to surrender, walk up, press **«كلبش»** to handcuff (1.2 s).
    - **Foot flee:** the suspect runs away. Catch him (within 2.5 m) and he gives up.
@@ -70,4 +70,4 @@ The officer's health reaches 0. A suspect escapes (out of range or time limit). 
 - The pedestrian and NPC logic must not allocate memory per frame. The HUD only updates at 8 Hz.
 
 ## 9. Acceptance (verification)
-In a headless 412×915 mobile run on low quality, missions 1–3 must be playable start to finish: radio dialogue appears, objectives advance at the right moments, the arrest works (order, then cuff), and the chase can be caught. Screenshots are saved for each mission.
+In a 412×915 mobile test run on low quality, missions 1–3 must be playable start to finish: radio dialogue appears, objectives advance at the right moments, the arrest works (order, then cuff), and the chase can be caught. Screenshots are saved for each mission.
