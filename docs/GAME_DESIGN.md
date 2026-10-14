@@ -24,7 +24,18 @@ Tone: a game about arresting people. Non-gory. Suspects drop their weapon and fa
 |---|---|---|---|
 | `surrender` | hands up (stays put) | down (penalty: excessive force) | — |
 | `flee` | 50%: hands up, else runs | stops and surrenders after 1 hit | caught within 2.5 m → surrenders; escapes beyond 90 m → mission failed |
-| `fight` | ignores | 3 HP (boss 8). At ≤2 HP the boss surrenders | moves to nearest cover. Cycle: hide 1.6–2.4 s, then peek and shoot 1.2 s. Hit chance 30% (12% if you are in the car) |
+| `fight` | ignores | 3 HP (boss 8). At ≤2 HP the boss surrenders | uses cover (see below). Hit chance 30% when peeking (12% if you are in the car), about half that while sidestepping, none while running between crates |
+
+**Gunmen and cover** (`src/game/logic/cover.ts`): `advance → move → hide ↔ peek`, plus `flank`.
+- A crate only protects a gunman when it is between him and you. Work round the side of it and your shots land.
+- He hides 1.6–2.4 s, then peeks and shoots for 1.3 s. After two peeks he may run to another free crate (never one you're standing next to) or sidestep round you (flank). If you get round his crate, he runs to its other side or to another one.
+- Each shootout gets two spare crates at the sides of the group. Running and flanking gunmen are out in the open.
+- How often they move or flank grows through the story (mission 4 → 12) and with your rank on patrol. Hostage takers never leave their crate.
+
+**Suspect cars** (`src/game/logic/suspectCar.ts`): `flee → evade → ram → spun / boxed → surrender`.
+- `evade`: with you on its tail it weaves a little in its lane.
+- `ram`: when you're level with its doors it swipes sideways into you, and when you tailgate it brake-checks you. There is one ram at a time and a cooldown of 13 s on the first chase, down to 7 s on the fastest. Nothing happens in the first 6 s of a chase. A swipe costs a few % damage and shoves you.
+- No rams while it's spun out by a PIT, once the box-in meter is past half, or while you're on foot.
 
 Hostage: stands next to the captors. When all captors are down or cuffed, the hostage runs to safety. Hitting the hostage fails the mission.
 

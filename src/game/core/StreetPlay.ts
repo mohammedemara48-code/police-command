@@ -24,6 +24,7 @@ import {
   type PitInput
 } from '../logic/crash';
 import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from '../logic/chase';
+import { newCarAi, stepCarAi, carCmd, ramLanded, type CarSense, type CarCmd } from '../logic/suspectCar';
 import { character, onCharacter, setCharacter } from '../entities/Character';
 import { STATION, hubAllowed } from '../logic/station';
 import { resolve as collide, type OBB } from '../logic/collide';
@@ -77,6 +78,7 @@ import {
   progress,
   rank,
   isPatrol,
+  RANKS,
   type LevelDef,
   type Line,
   type Behaviour
@@ -266,6 +268,19 @@ export class StreetPlay {
   private pitCool = 0;
   private pitHead = 0;
   private pitIn: PitInput = { px: 0, pz: 0, pVelYaw: 0, pSpeed: 0, sx: 0, sz: 0, sYaw: 0, sSpeed: 0, sHl: 2.35 };
+  /** suspect driver: flee / evade / ram / spun / boxed / surrender */
+  private carAi = newCarAi();
+  private carSense: CarSense = {
+    lx: 0,
+    lz: 0,
+    inCar: false,
+    pSpeed: 0,
+    lock: 0,
+    spun: false,
+    caught: false,
+    skill: 0
+  };
+  private carOut: CarCmd = { speedMul: 1, lat: 0, yawOff: 0 };
   private speedoEl: HTMLElement | null = null;
   private speedoTxt = '';
   private camFov = 48;
@@ -1157,6 +1172,11 @@ export class StreetPlay {
     this.msIdx = 0;
     this.msTime = 0;
     this.squad.resetPlayer();
+    // gunmen get bolder through the story (from the port shootout to the boss) and with rank on patrol
+    const id = this.level.id;
+    this.squad.skill = isPatrol(id)
+      ? RANKS.indexOf(rank()) / (RANKS.length - 1)
+      : Math.max(0, Math.min(1, (id - 4) / 8));
     this.damage = 0;
     let seen = false;
     try {
@@ -2274,6 +2294,10 @@ export class StreetPlay {
     this.chaseTurn = 0;
     this.chaseLock = 0;
     this.chaseArrest = false;
+    this.carAi = newCarAi();
+    this.carSense.caught = false;
+    // the first chase barely rams, the gang's getaway driver (mission 10) and late patrol calls do it most
+    this.carSense.skill = Math.max(0, Math.min(1, (this.chaseSpeed - 0.85) / 0.45));
     this.travel = null;
     if (this.suspect) this.group.remove(this.suspect);
     this.suspect = this.makeSuspectCar();
@@ -2926,7 +2950,26 @@ export class StreetPlay {
       if (onRoad(nx, nz, 1)) sp.set(nx, 0, nz);
     }
     const moving = this.spinT <= 0;
-    const step = !moving ? 0 : this.inCar || this.chaseTime > GRACE ? flee * dt : flee * dt * 0.35;
+    // driver brain: may swipe at you when you're alongside, or brake-check you when you tailgate
+    const cs = this.carSense;
+    {
+      const y = this.suspect.rotation.y,
+        c = Math.cos(y),
+        s = Math.sin(y);
+      const dx = this.car.position.x - sp.x,
+        dz = this.car.position.z - sp.z;
+      cs.lx = dx * c - dz * s;
+      cs.lz = dx * s + dz * c;
+    }
+    cs.inCar = this.inCar;
+    cs.pSpeed = Math.abs(this.speed);
+    cs.lock = this.chaseLock / LOCK_T;
+    cs.spun = !moving;
+    const was = this.carAi.mode;
+    if (stepCarAi(this.carAi, cs, dt) === 'ram' && was !== 'ram')
+      this.setStatus(this.carAi.side ? '⚠ الحرامي بيحاول يخبطك!' : '⚠ فرمل فجأة قدامك!');
+    const cmd = carCmd(this.carAi, cs.skill, this.carOut);
+    const step = !moving ? 0 : (this.inCar || this.chaseTime > GRACE ? flee * dt : flee * dt * 0.35) * cmd.speedMul;
     let head = moving ? followPath(sp, this.chasePath, step) : null;
     if (head === null && moving) {
       const far = farNode(sp.x, sp.z);
@@ -2935,13 +2978,31 @@ export class StreetPlay {
     }
     if (head !== null && moving) {
       this.chaseTurn = wrapAngle(head - this.suspect.rotation.y);
-      this.suspect.rotation.y = approachAngle(this.suspect.rotation.y, head, dt * 5);
+      this.suspect.rotation.y = approachAngle(this.suspect.rotation.y, head + cmd.yawOff, dt * 5);
+    }
+    if (cmd.lat !== 0 && moving) {
+      // sideways drift (swipe or weave); the path pulls it back into lane afterwards
+      const y = this.suspect.rotation.y;
+      const nx = sp.x + Math.cos(y) * cmd.lat * dt,
+        nz = sp.z - Math.sin(y) * cmd.lat * dt;
+      if (onRoad(nx, nz, 1)) sp.set(nx, 0, nz);
     }
     // solid cars: you can't drive through the suspect; a nudge on its rear quarter (PIT) spins it out
     if (this.inCar) {
-      const sv = moving ? flee : 0,
-        sy = this.suspect.rotation.y;
-      const closing = this.carVsCar(this.suspect, Math.sin(sy) * sv, Math.cos(sy) * sv, 1, 2.35);
+      const sv = moving ? flee * cmd.speedMul : 0,
+        sy = this.suspect.rotation.y,
+        lat = moving ? cmd.lat : 0;
+      const closing = this.carVsCar(
+        this.suspect,
+        Math.sin(sy) * sv + Math.cos(sy) * lat,
+        Math.cos(sy) * sv - Math.sin(sy) * lat,
+        1,
+        2.35
+      );
+      if (closing > 0 && this.carAi.mode === 'ram') {
+        ramLanded(this.carAi);
+        if (this.carAi.side) this.setStatus(`💥 الحرامي خبطك! ضرر الدورية ${this.damage}%`);
+      }
       if (closing >= 0 && this.spinT <= 0 && this.pitCool <= 0) {
         const q = this.pitIn;
         q.px = this.car.position.x;
@@ -2980,6 +3041,8 @@ export class StreetPlay {
   /** chase won: the car stops, the driver steps out with the scripted behaviour */
   private caught() {
     this.chasing = false;
+    this.carSense.caught = true;
+    stepCarAi(this.carAi, this.carSense, 0);
     audio.sirenLoop(false);
     this.speed = 0;
     const p = this.suspect!.position;
