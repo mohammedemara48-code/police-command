@@ -66,7 +66,10 @@ export class UI {
       this.toast(`🚨 ${inc.title} — ${inc.districtName}`, 'warn');
     };
     window.addEventListener('resize', () => this.render());
-    window.addEventListener('pointerdown', () => (this.pointerDownAt = performance.now()), { capture: true, passive: true });
+    window.addEventListener('pointerdown', () => (this.pointerDownAt = performance.now()), {
+      capture: true,
+      passive: true
+    });
     this.renderStart();
   }
 
@@ -86,7 +89,10 @@ export class UI {
     if (!this.accountHooked) {
       this.accountHooked = true;
       // refresh the menu (login label / unlocked levels) when the account syncs, but only if a menu is showing
-      onAccount(() => { if (!this.launched && (this.menuScreen === 'main' || this.menuScreen === 'account')) this.menu(this.menuScreen as 'main'); });
+      onAccount(() => {
+        if (!this.launched && (this.menuScreen === 'main' || this.menuScreen === 'account'))
+          this.menu(this.menuScreen as 'main');
+      });
       void restore();
     }
     this.menu('main');
@@ -125,13 +131,13 @@ export class UI {
             <button class="btn ghost" data-m="main">رجوع</button>`
           : screen === 'account'
             ? accountHtml()
-          : screen === 'board'
-            ? '<h2>🏆 ترتيب الأسبوع</h2><p class="hint">جاري التحميل…</p><button class="btn ghost" data-m="main">رجوع</button>'
-          : screen === 'ach'
-            ? `${achHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
-          : screen === 'settings'
-            ? `<h2>الإعدادات</h2>${settingsHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
-            : `<h2>الحقوق</h2>
+            : screen === 'board'
+              ? '<h2>🏆 ترتيب الأسبوع</h2><p class="hint">جاري التحميل…</p><button class="btn ghost" data-m="main">رجوع</button>'
+              : screen === 'ach'
+                ? `${achHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
+                : screen === 'settings'
+                  ? `<h2>الإعدادات</h2>${settingsHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
+                  : `<h2>الحقوق</h2>
               <p class="credits">الضابط والمشاة وعربية الشرطة: Quaternius (CC0)<br>
               عربية Dodge Challenger: Grzybek عبر Poly Pizza (CC-BY 3.0)<br>
               مباني ومؤثرات صوتية: Kenney.nl (CC0)<br>
@@ -147,7 +153,12 @@ export class UI {
         if (this.menuScreen !== 'board' || this.launched) return;
         const card = this.overlay.querySelector('.menu-card, .meta-card') ?? this.overlay.firstElementChild;
         if (card) card.innerHTML = `${html}<button class="btn ghost" data-m="main">رجوع</button></div>`;
-        this.overlay.querySelectorAll<HTMLButtonElement>('[data-m]').forEach((b) => b.addEventListener('click', () => { audio.click(); this.menu(b.dataset.m as 'main'); }));
+        this.overlay.querySelectorAll<HTMLButtonElement>('[data-m]').forEach((b) =>
+          b.addEventListener('click', () => {
+            audio.click();
+            this.menu(b.dataset.m as 'main');
+          })
+        );
       });
     }
     this.menuScreen = screen;
@@ -156,15 +167,24 @@ export class UI {
         audio.resume();
         audio.click();
         const m = b.dataset.m!;
-        if ((m === 'play' || m === 'patrol') && needsCharacter()) this.creator(true, () => this.launch('street', m === 'play' ? progress.current : -1));
+        if ((m === 'play' || m === 'patrol') && needsCharacter())
+          this.creator(true, () => this.launch('street', m === 'play' ? progress.current : -1));
         else if (m === 'character') this.creator(false, () => this.menu('main'));
         else if (m === 'play') this.launch('street', progress.current);
         else if (m === 'patrol') this.launch('street', -1);
         else if (m === 'command') this.launch('command');
         else this.menu(m as 'main');
-      }));
+      })
+    );
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-l]').forEach((b) =>
-      b.addEventListener('click', () => { audio.resume(); audio.click(); const l = Number(b.dataset.l); if (needsCharacter()) this.creator(true, () => this.launch('street', l)); else this.launch('street', l); }));
+      b.addEventListener('click', () => {
+        audio.resume();
+        audio.click();
+        const l = Number(b.dataset.l);
+        if (needsCharacter()) this.creator(true, () => this.launch('street', l));
+        else this.launch('street', l);
+      })
+    );
   }
 
   private creator(first: boolean, done: () => void) {
@@ -182,10 +202,21 @@ export class UI {
         const frac = p.total ? p.done / p.total : 0.1;
         if (bar) bar.style.width = `${Math.round(10 + frac * 90)}%`;
       }, 120);
-      try { await this.city.loadStreet(); } catch { clearInterval(poll); this.overlay.innerHTML = '<div class="loading-screen"><div class="ls-title">تعذّر التحميل. تأكد من الإنترنت وجرّب تاني.</div></div>'; return; }
+      try {
+        await this.city.loadStreet();
+      } catch {
+        clearInterval(poll);
+        this.overlay.innerHTML =
+          '<div class="loading-screen"><div class="ls-title">تعذّر التحميل. تأكد من الإنترنت وجرّب تاني.</div></div>';
+        return;
+      }
       // progressive: the street shows placeholder meshes right away; wait briefly (max 6 s) for the main models
       await new Promise<void>((res) => {
-        const chk = () => { const p = models.progress(); if ((p.total && p.done >= p.total) || performance.now() - t0 > 6000) res(); else setTimeout(chk, 150); };
+        const chk = () => {
+          const p = models.progress();
+          if ((p.total && p.done >= p.total) || performance.now() - t0 > 6000) res();
+          else setTimeout(chk, 150);
+        };
         chk();
       });
       clearInterval(poll);
@@ -197,14 +228,14 @@ export class UI {
     if (!this.launched) {
       this.launched = true;
       this.game.start();
-
     }
     if (kind === 'street') {
-      if (this.city.street && !this.city.street.onReport) this.city.street.onReport = (r) => {
-        this.game.AddRewards(r.money, r.rep);
-        if (r.success) this.game.state.incidentsResolved += 1;
-        else this.game.state.incidentsFailed += 1;
-      };
+      if (this.city.street && !this.city.street.onReport)
+        this.city.street.onReport = (r) => {
+          this.game.AddRewards(r.money, r.rep);
+          if (r.success) this.game.state.incidentsResolved += 1;
+          else this.game.state.incidentsFailed += 1;
+        };
       this.game.state.cityHour = 18.9;
       this.city.setTimeOfDay(18.9);
       this.city.street?.engage();
@@ -226,7 +257,10 @@ export class UI {
     const wait = Math.max(0, 250 - (performance.now() - this.lastRenderAt));
     this.renderQueued = window.setTimeout(() => {
       this.renderQueued = 0;
-      if (performance.now() - this.pointerDownAt < 350) { this.render(); return; }
+      if (performance.now() - this.pointerDownAt < 350) {
+        this.render();
+        return;
+      }
       this.lastRenderAt = performance.now();
       this.renderNow();
     }, wait);
@@ -294,9 +328,7 @@ export class UI {
 
     const hint = document.createElement('div');
     hint.className = 'hint';
-    hint.textContent = this.isMobile()
-      ? `يوم ${s.day} · إصبع: دوران`
-      : `سحب: دوران · عجلة: زوم · يوم ${s.day}`;
+    hint.textContent = this.isMobile() ? `يوم ${s.day} · إصبع: دوران` : `سحب: دوران · عجلة: زوم · يوم ${s.day}`;
     this.hud.appendChild(hint);
   }
 
@@ -423,7 +455,6 @@ export class UI {
       this.hud.appendChild(this.cctvPopup(selected));
     }
   }
-
 
   private bindTechTree(host: HTMLElement) {
     for (const t of this.game.techDefs) {
@@ -553,7 +584,6 @@ export class UI {
     this.render();
   }
 
-
   private stopGuns() {
     if (this.gunTimer) {
       clearInterval(this.gunTimer);
@@ -622,8 +652,6 @@ export class UI {
     }
     this.render();
   }
-
-
 
   private incidentCard(inc: Incident, active: boolean, mobile: boolean) {
     const el = document.createElement('div');
@@ -715,12 +743,14 @@ export class UI {
       </div>
       <div class="dispatch-log">
         <div style="font-weight:800;margin-bottom:4px;color:#edf3ff">سجل الإرسال المباشر</div>
-        ${logs
-          .map((l) => {
-            const sp = l.indexOf(' ');
-            return `<div><span class="ts">${l.slice(0, sp)}</span>${l.slice(sp)}</div>`;
-          })
-          .join('') || '<div>Surveillance current…</div>'}
+        ${
+          logs
+            .map((l) => {
+              const sp = l.indexOf(' ');
+              return `<div><span class="ts">${l.slice(0, sp)}</span>${l.slice(sp)}</div>`;
+            })
+            .join('') || '<div>Surveillance current…</div>'
+        }
       </div>
     `;
     box.querySelector('#cctv-x')!.addEventListener('click', () => {
@@ -783,14 +813,16 @@ export class UI {
       const closed = this.incidents.incidents.filter((i) => i.status === 'resolved' || i.status === 'failed');
       el.innerHTML = `<h3>التحقيقات والقضايا</h3>
         <p style="font-size:12px;color:var(--muted);margin-bottom:8px">محلول: ${this.game.state.incidentsResolved} · فاشل: ${this.game.state.incidentsFailed}</p>
-        ${closed
-          .slice(0, 8)
-          .map(
-            (i) =>
-              `<div class="card"><h4>${i.title}</h4><p>${i.description}</p>
+        ${
+          closed
+            .slice(0, 8)
+            .map(
+              (i) =>
+                `<div class="card"><h4>${i.title}</h4><p>${i.description}</p>
               <span class="chip ${i.status === 'resolved' ? 'ok' : 'hot'}">${i.status}</span></div>`
-          )
-          .join('') || '<div class="card"><p>لا قضايا مغلقة بعد.</p></div>'}`;
+            )
+            .join('') || '<div class="card"><p>لا قضايا مغلقة بعد.</p></div>'
+        }`;
     } else if (this.sheetTab === 'buildings') {
       el.innerHTML = `<h3>المباني والترقيات</h3>
         <div class="card"><h4>مركز القيادة</h4><p>مهبط + هليكوبتر + صحن فضائي — نشط</p><span class="chip ok">LVL 1</span></div>
