@@ -510,9 +510,12 @@ export class StreetPlay {
     const test = (g: THREE.Object3D | null | undefined) => {
       if (!g || !g.visible || g === (this.inCar ? this.car : null)) return;
       const t = ((g.position.x - C.x) * sx + (g.position.z - C.z) * sz) / L2;
+      if (Math.hypot(g.position.x - C.x, g.position.z - C.z) < 3.4) { now.add(g); return; }
       if (t <= 0 || t >= 0.92) return;
       const px = C.x + sx * t - g.position.x, pz = C.z + sz * t - g.position.z;
       if (px * px + pz * pz < 2.6 * 2.6) now.add(g);
+      // or simply right next to the lens
+      else if (Math.hypot(g.position.x - C.x, g.position.z - C.z) < 3.4) now.add(g);
     };
     test(this.car);
     for (const t of this.traffic) test(t.mesh);
@@ -1678,7 +1681,6 @@ export class StreetPlay {
       this.travel = null;
       this.placeId = place.id;
       this.setStatus(`وصلت إلى ${place.name}.`);
-      this.maybeStartChase(place);
       return;
     }
     this.travel = { z: place.z, fast: false };
@@ -1687,9 +1689,6 @@ export class StreetPlay {
     this.setStatus(`بتسوق نحو ${place.name}…`);
   }
 
-  private maybeStartChase(_place: StreetPlace) {
-    /* legacy trigger: missions are driven by the step runner now */
-  }
 
 
   private beginChase() {
@@ -1959,7 +1958,6 @@ export class StreetPlay {
         this.travel = null;
         if (place) {
           this.setStatus(`وصلت إلى ${place.name}.`);
-          this.maybeStartChase(place);
         }
       } else {
         throttle = Math.sign(dz);
@@ -2031,12 +2029,6 @@ export class StreetPlay {
       const swing = spd > 0.3 ? Math.sin(this.legPhase) * Math.min(0.7, spd * 0.18) : 0;
       if (legs[0]) legs[0].rotation.x = swing;
       if (legs[1]) legs[1].rotation.x = -swing;
-      if (this.missionId) {
-        const place = STREET_PLACES.find((p) => p.id === this.missionId);
-        if (place && Math.abs(this.player.position.z - place.z) < 8 && !this.chasing && !this.resultEl) {
-          this.maybeStartChase(place);
-        }
-      }
     }
   }
 
@@ -2100,7 +2092,8 @@ export class StreetPlay {
       // don't drive through the officer or the patrol car
       const me = this.inCar ? this.car.position : this.player.position;
       const dz = (me.z - z) * Math.sign(t.speed);
-      if (Math.abs(me.x - t.mesh.position.x) < 1.8 && dz > 0 && dz < 6) stop = true;
+      // only brake for someone actually in front (not alongside), so cars never park beside the officer
+      if (Math.abs(me.x - t.mesh.position.x) < 1.4 && dz > 2.6 && dz < 7.5) stop = true;
       // siren: cars nearby ease to the kerb and stop to let you through
       const C = this.car.position;
       const near = Math.hypot(C.x - t.mesh.position.x, C.z - z);
