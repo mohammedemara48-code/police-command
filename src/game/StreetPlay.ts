@@ -13,7 +13,7 @@ import { newCall, type Kind } from './Dispatch';
 import { Squad } from './Npc';
 import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
-import { models, CARS, LOW_CARS, MEN, WOMEN, LOW_BUILDINGS, TOWERS, fx } from './Models';
+import { models, CARS, MEN, WOMEN, LOW_BUILDINGS, TOWERS, fx } from './Models';
 import { audio } from './AudioManager';
 import { Q } from './Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -1612,7 +1612,7 @@ export class StreetPlay {
       fx.glow(lr, 0xff2244);
       fx.glow(lb, 0x2266ff);
     }
-    models.dress(g, 'police-real', { length: 4.6 });
+    models.dress(g, 'car-police', { length: 4.7 });
     return g;
   }
 
@@ -1637,9 +1637,9 @@ export class StreetPlay {
         const dir = k ? 1 : -1;
         mesh.position.set(-100 + i * 70 + k * 40, 0, z + dir * 1.7);
         mesh.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
-        models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[0], {
+        models.dress(mesh, CARS[(i * 2 + k) % CARS.length]!, {
           length: 4.5,
-          tint: Q.lowDetailPeople ? undefined : tints[(i * 2 + k) % tints.length]
+          tint: tints[(i * 2 + k) % tints.length]
         });
         this.group.add(mesh);
         this.cross.push({ mesh, speed: dir * (5 + i) });
@@ -1658,9 +1658,9 @@ export class StreetPlay {
       mesh.position.set(laneX, 0, -60 + i * 38);
       mesh.rotation.y = i % 2 === 0 ? 0 : Math.PI;
       const tints = [0xffffff, 0x4a7bd6, 0xbfc4cc, 0x3a3a3a, 0x3f9a5a, 0xf2f2f2, 0xd9b44a];
-      models.dress(mesh, (Q.lowDetailPeople ? LOW_CARS : CARS)[i % CARS.length], {
+      models.dress(mesh, CARS[i % CARS.length]!, {
         length: 4.5,
-        tint: Q.lowDetailPeople ? undefined : tints[i % tints.length]
+        tint: tints[i % tints.length]
       });
       this.group.add(mesh);
       this.traffic.push({ mesh, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });

@@ -89,6 +89,7 @@ export class CityScene {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = Q.shadows;
     models.shadows = Q.shadows;
+    models.hiQuality = !Q.lowDetailPeople;
     fx.particles = Q.particles;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -431,7 +432,7 @@ export class CityScene {
       wh.position.set(wx, 0.28, wz);
       g.add(wh);
     }
-    models.dress(g, 'police-real', { length: 3.6 });
+    models.dress(g, 'car-police', { length: 3.6 });
     return g;
   }
 
