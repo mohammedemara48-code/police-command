@@ -12,9 +12,22 @@ import { findPath, farNode, followPath } from './City';
 
 export type SState = 'idle' | 'flee' | 'fight' | 'hands' | 'cuffed' | 'down' | 'hostage' | 'free';
 export interface Suspect {
-  g: THREE.Group; b: Behaviour; state: SState; hp: number; boss: boolean;
-  cd: number; hide: number; hidden: boolean; cover: THREE.Vector3 | null; flash: number; down: number;
-  mats: THREE.MeshStandardMaterial[]; icon: THREE.Sprite; flinch: number; cuffT: number; path: { x: number; z: number }[];
+  g: THREE.Group;
+  b: Behaviour;
+  state: SState;
+  hp: number;
+  boss: boolean;
+  cd: number;
+  hide: number;
+  hidden: boolean;
+  cover: THREE.Vector3 | null;
+  flash: number;
+  down: number;
+  mats: THREE.MeshStandardMaterial[];
+  icon: THREE.Sprite;
+  flinch: number;
+  cuffT: number;
+  path: { x: number; z: number }[];
 }
 
 const tA = new THREE.Vector3();
@@ -24,13 +37,23 @@ function iconTex(txt: string, bg: string) {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const g = c.getContext('2d')!;
-  g.fillStyle = bg; g.beginPath(); g.arc(32, 32, 30, 0, Math.PI * 2); g.fill();
-  g.font = '34px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 32, 35);
+  g.fillStyle = bg;
+  g.beginPath();
+  g.arc(32, 32, 30, 0, Math.PI * 2);
+  g.fill();
+  g.font = '34px sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(txt, 32, 35);
   return new THREE.CanvasTexture(c);
 }
 
 export class Squad {
-  hp = 100; armor = 50; ammo = 12; mag = 12; dmg = 1;
+  hp = 100;
+  armor = 50;
+  ammo = 12;
+  mag = 12;
+  dmg = 1;
   list: Suspect[] = [];
   hostage: Suspect | null = null;
   failed: string | null = null;
@@ -44,18 +67,33 @@ export class Squad {
   private tracerMat = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true });
   private flashLight = new THREE.PointLight(0xffc860, 0, 7, 2);
   private crateMat = new THREE.MeshStandardMaterial({ color: 0x7a5a32, roughness: 0.9 });
-  private icons = { hands: iconTex('🙌', '#ffd23dcc'), cuffed: iconTex('🔗', '#3aa0ffcc'), alert: iconTex('❗', '#ff3b3bcc'), hostage: iconTex('🆘', '#ffffffcc') };
+  private icons = {
+    hands: iconTex('🙌', '#ffd23dcc'),
+    cuffed: iconTex('🔗', '#3aa0ffcc'),
+    alert: iconTex('❗', '#ff3b3bcc'),
+    hostage: iconTex('🆘', '#ffffffcc')
+  };
   onGunfire: ((x: number, z: number) => void) | null = null;
   onShot: (() => void) | null = null;
 
-  constructor(private group: THREE.Group, private makePerson: (hostage: boolean) => THREE.Group) {
+  constructor(
+    private group: THREE.Group,
+    private makePerson: (hostage: boolean) => THREE.Group
+  ) {
     group.add(this.flashLight);
   }
 
   resetPlayer() {
     const r = rank();
     const w = weaponStats(character(), r.mag, r.dmg);
-    this.mag = w.mag; this.dmg = w.dmg; this.fireCool = w.cool; this.ammo = this.mag; this.hp = 100; this.armor = 50; this.reloadT = 0; this.failed = null;
+    this.mag = w.mag;
+    this.dmg = w.dmg;
+    this.fireCool = w.cool;
+    this.ammo = this.mag;
+    this.hp = 100;
+    this.armor = 50;
+    this.reloadT = 0;
+    this.failed = null;
   }
 
   private make(spec: { b: Behaviour; boss?: boolean }, x: number, z: number, hostage = false): Suspect {
@@ -64,11 +102,36 @@ export class Squad {
     g.position.set(x, 0, z);
     this.group.add(g);
     const mats: THREE.MeshStandardMaterial[] = [];
-    g.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial; if (m && m.emissive && !mats.includes(m)) mats.push(m); });
-    const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.icons.alert, depthTest: false, transparent: true }));
-    icon.scale.setScalar(0.55); icon.position.y = 2.25; icon.visible = false; icon.renderOrder = 10;
+    g.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
+      if (m && m.emissive && !mats.includes(m)) mats.push(m);
+    });
+    const icon = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: this.icons.alert, depthTest: false, transparent: true })
+    );
+    icon.scale.setScalar(0.55);
+    icon.position.y = 2.25;
+    icon.visible = false;
+    icon.renderOrder = 10;
     g.add(icon);
-    return { g, b: spec.b, state: hostage ? 'hostage' : 'idle', hp: spec.boss ? 8 : 3, boss: !!spec.boss, cd: 1 + Math.random() * 1.5, hide: 0, hidden: false, cover: null, flash: 0, down: 0, mats, icon, flinch: 0, cuffT: 0, path: [] };
+    return {
+      g,
+      b: spec.b,
+      state: hostage ? 'hostage' : 'idle',
+      hp: spec.boss ? 8 : 3,
+      boss: !!spec.boss,
+      cd: 1 + Math.random() * 1.5,
+      hide: 0,
+      hidden: false,
+      cover: null,
+      flash: 0,
+      down: 0,
+      mats,
+      icon,
+      flinch: 0,
+      cuffT: 0,
+      path: []
+    };
   }
 
   spawn(x: number, z: number, specs: SuspectSpec[], opts: { cover?: boolean; hostage?: boolean; approachZ: number }) {
@@ -88,96 +151,174 @@ export class Squad {
     }
     if (opts.hostage) {
       this.hostage = this.make({ b: 'surrender' }, x, z + dir * 0.6, true);
-      this.hostage.icon.material.map = this.icons.hostage; this.hostage.icon.visible = true;
+      this.hostage.icon.material.map = this.icons.hostage;
+      this.hostage.icon.visible = true;
     }
   }
 
   /** a single suspect (e.g. the driver after a chase) */
-  spawnOne(b: Behaviour, x: number, z: number) { const s = this.make({ b }, x, z); s.state = b === 'fight' ? 'fight' : b === 'flee' ? 'flee' : 'idle'; this.list.push(s); return s; }
+  spawnOne(b: Behaviour, x: number, z: number) {
+    const s = this.make({ b }, x, z);
+    s.state = b === 'fight' ? 'fight' : b === 'flee' ? 'flee' : 'idle';
+    this.list.push(s);
+    return s;
+  }
 
   clear() {
     for (const s of this.list) s.g.removeFromParent();
     this.hostage?.g.removeFromParent();
     for (const c of this.covers) c.removeFromParent();
-    this.list = []; this.covers = []; this.hostage = null; this.threat = 0;
+    this.list = [];
+    this.covers = [];
+    this.hostage = null;
+    this.threat = 0;
   }
 
   /** all suspects arrested or neutralised (and the hostage is safe) */
-  done() { return this.list.length > 0 && this.list.every((s) => s.state === 'cuffed' || s.state === 'down'); }
-  remaining() { return this.list.filter((s) => s.state !== 'cuffed' && s.state !== 'down').length; }
+  done() {
+    return this.list.length > 0 && this.list.every((s) => s.state === 'cuffed' || s.state === 'down');
+  }
+  remaining() {
+    return this.list.filter((s) => s.state !== 'cuffed' && s.state !== 'down').length;
+  }
 
   /** closest suspect in front of the officer */
   target(from: THREE.Vector3, yaw: number, range = 24, skipSurrendered = false): Suspect | null {
-    let best: Suspect | null = null; let bd = range;
+    let best: Suspect | null = null;
+    let bd = range;
     for (const s of this.list) {
       if (s.state === 'down' || s.state === 'cuffed' || (skipSurrendered && s.state === 'hands')) continue;
-      const dx = s.g.position.x - from.x, dz = s.g.position.z - from.z;
+      const dx = s.g.position.x - from.x,
+        dz = s.g.position.z - from.z;
       const d = Math.hypot(dx, dz);
       const a = Math.atan2(dx, dz) - yaw;
       const ang = Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
-      if (d < bd && (ang < 0.75 || d < 3)) { best = s; bd = d; }
+      if (d < bd && (ang < 0.75 || d < 3)) {
+        best = s;
+        bd = d;
+      }
     }
     return best;
   }
 
-  get reloading() { return this.reloadT > 0; }
+  get reloading() {
+    return this.reloadT > 0;
+  }
 
   shoot(from: THREE.Vector3, yaw: number) {
     if (this.cool > 0 || this.reloadT > 0) return;
-    if (this.ammo <= 0) { this.reloadT = 1.3; return; }
-    this.cool = this.fireCool; this.ammo--; if (this.ammo <= 0) this.reloadT = 1.3;
-    audio.gunshot(); addStat('shots'); this.onShot?.();
+    if (this.ammo <= 0) {
+      this.reloadT = 1.3;
+      return;
+    }
+    this.cool = this.fireCool;
+    this.ammo--;
+    if (this.ammo <= 0) this.reloadT = 1.3;
+    audio.gunshot();
+    addStat('shots');
+    this.onShot?.();
     this.onGunfire?.(from.x, from.z);
     // auto-aim never locks onto someone with hands up (the officer lowers the gun instead)
     const t = this.target(from, yaw, 28, true);
     tA.set(from.x + Math.sin(yaw) * 0.6, 1.35, from.z + Math.cos(yaw) * 0.6);
-    this.flashLight.position.copy(tA); this.flashLight.intensity = 7;
+    this.flashLight.position.copy(tA);
+    this.flashLight.intensity = 7;
     // hostage in the line of fire?
     const h = this.hostage;
     if (h && h.state === 'hostage' && t) {
       const hd = Math.hypot(h.g.position.x - from.x, h.g.position.z - from.z);
       const td = Math.hypot(t.g.position.x - from.x, t.g.position.z - from.z);
-      const ha = Math.atan2(h.g.position.x - from.x, h.g.position.z - from.z), ta = Math.atan2(t.g.position.x - from.x, t.g.position.z - from.z);
+      const ha = Math.atan2(h.g.position.x - from.x, h.g.position.z - from.z),
+        ta = Math.atan2(t.g.position.x - from.x, t.g.position.z - from.z);
       if (hd < td && Math.abs(Math.atan2(Math.sin(ha - ta), Math.cos(ha - ta))) < 0.12 && Math.random() < 0.5) {
-        this.tracer(tA, tB.set(h.g.position.x, 1.2, h.g.position.z)); this.failed = 'الرهينة اتصابت.'; return;
+        this.tracer(tA, tB.set(h.g.position.x, 1.2, h.g.position.z));
+        this.failed = 'الرهينة اتصابت.';
+        return;
       }
     }
-    if (!t) { this.tracer(tA, tB.set(from.x + Math.sin(yaw) * 22, 1.3, from.z + Math.cos(yaw) * 22)); return; }
-    if (t.hidden) { // bullet hits the cover
-      this.tracer(tA, tB.set(t.g.position.x, 0.9, t.g.position.z + (from.z > t.g.position.z ? 1.3 : -1.3))); return;
+    if (!t) {
+      this.tracer(tA, tB.set(from.x + Math.sin(yaw) * 22, 1.3, from.z + Math.cos(yaw) * 22));
+      return;
+    }
+    if (t.hidden) {
+      // bullet hits the cover
+      this.tracer(tA, tB.set(t.g.position.x, 0.9, t.g.position.z + (from.z > t.g.position.z ? 1.3 : -1.3)));
+      return;
     }
     this.tracer(tA, tB.set(t.g.position.x, 1.2, t.g.position.z));
     if (Math.random() > 0.88) return;
-    if (t.state === 'hands') { this.failed = 'ضربت مشتبه به مستسلم — استخدام مفرط للقوة.'; return; }
-    t.hp -= this.dmg; t.flash = 0.15; t.flinch = 0.25; addStat('hits');
-    if (t.b === 'flee' && t.state === 'flee') { this.surrender(t); return; }
-    if (t.boss && t.hp <= 2) { this.surrender(t); return; }
-    if (t.hp <= 0) { t.state = 'down'; t.down = 0.001; t.icon.visible = false; addStat('gang'); }
-    else if (t.state === 'idle') t.state = t.b === 'fight' ? 'fight' : t.b === 'flee' ? 'flee' : 'hands';
+    if (t.state === 'hands') {
+      this.failed = 'ضربت مشتبه به مستسلم — استخدام مفرط للقوة.';
+      return;
+    }
+    t.hp -= this.dmg;
+    t.flash = 0.15;
+    t.flinch = 0.25;
+    addStat('hits');
+    if (t.b === 'flee' && t.state === 'flee') {
+      this.surrender(t);
+      return;
+    }
+    if (t.boss && t.hp <= 2) {
+      this.surrender(t);
+      return;
+    }
+    if (t.hp <= 0) {
+      t.state = 'down';
+      t.down = 0.001;
+      t.icon.visible = false;
+      addStat('gang');
+    } else if (t.state === 'idle') t.state = t.b === 'fight' ? 'fight' : t.b === 'flee' ? 'flee' : 'hands';
   }
 
-  private surrender(s: Suspect) { s.state = 'hands'; s.hidden = false; s.g.position.y = 0; s.icon.material.map = this.icons.hands; s.icon.material.needsUpdate = true; s.icon.visible = true; }
+  private surrender(s: Suspect) {
+    s.state = 'hands';
+    s.hidden = false;
+    s.g.position.y = 0;
+    s.icon.material.map = this.icons.hands;
+    s.icon.material.needsUpdate = true;
+    s.icon.visible = true;
+  }
 
   /** «استسلم!» — order the targeted suspect to give up */
   order(from: THREE.Vector3, yaw: number) {
     const s = this.target(from, yaw, 18);
     if (!s) return 'مفيش مشتبه به قدامك.';
     if (s.state === 'hands') return 'مستسلم — قرّب وكلبشه.';
-    if (s.b === 'surrender' || (s.state === 'idle' && s.b !== 'fight')) { if (s.b === 'flee' && Math.random() < 0.5) { s.state = 'flee'; return 'بيجري! الحقه.'; } this.surrender(s); return 'رفع إيده. قرّب وكلبشه.'; }
-    if (s.b === 'flee') { if (Math.random() < 0.5) { this.surrender(s); return 'استسلم!'; } s.state = 'flee'; return 'بيجري! الحقه.'; }
+    if (s.b === 'surrender' || (s.state === 'idle' && s.b !== 'fight')) {
+      if (s.b === 'flee' && Math.random() < 0.5) {
+        s.state = 'flee';
+        return 'بيجري! الحقه.';
+      }
+      this.surrender(s);
+      return 'رفع إيده. قرّب وكلبشه.';
+    }
+    if (s.b === 'flee') {
+      if (Math.random() < 0.5) {
+        this.surrender(s);
+        return 'استسلم!';
+      }
+      s.state = 'flee';
+      return 'بيجري! الحقه.';
+    }
     s.state = 'fight';
     return 'رافض يستسلم ومسلح!';
   }
 
   /** suspect with hands up within reach */
   cuffable(from: THREE.Vector3) {
-    for (const s of this.list) if (s.state === 'hands' && Math.hypot(s.g.position.x - from.x, s.g.position.z - from.z) < 2.6) return s;
+    for (const s of this.list)
+      if (s.state === 'hands' && Math.hypot(s.g.position.x - from.x, s.g.position.z - from.z) < 2.6) return s;
     return null;
   }
 
   cuff(s: Suspect) {
-    s.state = 'cuffed'; s.icon.material.map = this.icons.cuffed; s.icon.material.needsUpdate = true; s.icon.visible = true;
-    addStat('arrests'); audio.click();
+    s.state = 'cuffed';
+    s.icon.material.map = this.icons.cuffed;
+    s.icon.material.needsUpdate = true;
+    s.icon.visible = true;
+    addStat('arrests');
+    audio.click();
   }
 
   private tracer(a: THREE.Vector3, b: THREE.Vector3) {
@@ -189,38 +330,75 @@ export class Squad {
 
   update(dt: number, player: THREE.Vector3, inCar: boolean) {
     this.cool = Math.max(0, this.cool - dt);
-    if (this.reloadT > 0) { this.reloadT -= dt; if (this.reloadT <= 0) this.ammo = this.mag; }
+    if (this.reloadT > 0) {
+      this.reloadT -= dt;
+      if (this.reloadT <= 0) this.ammo = this.mag;
+    }
     this.flashLight.intensity = Math.max(0, this.flashLight.intensity - dt * 70);
     for (let i = this.tracers.length - 1; i >= 0; i--) {
-      const t = this.tracers[i]; t.t -= dt;
-      if (t.t <= 0) { t.line.removeFromParent(); t.line.geometry.dispose(); (t.line.material as THREE.Material).dispose(); this.tracers.splice(i, 1); }
+      const t = this.tracers[i];
+      t.t -= dt;
+      if (t.t <= 0) {
+        t.line.removeFromParent();
+        t.line.geometry.dispose();
+        (t.line.material as THREE.Material).dispose();
+        this.tracers.splice(i, 1);
+      }
     }
-    if (this.hurtT > 0) { this.hurtT -= dt; if (this.hurtT <= 0) document.body.classList.remove('hurt'); }
+    if (this.hurtT > 0) {
+      this.hurtT -= dt;
+      if (this.hurtT <= 0) document.body.classList.remove('hurt');
+    }
     let armed = 0;
     for (const s of this.list) {
       const p = s.g.position;
-      if (s.flash > 0) { s.flash -= dt; for (const m of s.mats) m.emissive.setHex(s.flash > 0 ? 0xff3030 : 0x000000); }
-      if (s.flinch > 0) { s.flinch -= dt; s.g.rotation.z = Math.sin(s.flinch * 40) * 0.12; } else s.g.rotation.z = 0;
-      const dx = player.x - p.x, dz = player.z - p.z, d = Math.hypot(dx, dz);
+      if (s.flash > 0) {
+        s.flash -= dt;
+        for (const m of s.mats) m.emissive.setHex(s.flash > 0 ? 0xff3030 : 0x000000);
+      }
+      if (s.flinch > 0) {
+        s.flinch -= dt;
+        s.g.rotation.z = Math.sin(s.flinch * 40) * 0.12;
+      } else s.g.rotation.z = 0;
+      const dx = player.x - p.x,
+        dz = player.z - p.z,
+        d = Math.hypot(dx, dz);
       switch (s.state) {
         case 'down':
-          s.g.userData.forceClip = 'down'; p.y = 0;
-          if (s.down < 1 && !(s.g.userData.clips as string[] | undefined)?.includes('down')) { s.down = Math.min(1, s.down + dt * 3); s.g.rotation.x = -s.down * 1.45; }
+          s.g.userData.forceClip = 'down';
+          p.y = 0;
+          if (s.down < 1 && !(s.g.userData.clips as string[] | undefined)?.includes('down')) {
+            s.down = Math.min(1, s.down + dt * 3);
+            s.g.rotation.x = -s.down * 1.45;
+          }
           break;
         case 'cuffed':
           s.g.userData.forceClip = 'idle';
           break;
         case 'hands':
-          s.g.rotation.y = Math.atan2(dx, dz); s.g.userData.forceClip = 'idle';
+          s.g.rotation.y = Math.atan2(dx, dz);
+          s.g.userData.forceClip = 'idle';
           break;
         case 'idle':
-          if ((s.b === 'fight' && d < 26) || (s.b === 'flee' && d < 12)) { s.state = s.b; s.icon.visible = true; }
+          if ((s.b === 'fight' && d < 26) || (s.b === 'flee' && d < 12)) {
+            s.state = s.b;
+            s.icon.visible = true;
+          }
           break;
         case 'flee': {
-          if (d < 2.5) { this.surrender(s); break; }
-          if (d > 90) { this.failed = 'المشتبه به هرب.'; break; }
+          if (d < 2.5) {
+            this.surrender(s);
+            break;
+          }
+          if (d > 90) {
+            this.failed = 'المشتبه به هرب.';
+            break;
+          }
           // flee AI: A* over the road graph to an intersection far from the officer
-          if (!s.path.length) { const f = farNode(player.x, player.z); s.path = findPath(p.x, p.z, f.x, f.z); }
+          if (!s.path.length) {
+            const f = farNode(player.x, player.z);
+            s.path = findPath(p.x, p.z, f.x, f.z);
+          }
           const head = followPath(p, s.path, 4.1 * dt);
           if (head !== null) s.g.rotation.y = head;
           s.g.userData.forceClip = null;
@@ -229,10 +407,16 @@ export class Squad {
         case 'fight': {
           armed++;
           s.g.rotation.y = Math.atan2(dx, dz);
-          if (!s.cover && d > 9 && d < 40) { p.x += (dx / d) * dt * 1.1; p.z += (dz / d) * dt * 1.1; }
+          if (!s.cover && d > 9 && d < 40) {
+            p.x += (dx / d) * dt * 1.1;
+            p.z += (dz / d) * dt * 1.1;
+          }
           if (s.cover) {
             s.hide -= dt;
-            if (s.hide <= 0) { s.hidden = !s.hidden; s.hide = s.hidden ? 1.6 + Math.random() * 0.8 : 1.3; }
+            if (s.hide <= 0) {
+              s.hidden = !s.hidden;
+              s.hide = s.hidden ? 1.6 + Math.random() * 0.8 : 1.3;
+            }
             p.y += ((s.hidden ? -0.75 : 0) - p.y) * Math.min(1, dt * 10);
           }
           s.g.userData.forceClip = s.flinch > 0 ? 'hit' : s.hidden ? 'idle' : 'gun';
@@ -241,7 +425,14 @@ export class Squad {
             s.cd = 1.2 + Math.random() * 1.3;
             const hit = Math.random() < (inCar ? 0.12 : 0.3);
             tA.set(p.x, 1.35 + p.y, p.z);
-            this.tracer(tA, tB.set(player.x + (hit ? 0 : (Math.random() - 0.5) * 3), 1.2, player.z + (hit ? 0 : (Math.random() - 0.5) * 3)));
+            this.tracer(
+              tA,
+              tB.set(
+                player.x + (hit ? 0 : (Math.random() - 0.5) * 3),
+                1.2,
+                player.z + (hit ? 0 : (Math.random() - 0.5) * 3)
+              )
+            );
             audio.sample('gunshot', 0.35, 1.1);
             this.onGunfire?.(p.x, p.z);
             if (hit) this.damage(inCar ? 5 : 9);
@@ -252,8 +443,20 @@ export class Squad {
     }
     const h = this.hostage;
     if (h) {
-      if (h.state === 'hostage' && this.list.every((s) => s.state !== 'fight' && s.state !== 'idle')) { h.state = 'free'; h.icon.visible = false; h.cd = 4; }
-      if (h.state === 'free') { h.cd -= dt; h.g.position.z -= dt * 3.5; h.g.userData.forceClip = null; if (h.cd <= 0) { h.g.removeFromParent(); this.hostage = null; } }
+      if (h.state === 'hostage' && this.list.every((s) => s.state !== 'fight' && s.state !== 'idle')) {
+        h.state = 'free';
+        h.icon.visible = false;
+        h.cd = 4;
+      }
+      if (h.state === 'free') {
+        h.cd -= dt;
+        h.g.position.z -= dt * 3.5;
+        h.g.userData.forceClip = null;
+        if (h.cd <= 0) {
+          h.g.removeFromParent();
+          this.hostage = null;
+        }
+      }
     }
     const want = Math.min(5, armed + (this.list.some((s) => s.state === 'flee') ? 1 : 0));
     this.threat += (want - this.threat) * Math.min(1, dt * 1.5);
@@ -262,7 +465,9 @@ export class Squad {
 
   private damage(n: number) {
     const a = Math.min(this.armor, n * 0.7);
-    this.armor -= a; this.hp = Math.max(0, this.hp - (n - a));
-    document.body.classList.add('hurt'); this.hurtT = 0.25;
+    this.armor -= a;
+    this.hp = Math.max(0, this.hp - (n - a));
+    document.body.classList.add('hurt');
+    this.hurtT = 0.25;
   }
 }

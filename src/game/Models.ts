@@ -9,11 +9,30 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  * Primitive placeholder meshes stay until the model is loaded, then get swapped.
  */
 export type ModelKind =
-  | 'police' | 'sedan' | 'taxi' | 'suv' | 'van' | 'sedan-sports'
-  | 'character-male-a' | 'character-female-a' | 'character-male-c' | 'character-female-c'
-  | 'building-a' | 'building-c' | 'building-e' | 'building-g'
-  | 'building-skyscraper-a' | 'building-skyscraper-c' | 'building-skyscraper-e'
-  | 'officer' | 'officer-female' | 'man-suit' | 'woman-a' | 'woman-b' | 'police-real' | 'challenger';
+  | 'police'
+  | 'sedan'
+  | 'taxi'
+  | 'suv'
+  | 'van'
+  | 'sedan-sports'
+  | 'character-male-a'
+  | 'character-female-a'
+  | 'character-male-c'
+  | 'character-female-c'
+  | 'building-a'
+  | 'building-c'
+  | 'building-e'
+  | 'building-g'
+  | 'building-skyscraper-a'
+  | 'building-skyscraper-c'
+  | 'building-skyscraper-e'
+  | 'officer'
+  | 'officer-female'
+  | 'man-suit'
+  | 'woman-a'
+  | 'woman-b'
+  | 'police-real'
+  | 'challenger';
 
 export const CARS: ModelKind[] = ['challenger', 'challenger', 'challenger', 'challenger', 'challenger'];
 export const LOW_CARS: ModelKind[] = ['sedan', 'taxi', 'suv', 'van', 'sedan-sports'];
@@ -22,12 +41,32 @@ export const PEOPLE: ModelKind[] = ['character-male-a', 'character-female-a', 'c
 export const LOW_BUILDINGS: ModelKind[] = ['building-a', 'building-c', 'building-e', 'building-g'];
 export const TOWERS: ModelKind[] = ['building-skyscraper-a', 'building-skyscraper-c', 'building-skyscraper-e'];
 
-interface Loaded { scene: THREE.Group; clips: THREE.AnimationClip[]; size: THREE.Vector3 }
-interface Pending { group: THREE.Object3D; kind: ModelKind; fit: Fit }
-export interface Fit { length?: number; height?: number; box?: [number, number, number]; yaw?: number; tint?: number; noShadow?: boolean; recolor?: Record<string, number> }
+interface Loaded {
+  scene: THREE.Group;
+  clips: THREE.AnimationClip[];
+  size: THREE.Vector3;
+}
+interface Pending {
+  group: THREE.Object3D;
+  kind: ModelKind;
+  fit: Fit;
+}
+export interface Fit {
+  length?: number;
+  height?: number;
+  box?: [number, number, number];
+  yaw?: number;
+  tint?: number;
+  noShadow?: boolean;
+  recolor?: Record<string, number>;
+}
 interface Actor {
-  obj: THREE.Object3D; mixer: THREE.AnimationMixer; actions: Record<string, THREE.AnimationAction>;
-  cur: string; last: THREE.Vector3; speed: number;
+  obj: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  actions: Record<string, THREE.AnimationAction>;
+  cur: string;
+  last: THREE.Vector3;
+  speed: number;
 }
 
 class ModelLib {
@@ -48,21 +87,32 @@ class ModelLib {
   private load(kind: ModelKind) {
     let p = this.loading.get(kind);
     if (!p) {
-      p = this.loader.loadAsync(`/models/${kind}.gltf`).then((g) => {
-        const lights: THREE.Object3D[] = [];
-        g.scene.traverse((o) => { if ((o as THREE.Light).isLight) lights.push(o); });
-        lights.forEach((o) => o.removeFromParent());
-        g.scene.traverse((o) => {
-          // skinned meshes have bind-pose bounds that do not follow animation; keep them unculled, cull everything else
-          if ((o as THREE.SkinnedMesh).isSkinnedMesh) (o as THREE.Mesh).frustumCulled = false;
-          const m = o as THREE.Mesh;
-          if (m.isMesh) { m.castShadow = this.shadows; m.receiveShadow = true; }
+      p = this.loader
+        .loadAsync(`/models/${kind}.gltf`)
+        .then((g) => {
+          const lights: THREE.Object3D[] = [];
+          g.scene.traverse((o) => {
+            if ((o as THREE.Light).isLight) lights.push(o);
+          });
+          lights.forEach((o) => o.removeFromParent());
+          g.scene.traverse((o) => {
+            // skinned meshes have bind-pose bounds that do not follow animation; keep them unculled, cull everything else
+            if ((o as THREE.SkinnedMesh).isSkinnedMesh) (o as THREE.Mesh).frustumCulled = false;
+            const m = o as THREE.Mesh;
+            if (m.isMesh) {
+              m.castShadow = this.shadows;
+              m.receiveShadow = true;
+            }
+          });
+          const size = new THREE.Box3().setFromObject(g.scene).getSize(new THREE.Vector3());
+          const l = { scene: g.scene, clips: g.animations, size };
+          this.cache.set(kind, l);
+          return l;
+        })
+        .catch(() => {
+          this.failed++;
+          return null;
         });
-        const size = new THREE.Box3().setFromObject(g.scene).getSize(new THREE.Vector3());
-        const l = { scene: g.scene, clips: g.animations, size };
-        this.cache.set(kind, l);
-        return l;
-      }).catch(() => { this.failed++; return null; });
       this.loading.set(kind, p);
     }
     return p;
@@ -72,7 +122,10 @@ class ModelLib {
   dress(group: THREE.Object3D, kind: ModelKind, fit: Fit) {
     if (!this.enabled) return;
     const l = this.cache.get(kind);
-    if (l) { this.apply(group, l, kind, fit); return; }
+    if (l) {
+      this.apply(group, l, kind, fit);
+      return;
+    }
     this.pending.push({ group, kind, fit });
     void this.load(kind).then((ld) => {
       if (!ld) return;
@@ -160,9 +213,22 @@ class ModelLib {
         drive: find(/^drive$/i) ?? find(/sit(ting|idle)?$/i) ?? find(/idle/i, /gun|sword/i)
       };
       for (const [k, c] of Object.entries(alias)) if (c && !actions[k]) actions[k] = mixer.clipAction(c);
-      for (const k of ['down', 'hit']) { const x = actions[k]; if (x) { x.setLoop(THREE.LoopOnce, 1); x.clampWhenFinished = true; } }
+      for (const k of ['down', 'hit']) {
+        const x = actions[k];
+        if (x) {
+          x.setLoop(THREE.LoopOnce, 1);
+          x.clampWhenFinished = true;
+        }
+      }
       group.userData.clips = Object.keys(actions);
-      const a: Actor = { obj: group, mixer, actions, cur: 'idle', last: group.getWorldPosition(new THREE.Vector3()), speed: 0 };
+      const a: Actor = {
+        obj: group,
+        mixer,
+        actions,
+        cur: 'idle',
+        last: group.getWorldPosition(new THREE.Vector3()),
+        speed: 0
+      };
       actions.idle?.play();
       mixer.update(Math.random());
       this.actors.push(a);
@@ -184,12 +250,21 @@ class ModelLib {
   }
 
   /** Shared night-window material; CityScene drives its emissive by time of day. */
-  windowMat = new THREE.MeshStandardMaterial({ color: 0x55606a, emissive: 0xffc46b, emissiveIntensity: 0.05, roughness: 0.4 });
+  windowMat = new THREE.MeshStandardMaterial({
+    color: 0x55606a,
+    emissive: 0xffc46b,
+    emissiveIntensity: 0.05,
+    roughness: 0.4
+  });
   private roofMat = new THREE.MeshStandardMaterial({ color: 0x5b636b, roughness: 0.8, metalness: 0.3 });
-  private signMats = [0xff3d7f, 0x3dd9ff, 0xffd23d, 0x7dff6a].map((c) =>
-    new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.2, roughness: 0.3 }));
+  private signMats = [0xff3d7f, 0x3dd9ff, 0xffd23d, 0x7dff6a].map(
+    (c) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.2, roughness: 0.3 })
+  );
   private seed = 1;
-  private rnd() { this.seed = (this.seed * 16807) % 2147483647; return this.seed / 2147483647; }
+  private rnd() {
+    this.seed = (this.seed * 16807) % 2147483647;
+    return this.seed / 2147483647;
+  }
 
   /** Lit windows (merged into one mesh), rooftop units and neon signs, fitted to the real model bounds. */
   private decorate(group: THREE.Object3D, holder: THREE.Object3D, kind: ModelKind) {
@@ -200,21 +275,33 @@ class ModelLib {
     const c = bb.getCenter(new THREE.Vector3());
     this.seed = Math.abs(Math.floor(group.position.x * 131 + group.position.z * 71)) + 7;
     const geos: THREE.BufferGeometry[] = [];
-    const ww = 0.42, wh = 0.55, gapX = 1.1, gapY = 1.25;
+    const ww = 0.42,
+      wh = 0.55,
+      gapX = 1.1,
+      gapY = 1.25;
     const addFace = (len: number, axis: 'x' | 'z', side: number) => {
       const cols = Math.max(1, Math.floor((len - 0.6) / gapX));
       const rows = Math.max(1, Math.floor((size.y - 1.2) / gapY));
-      for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
-        if (this.rnd() < 0.45) continue;
-        const g = new THREE.PlaneGeometry(ww, wh);
-        const off = -len / 2 + (len / cols) * (k + 0.5);
-        const y = bb.min.y + 1.0 + r * gapY;
-        if (axis === 'z') { if (side < 0) g.rotateY(Math.PI); g.translate(c.x + off, y, side > 0 ? bb.max.z + 0.04 : bb.min.z - 0.04); }
-        else { g.rotateY(side > 0 ? Math.PI / 2 : -Math.PI / 2); g.translate(side > 0 ? bb.max.x + 0.04 : bb.min.x - 0.04, y, c.z + off); }
-        geos.push(g);
-      }
+      for (let r = 0; r < rows; r++)
+        for (let k = 0; k < cols; k++) {
+          if (this.rnd() < 0.45) continue;
+          const g = new THREE.PlaneGeometry(ww, wh);
+          const off = -len / 2 + (len / cols) * (k + 0.5);
+          const y = bb.min.y + 1.0 + r * gapY;
+          if (axis === 'z') {
+            if (side < 0) g.rotateY(Math.PI);
+            g.translate(c.x + off, y, side > 0 ? bb.max.z + 0.04 : bb.min.z - 0.04);
+          } else {
+            g.rotateY(side > 0 ? Math.PI / 2 : -Math.PI / 2);
+            g.translate(side > 0 ? bb.max.x + 0.04 : bb.min.x - 0.04, y, c.z + off);
+          }
+          geos.push(g);
+        }
     };
-    addFace(size.x, 'z', 1); addFace(size.x, 'z', -1); addFace(size.z, 'x', 1); addFace(size.z, 'x', -1);
+    addFace(size.x, 'z', 1);
+    addFace(size.x, 'z', -1);
+    addFace(size.z, 'x', 1);
+    addFace(size.z, 'x', -1);
     if (geos.length) {
       const m = new THREE.Mesh(mergeGeometries(geos), this.windowMat);
       geos.forEach((g) => g.dispose());
@@ -227,14 +314,21 @@ class ModelLib {
       const tank = this.rnd() < 0.3;
       const geo = tank ? new THREE.CylinderGeometry(0.5, 0.5, 1.1, 10) : new THREE.BoxGeometry(0.9, 0.5, 0.7);
       const u = new THREE.Mesh(geo, this.roofMat);
-      u.position.set(c.x + (this.rnd() - 0.5) * size.x * 0.6, bb.max.y + (tank ? 0.55 : 0.25), c.z + (this.rnd() - 0.5) * size.z * 0.6);
+      u.position.set(
+        c.x + (this.rnd() - 0.5) * size.x * 0.6,
+        bb.max.y + (tank ? 0.55 : 0.25),
+        c.z + (this.rnd() - 0.5) * size.z * 0.6
+      );
       u.castShadow = false;
       u.userData.keep = true;
       group.add(u);
     }
     // neon sign on some low buildings
     if (!kind.includes('skyscraper') && this.rnd() < 0.55) {
-      const sign = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.6, size.x * 0.7), 0.45, 0.08), this.signMats[Math.floor(this.rnd() * 4)]);
+      const sign = new THREE.Mesh(
+        new THREE.BoxGeometry(Math.min(2.6, size.x * 0.7), 0.45, 0.08),
+        this.signMats[Math.floor(this.rnd() * 4)]
+      );
       sign.position.set(c.x, bb.min.y + Math.min(size.y * 0.55, 3.2), bb.max.z + 0.12);
       sign.userData.keep = true;
       group.add(sign);
@@ -252,7 +346,9 @@ class ModelLib {
   }
 
   /** Force a clip (e.g. 'drive' when seated). */
-  setClip(group: THREE.Object3D, name: string | null) { group.userData.forceClip = name; }
+  setClip(group: THREE.Object3D, name: string | null) {
+    group.userData.forceClip = name;
+  }
 
   private tmp = new THREE.Vector3();
   update(dt: number) {
@@ -263,7 +359,8 @@ class ModelLib {
       const v = Math.hypot(this.tmp.x - a.last.x, this.tmp.z - a.last.z) / dt;
       a.last.copy(this.tmp);
       a.speed += (v - a.speed) * Math.min(1, dt * 8);
-      const want = (a.obj.userData.forceClip as string | null) ?? (a.speed > 3.2 ? 'sprint' : a.speed > 0.25 ? 'walk' : 'idle');
+      const want =
+        (a.obj.userData.forceClip as string | null) ?? (a.speed > 3.2 ? 'sprint' : a.speed > 0.25 ? 'walk' : 'idle');
       if (want !== a.cur && a.actions[want]) {
         const next = a.actions[want];
         next.reset().play();
@@ -301,12 +398,21 @@ class Fx {
   private puffs: Array<{ s: THREE.Sprite; life: number }> = [];
   private pool: THREE.Sprite[] = [];
   particles = 1;
-  private t() { return (this.tex ??= radialTexture()); }
+  private t() {
+    return (this.tex ??= radialTexture());
+  }
 
   glow(light: THREE.PointLight, color: number, size = 2.2) {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: this.t(), color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0
-    }));
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: this.t(),
+        color,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        transparent: true,
+        opacity: 0
+      })
+    );
     sprite.scale.setScalar(size);
     light.add(sprite);
     this.glows.push({ light, sprite });
@@ -314,9 +420,17 @@ class Fx {
 
   smoke(parent: THREE.Object3D, x: number, y: number, z: number) {
     if (Math.random() > this.particles || this.puffs.length > 60) return;
-    const s = this.pool.pop() ?? new THREE.Sprite(new THREE.SpriteMaterial({
-      map: this.t(), color: 0x9aa4ae, depthWrite: false, transparent: true, opacity: 0.35
-    }));
+    const s =
+      this.pool.pop() ??
+      new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this.t(),
+          color: 0x9aa4ae,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.35
+        })
+      );
     s.position.set(x + (Math.random() - 0.5) * 0.3, y, z + (Math.random() - 0.5) * 0.3);
     s.scale.setScalar(0.4);
     parent.add(s);

@@ -5,13 +5,27 @@ import { audio } from './AudioManager';
 import { quality, setQuality, type Quality } from './Quality';
 
 const KEY = 'pc.save.v1';
-interface Save { best: number; shifts: number; resolved: number; level: number }
+interface Save {
+  best: number;
+  shifts: number;
+  resolved: number;
+  level: number;
+}
 
 function load(): Save {
-  try { return { best: 0, shifts: 0, resolved: 0, level: 1, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; }
-  catch { return { best: 0, shifts: 0, resolved: 0, level: 1 }; }
+  try {
+    return { best: 0, shifts: 0, resolved: 0, level: 1, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+  } catch {
+    return { best: 0, shifts: 0, resolved: 0, level: 1 };
+  }
 }
-function store(s: Save) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* ignore */ } }
+function store(s: Save) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
+}
 
 /** Pause menu, game over, persistent career progress (best score, career level). */
 export class Meta {
@@ -37,13 +51,19 @@ export class Meta {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') this.togglePause();
     });
-    document.addEventListener('visibilitychange', () => { if (document.hidden && this.game.state.running) this.setPause(true); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.game.state.running) this.setPause(true);
+    });
     setInterval(() => this.persist(), 5000);
   }
 
-  get active() { return this.game.state.running && !this.paused && !this.over; }
+  get active() {
+    return this.game.state.running && !this.paused && !this.over;
+  }
 
-  togglePause() { if (this.game.state.running && !this.over) this.setPause(!this.paused); }
+  togglePause() {
+    if (this.game.state.running && !this.over) this.setPause(!this.paused);
+  }
 
   setPause(p: boolean) {
     this.paused = p;
@@ -79,7 +99,10 @@ export class Meta {
     const s = this.game.state;
     if (!s.running) return;
     const delta = s.incidentsResolved - this.resolvedAtStart;
-    if (delta > 0) { this.save.resolved += delta; this.resolvedAtStart = s.incidentsResolved; }
+    if (delta > 0) {
+      this.save.resolved += delta;
+      this.resolvedAtStart = s.incidentsResolved;
+    }
     this.save.best = Math.max(this.save.best, s.score);
     this.save.level = 1 + Math.floor(Math.sqrt(this.save.resolved / 3));
     store(this.save);
@@ -92,12 +115,22 @@ export class Meta {
     this.el.querySelectorAll<HTMLButtonElement>('[data-a]').forEach((b) =>
       b.addEventListener('click', () => {
         if (b.dataset.a === 'resume') this.setPause(false);
-        else { this.persist(); this.save.shifts += 1; store(this.save); location.reload(); }
+        else {
+          this.persist();
+          this.save.shifts += 1;
+          store(this.save);
+          location.reload();
+        }
       })
     );
   }
-  private bindSettings() { bindSettings(this.el, () => this.persist()); }
-  private hide() { this.el.hidden = true; this.el.innerHTML = ''; }
+  private bindSettings() {
+    bindSettings(this.el, () => this.persist());
+  }
+  private hide() {
+    this.el.hidden = true;
+    this.el.innerHTML = '';
+  }
 }
 
 export function settingsHtml() {
@@ -121,14 +154,23 @@ export function settingsHtml() {
 }
 
 export function bindSettings(root: HTMLElement, beforeReload: () => void = () => undefined) {
-  root.querySelectorAll<HTMLInputElement>('[data-v]').forEach((r) =>
-    r.addEventListener('input', () => audio.setVolume(r.dataset.v as 'master' | 'music' | 'sfx', Number(r.value))));
+  root
+    .querySelectorAll<HTMLInputElement>('[data-v]')
+    .forEach((r) =>
+      r.addEventListener('input', () => audio.setVolume(r.dataset.v as 'master' | 'music' | 'sfx', Number(r.value)))
+    );
   const q = root.querySelector<HTMLSelectElement>('[data-q]');
-  q?.addEventListener('change', () => { beforeReload(); setQuality(q.value as Quality); });
+  q?.addEventListener('change', () => {
+    beforeReload();
+    setQuality(q.value as Quality);
+  });
   const m = root.querySelector<HTMLSelectElement>('[data-motion]');
   m?.addEventListener('change', () => setReducedMotion(m.value === 'reduce'));
   const msg = root.querySelector<HTMLElement>('.save-msg');
-  root.querySelector('[data-save="export"]')?.addEventListener('click', () => { exportSave(); if (msg) msg.textContent = 'اتحفظ ملف الحفظ في التنزيلات.'; });
+  root.querySelector('[data-save="export"]')?.addEventListener('click', () => {
+    exportSave();
+    if (msg) msg.textContent = 'اتحفظ ملف الحفظ في التنزيلات.';
+  });
   root.querySelector('[data-save="import"]')?.addEventListener('click', async () => {
     const err = await importSave();
     if (err && msg) msg.textContent = err;
