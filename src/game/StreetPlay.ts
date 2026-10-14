@@ -4,10 +4,11 @@ import { stepCar, driftOf, kmh, hitDamage, pullOver } from './logic/driving';
 import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from './logic/chase';
 import { character, onCharacter, setCharacter } from './Character';
 import { STATION, hubAllowed } from './logic/station';
+import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from './logic/missions';
 import { openCreator } from './CharacterCreator';
 import { modelFor, recolorFor, WEAPONS, type WeaponId } from './logic/character';
 import { buildCity, onRoad, nearCross, drawCityMap, CROSS_Z, findPath, farNode, followPath } from './City';
-import { newCall } from './Dispatch';
+import { newCall, type Kind } from './Dispatch';
 import { Squad } from './Npc';
 import { addStat, checkAch } from './Achievements';
 import * as THREE from 'three';
@@ -398,6 +399,79 @@ export class StreetPlay {
     }
   }
 
+  // ---- traffic stop (siren pull-over)
+  private speeder: THREE.Group | null = null;
+  private spPath: { x: number; z: number }[] = [];
+  private pullM = 0;
+  private pullStopped = false;
+  private spTurn = 0;
+  private beginPullover() {
+    this.endPullover();
+    const g = this.makeSuspectCar();
+    const dir = this.car.position.z < 120 ? 1 : -1;
+    const ax = Math.round(this.car.position.x / 60) * 60;
+    g.position.set(ax + 1.6 * -dir, 0, this.car.position.z + dir * 30);
+    g.rotation.y = dir > 0 ? 0 : Math.PI;
+    const far = farNode(g.position.x, g.position.z);
+    this.spPath = trimBehind(findPath(g.position.x, g.position.z, far.x, far.z), g.position.x, g.position.z, g.rotation.y);
+    this.group.add(g);
+    this.speeder = g;
+    this.pullM = 0; this.pullStopped = false;
+    this.setStatus('🚗💨 العربية المسرعة قدامك. شغّل السارينة 🚨 وقرّب منها.');
+  }
+  private endPullover() {
+    if (this.speeder) this.group.remove(this.speeder);
+    this.speeder = null;
+  }
+  private tickPullover(dt: number, text: string) {
+    const g = this.speeder;
+    if (!g) return;
+    const me = this.inCar ? this.car.position : this.player.position;
+    const dist = Math.hypot(g.position.x - me.x, g.position.z - me.z);
+    this.msTarget.copy(g.position); this.msHasTarget = true;
+    if (!this.pullStopped) {
+      const v = speederSpeed(18 + rank().car, this.spTurn) * (this.inCar ? 1 : 0.3);
+      let head = followPath(g.position, this.spPath, v * dt);
+      if (head === null) { const f = farNode(g.position.x, g.position.z); this.spPath = findPath(g.position.x, g.position.z, f.x, f.z); head = followPath(g.position, this.spPath, v * dt); }
+      if (head !== null) { this.spTurn = wrapAngle(head - g.rotation.y); g.rotation.y = approachAngle(g.rotation.y, head, dt * 5); }
+      this.pullM = stepPull(this.pullM, { siren: this.siren, inCar: this.inCar, dist }, dt);
+      if (this.pullM >= PULL_T) {
+        this.pullStopped = true;
+        // ease to the kerb
+        g.position.x += Math.cos(g.rotation.y) * 1.2;
+        audio.sample('confirm', 0.6);
+        this.setStatus('العربية وقفت على جنب. انزل واكتب المخالفة 📝');
+      } else if (dist > 170) { this.endPullover(); this.finishMission(false, 'العربية المسرعة هربت.'); return; }
+      const pct = Math.round((this.pullM / PULL_T) * 100);
+      this.msText = !this.inCar ? 'اركب الدورية' : !this.siren ? '🚨 شغّل السارينة!' : pct > 0 ? `🚨 خليك وراها… ${pct}%` : text;
+    } else {
+      this.msText = this.inCar ? 'انزل واكتب المخالفة' : 'روح للسواق واكتب المخالفة';
+      if (!this.inCar && dist < TICKET_R) {
+        audio.sample('success', 0.6);
+        this.setStatus('📝 المخالفة اتكتبت. شغل نضيف!');
+        if (this.siren) this.toggleSiren(false);
+        this.endPullover();
+        this.nextStep();
+      }
+    }
+  }
+
+  // ---- patrol checkpoints
+  private cpIdx = 0;
+  private cpRing: THREE.Mesh | null = null;
+  private showCheckpoint(pts: { x: number; z: number }[]) {
+    const p = pts[this.cpIdx];
+    if (!p) { this.clearCheckpoint(); return; }
+    if (!this.cpRing) {
+      this.cpRing = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.25, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.85 }));
+      this.cpRing.rotation.x = -Math.PI / 2;
+      this.group.add(this.cpRing);
+    }
+    this.cpRing.position.set(p.x, 0.3, p.z);
+    this.cpRing.visible = true;
+  }
+  private clearCheckpoint() { if (this.cpRing) this.cpRing.visible = false; }
+
   private stationBuilt = false;
   private canHub = false;
   /** The police station (hub): blue-white facade, lit sign, beacon lights and a glowing door ring. */
@@ -447,7 +521,7 @@ export class StreetPlay {
       ? `<h2>📋 لوحة المهام</h2><div class="hub-list">${LEVELS.map((l) => {
           const locked = l.id > progress.unlocked, st = progress.stars[l.id] ?? 0;
           return `<button type="button" data-lv="${l.id}" ${locked ? 'disabled' : ''}>${locked ? '🔒' : '▶'} ${l.id}. ${l.title} <small>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</small></button>`;
-        }).join('')}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية)</button></div>`
+        }).join('')}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية)</button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button></div>`
       : tab === 'armory'
         ? `<h2>🔫 مخزن السلاح</h2><div class="hub-list">${(Object.keys(WEAPONS) as WeaponId[]).map((k) =>
             `<button type="button" data-wp="${k}" class="${c.weapon === k ? 'on' : ''}">${WEAPONS[k].name} <small>${WEAPONS[k].desc}</small></button>`).join('')}</div>`
@@ -484,6 +558,11 @@ export class StreetPlay {
       this.squad.resetPlayer();
       audio.sample('confirm', 0.7);
       this.openHub('armory');
+    }));
+    el.querySelectorAll<HTMLButtonElement>('[data-call]').forEach((b) => b.addEventListener('click', () => {
+      this.closeHub();
+      const me = this.player.position;
+      this.setLevel(newCall(me.x, me.z, Date.now(), b.dataset.call as Kind).id);
     }));
     el.querySelectorAll<HTMLButtonElement>('[data-lv]').forEach((b) => b.addEventListener('click', () => {
       this.closeHub();
@@ -744,6 +823,8 @@ export class StreetPlay {
       case 'car': this.msText = st.text ?? 'اركب الدورية'; if (this.inCar) this.nextStep(); break;
       case 'goto': this.msText = st.text; this.msTarget.set(st.x, 0, st.z); this.msHasTarget = true; break;
       case 'chase': this.chaseText = this.msText = st.text ?? 'الحق العربية'; this.chaseThen = st.then ?? null; this.chaseLimit = st.limit; this.chaseSpeed = st.speed; this.beginChase(); break;
+      case 'pullover': this.msText = st.text; this.beginPullover(); break;
+      case 'checkpoints': this.msText = st.text; this.cpIdx = 0; this.showCheckpoint(st.pts); break;
       case 'suspects': {
         this.msText = st.text;
         const prev = [...this.level.steps].slice(0, this.msIdx).reverse().find((x) => x.t === 'goto');
@@ -771,6 +852,16 @@ export class StreetPlay {
         // 2D distance from whatever the player controls (car or on foot): fixes the old "1 m" stall
         if (Math.hypot(st.x - pos.x, st.z - pos.z) < (st.r ?? 9)) { this.setStatus('وصلت.'); this.nextStep(); }
         break;
+      case 'pullover': this.tickPullover(dt, st.text); break;
+      case 'checkpoints': {
+        const n = passCheckpoint(this.cpIdx, st.pts, pos.x, pos.z, this.inCar);
+        if (n !== this.cpIdx) { this.cpIdx = n; audio.sample('confirm', 0.7); this.setStatus(`✔ نقطة ${n}/${st.pts.length}`); this.showCheckpoint(st.pts); }
+        if (this.cpIdx >= st.pts.length) { this.clearCheckpoint(); this.nextStep(); break; }
+        const p = st.pts[this.cpIdx]!;
+        this.msTarget.set(p.x, 0, p.z); this.msHasTarget = true;
+        this.msText = `${st.text} (${this.cpIdx}/${st.pts.length})`;
+        break;
+      }
       case 'chase':
         if (this.chaseArrest) {
           const t = this.squad.list.find((x) => x.state !== 'cuffed' && x.state !== 'down');
@@ -1223,6 +1314,8 @@ export class StreetPlay {
     this.missionId = this.level.placeId;
     this.chasing = false;
     this.chaseArrest = false;
+    this.endPullover();
+    this.clearCheckpoint();
     this.msIdx = -1;
     this.msText = 'اقرا المهمة واضغط «ابدأ»';
     this.msHasTarget = false;
@@ -1586,6 +1679,8 @@ export class StreetPlay {
     this.msIdx = -1;
     this.chasing = false;
     this.chaseArrest = false;
+    this.endPullover();
+    this.clearCheckpoint();
     this.firing = false;
     audio.sirenLoop(false);
     if (success) audio.success(); else audio.fail();

@@ -5,14 +5,16 @@
 import { AVENUES_X, CROSS_Z, districtAt, DISTRICT_NAMES } from './City';
 import { patrolCalls, rank, type LevelDef, type SuspectSpec, type Step, type Behaviour } from './Levels';
 
-type Kind = 'robbery' | 'chase' | 'gang' | 'hostage' | 'runner';
-const KINDS: Kind[] = ['robbery', 'chase', 'gang', 'hostage', 'runner', 'robbery', 'chase', 'gang'];
+export type Kind = 'robbery' | 'chase' | 'gang' | 'hostage' | 'runner' | 'speeder' | 'route';
+const KINDS: Kind[] = ['robbery', 'chase', 'gang', 'hostage', 'runner', 'robbery', 'chase', 'gang', 'speeder', 'route'];
 const TITLES: Record<Kind, string[]> = {
   robbery: ['سطو على صيدلية', 'سرقة سوبر ماركت', 'سطو على محل دهب'],
   chase: ['عربية مسروقة', 'سواق متهور', 'هروب من كمين'],
   gang: ['اشتباك عصابات', 'تجار سلاح', 'رجالة العقرب'],
   hostage: ['رهينة في محل', 'احتجاز موظف'],
-  runner: ['نشال هارب', 'مشتبه به بيجري']
+  runner: ['نشال هارب', 'مشتبه به بيجري'],
+  speeder: ['مخالفة سرعة', 'سواق طاير', 'عربية بتسابق'],
+  route: ['دورية تفقدية', 'تأمين الشوارع', 'لفة أمنية']
 };
 
 let seq = 0;
@@ -21,11 +23,11 @@ function mulberry(a: number) {
 }
 
 /** Generate a call near (px,pz) but not on top of it. Difficulty scales with rank. */
-export function newCall(px: number, pz: number, seed = Date.now()): LevelDef {
+export function newCall(px: number, pz: number, seed = Date.now(), force?: Kind): LevelDef {
   const r = mulberry(seed);
   const pick = <T>(a: T[]) => a[Math.floor(r() * a.length)];
   const lvl = Math.max(1, ['مستجد', 'شرطي', 'رقيب', 'ملازم', 'نقيب', 'رائد'].indexOf(rank().name) + 1);
-  const kind = pick(KINDS);
+  const kind = force ?? pick(KINDS);
   // location: on an avenue, between two cross streets, 60–200 m from the player
   let x = 0, z = 0;
   for (let i = 0; i < 20; i++) {
@@ -48,6 +50,17 @@ export function newCall(px: number, pz: number, seed = Date.now()): LevelDef {
       steps = [radio(`كل الوحدات: ${pick(TITLES.chase)} في ${where}. الحقها!`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },
         { t: 'chase', speed: 0.85 + lvl * 0.07, limit: 50, then: r() < 0.5 ? 'surrender' : r() < 0.5 ? 'flee' : 'fight', text: 'الحق العربية' }];
       break;
+    case 'speeder':
+      steps = [radio(`عربية مسرعة جدًا في ${where}. شغّل السارينة ووقّفها على جنب.`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },
+        { t: 'pullover', text: 'شغّل السارينة وخليك وراها' }];
+      break;
+    case 'route': {
+      // 4 intersections in a loop near the call
+      const ax = AVENUES_X.filter((a) => Math.abs(a - x) <= 60);
+      const pts = [0, 1, 2, 3].map((i) => ({ x: ax[i % ax.length]!, z: CROSS_Z[Math.min(CROSS_Z.length - 1, Math.max(0, CROSS_Z.findIndex((c) => c > z - 1) - 1 + (i >> 1)))]! }));
+      steps = [radio(`العمليات: لف دورية تفقدية على ${pts.length} تقاطعات في ${where}.`), { t: 'car' }, { t: 'checkpoints', pts, text: 'عدّي على نقط التفتيش' }];
+      break;
+    }
     case 'gang':
       for (let i = 0; i < Math.max(2, n); i++) list.push(mk(i === n - 1 && r() < 0.3 ? 'flee' : 'fight', i));
       steps = [radio(`طلقات نار في ${where}! ${list.length} مسلحين. اتحامى.`), { t: 'car' }, { t: 'goto', x, z: gz, text: `روح ${where}` },

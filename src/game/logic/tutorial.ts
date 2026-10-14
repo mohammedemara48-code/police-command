@@ -1,7 +1,7 @@
 /** First-call interactive tutorial: picks the hint for the current situation (pure, unit-tested). */
 export type TutAct = 'car' | 'move' | 'order' | 'cuff' | null;
 export interface TutState {
-  step: 'radio' | 'car' | 'goto' | 'chase' | 'suspects' | 'done';
+  step: 'radio' | 'car' | 'goto' | 'chase' | 'suspects' | 'pullover' | 'checkpoints' | 'done';
   inCar: boolean;
   radioShowing: boolean;
   /** state of the nearest suspect still free (undefined when none) */
