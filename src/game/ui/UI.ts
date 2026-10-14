@@ -236,8 +236,9 @@ export class UI {
           if (r.success) this.game.state.incidentsResolved += 1;
           else this.game.state.incidentsFailed += 1;
         };
-      this.game.state.cityHour = 18.9;
-      this.city.setTimeOfDay(18.9);
+      // patrols start in bright daylight; the day/night cycle carries on from there
+      this.game.state.cityHour = 10;
+      this.city.setTimeOfDay(10);
       this.city.street?.engage();
       this.city.street?.setLevel(level);
     } else {

@@ -2993,3 +2993,35 @@ html.onfoot body[data-play='street'] .street-actions [data-act='siren'] {
     width: 52px;
   }
 }
+
+/* objective as a blue Egyptian road sign: label on top, destination in white, distance in yellow */
+body[data-play='street'] #street-obj {
+  background: #1b5fb4 !important;
+  border: 2px solid #fff !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35) !important;
+  color: #fff !important;
+  border-radius: 6px !important;
+}
+body[data-play='street'] #street-obj small {
+  color: #dbe8ff !important;
+  opacity: 1 !important;
+}
+body[data-play='street'] #street-obj .now {
+  color: #fff !important;
+}
+body[data-play='street'] #street-obj > em {
+  display: block;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 15px;
+  color: #ffd84a;
+  direction: rtl;
+  margin-top: 1px;
+}
+/* speed readout: big white number, no box clutter */
+body[data-play='street'] #street-speedo b {
+  color: #fff;
+  font-weight: 900;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  font-variant-numeric: tabular-nums;
+}

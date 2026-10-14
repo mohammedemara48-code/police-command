@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { rigModelWheels } from '../world/Egypt';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -225,6 +226,7 @@ class ModelLib {
     }
     if (kind.startsWith('cop_')) this.policeGear(model);
     group.add(holder);
+    if (CAR_GLB.has(kind)) rigModelWheels(group, model);
     if (kind.startsWith('building')) this.decorate(group, holder, kind);
     if (l.clips.length) {
       const mixer = new THREE.AnimationMixer(model);

@@ -58,8 +58,6 @@ function frame(now: number) {
     }
   }
 
-  // Street patrol is always played at golden-hour/dusk; keep the HUD clock in sync with what is on screen.
-  if (city.street?.active) game.state.cityHour = 18.9;
   if (Math.abs(game.state.cityHour - lastHour) > 0.02 || !!city.street?.active !== lastStreet) {
     lastHour = game.state.cityHour;
     lastStreet = !!city.street?.active;
