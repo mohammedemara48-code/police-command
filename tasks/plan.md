@@ -12,15 +12,15 @@ Week target: publishable GTA-style police game by Tue 20 Oct 2026 20:30 Asia/Riy
 - P0.6 Combat v2 — mobile aim, body-zone hits, ammo packs, officer crate cover, armor 0–100 (#52 / #53)
 - P0.7 Foot collision + compact HUD — officer stops at cars, cover crates and avenue building fronts; health/armor as circular rings; landscape layout keeps rings and action buttons apart (#54)
 - P0.8 Realistic characters polish — MakeHuman skin/face materials (soft sheen), shinier hair and clearer eyes, longer idle↔walk↔sprint blends, animated character-creator preview
+- P1 Precinct hub — armory purchases (priced revolver/SMG), garage upgrades (engine/armor/brakes) with real driving effects, mission board lock/reward hints; street purse on progress save
 
 ## Next
 
-1. **P1 precinct hub** — armory spend, garage upgrades, mission board polish (hub shell already opens at the door).
-2. More mission types (DUI, speed trap, raid waves, VIP escort).
-3. Story cutscenes + letterbox dialogue.
-4. Audio pass (radio chatter, district ambience, threat music).
-5. Visual pass (day/night in street mode, rain, LODs).
-6. Pedestrian / traffic v2 (crosswalks, siren pull-over lanes).
+1. **More mission types** (DUI, speed trap, raid waves, VIP escort).
+2. Story cutscenes + letterbox dialogue.
+3. Audio pass (radio chatter, district ambience, threat music).
+4. Visual pass (day/night in street mode, rain, LODs).
+5. Pedestrian / traffic v2 (crosswalks, siren pull-over lanes).
 
 ## Later (publish)
 
