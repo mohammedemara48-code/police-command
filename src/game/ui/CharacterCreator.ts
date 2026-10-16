@@ -32,8 +32,8 @@ export function openCreator(root: HTMLElement, opts: { first: boolean; done: () 
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x30343c, 2.2));
-  const key = new THREE.DirectionalLight(0xffffff, 2.4);
-  key.position.set(2, 4, 3);
+  const key = new THREE.DirectionalLight(0xffffff, 2.7);
+  key.position.set(2, 4.6, 3);
   scene.add(key);
   const rim = new THREE.DirectionalLight(0x7fb0ff, 1.4);
   rim.position.set(-3, 2, -3);
@@ -45,8 +45,8 @@ export function openCreator(root: HTMLElement, opts: { first: boolean; done: () 
   disc.rotation.x = -Math.PI / 2;
   scene.add(disc);
   const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 20);
-  cam.position.set(0, 1.25, 4.1);
-  cam.lookAt(0, 0.92, 0);
+  cam.position.set(0, 1.35, 3.65);
+  cam.lookAt(0, 0.98, 0);
   const holder = new THREE.Group();
   scene.add(holder);
   let avatar = new THREE.Group();
@@ -99,6 +99,7 @@ export function openCreator(root: HTMLElement, opts: { first: boolean; done: () 
       cam.aspect = w / h;
       cam.updateProjectionMatrix();
     }
+    models.update(dt);
     renderer.render(scene, cam);
     requestAnimationFrame(loop);
   };

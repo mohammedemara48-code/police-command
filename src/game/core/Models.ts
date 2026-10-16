@@ -4,6 +4,12 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import {
+  humanMatRole,
+  shouldBrightenRecolor,
+  LOCO_CROSSFADE,
+  LOCO_SPEED_EMA
+} from '../logic/humanMaterials';
 
 /**
  * Low-poly CC0 models (Kenney Car Kit, Mini Characters, City Kit Commercial).
@@ -127,10 +133,8 @@ class ModelLib {
               m.castShadow = this.shadows;
               m.receiveShadow = true;
               if (CAR_GLB.has(kind)) m.material = this.carMat(m.material as THREE.MeshStandardMaterial);
-              else if (GLB.has(kind)) {
-                const mat = m.material as THREE.MeshStandardMaterial;
-                // skin a little glossy, cloth matte
-                mat.roughness = mat.name === 'Skin' ? 0.62 : mat.name === 'Shoes' ? 0.45 : 0.9;
+              else if (GLB.has(kind) && !CAR_GLB.has(kind)) {
+                m.material = this.humanMat(m.material as THREE.MeshStandardMaterial);
               }
             }
           });
@@ -212,7 +216,7 @@ class ModelLib {
         if (c === undefined) return;
         const mm = src.clone();
         mm.color.setHex(c);
-        if (mm.map && !GLB.has(kind)) mm.color.multiplyScalar(1.2);
+        if (shouldBrightenRecolor(!!mm.map, GLB.has(kind))) mm.color.multiplyScalar(1.2);
         m.material = mm;
       });
     }
@@ -328,6 +332,54 @@ class ModelLib {
       const m = new THREE.Mesh(new THREE.BoxGeometry(H * 0.012, H * 0.04, H * 0.035), patch);
       place(m, new THREE.Vector3(p.x + (i ? -1 : 1) * H * 0.045, p.y - H * 0.025, p.z), b);
     });
+  }
+
+  /** Cached skin/hair/eye polish for MakeHuman GLBs; shared across clones of the same source mat. */
+  private humanMats = new Map<string, THREE.Material>();
+  private humanMat(src: THREE.MeshStandardMaterial): THREE.Material {
+    const role = humanMatRole(src.name);
+    const key = src.uuid + ':' + role;
+    let out = this.humanMats.get(key);
+    if (out) return out;
+    if (role === 'skin') {
+      out = new THREE.MeshPhysicalMaterial({
+        name: src.name,
+        map: src.map,
+        normalMap: src.normalMap,
+        color: src.color.clone(),
+        metalness: 0,
+        roughness: 0.52,
+        clearcoat: 0.16,
+        clearcoatRoughness: 0.55,
+        sheen: 0.32,
+        sheenRoughness: 0.58,
+        sheenColor: new THREE.Color(0xf0c4a8),
+        envMapIntensity: 0.55
+      });
+    } else if (role === 'hair') {
+      const mm = src.clone();
+      mm.roughness = 0.32;
+      mm.metalness = 0.08;
+      mm.color.multiplyScalar(0.82);
+      out = mm;
+    } else if (role === 'eye') {
+      const mm = src.clone();
+      mm.roughness = 0.1;
+      mm.metalness = 0.12;
+      mm.envMapIntensity = 1.25;
+      out = mm;
+    } else if (role === 'shoes') {
+      const mm = src.clone();
+      mm.roughness = 0.45;
+      mm.metalness = Math.min(mm.metalness, 0.15);
+      out = mm;
+    } else {
+      const mm = src.clone();
+      mm.roughness = 0.9;
+      out = mm;
+    }
+    this.humanMats.set(key, out);
+    return out;
   }
 
   private tints = new Map<string, THREE.Material>();
@@ -514,13 +566,13 @@ class ModelLib {
       a.obj.getWorldPosition(this.tmp);
       const v = Math.hypot(this.tmp.x - a.last.x, this.tmp.z - a.last.z) / dt;
       a.last.copy(this.tmp);
-      a.speed += (v - a.speed) * Math.min(1, dt * 8);
+      a.speed += (v - a.speed) * Math.min(1, dt * LOCO_SPEED_EMA);
       const want =
         (a.obj.userData.forceClip as string | null) ?? (a.speed > 3.2 ? 'sprint' : a.speed > 0.25 ? 'walk' : 'idle');
       if (want !== a.cur && a.actions[want]) {
         const next = a.actions[want];
         next.reset().play();
-        a.actions[a.cur]?.crossFadeTo(next, 0.2, false);
+        a.actions[a.cur]?.crossFadeTo(next, LOCO_CROSSFADE, false);
         a.cur = want;
       }
       const act = a.actions[a.cur];
