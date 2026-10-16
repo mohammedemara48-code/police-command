@@ -83,6 +83,7 @@ The officer's health reaches 0. A suspect escapes (out of range or time limit). 
 - One ~250×340 m city, built from instanced blocks, culled per block.
 - Phones default to low quality, but always use the realistic (Quaternius) character set, with fewer pedestrians on low.
 - The pedestrian and NPC logic must not allocate memory per frame. The HUD only updates at 8 Hz.
+- MakeHuman people use soft skin clearcoat/sheen and ~0.3 s locomotion cross-fades; the character creator preview runs the same idle mixer.
 
 ## 9. Acceptance (verification)
 In a 412×915 mobile test run on low quality, missions 1–3 must be playable start to finish: radio dialogue appears, objectives advance at the right moments, the arrest works (order, then cuff), and the chase can be caught. Screenshots are saved for each mission.
