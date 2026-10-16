@@ -26,7 +26,21 @@ import {
 import { fleeSpeed, trimBehind, chaseOutcome, stepLock, WARN_R, GRACE, LOCK_T, START_GAP } from '../logic/chase';
 import { newCarAi, stepCarAi, carCmd, ramLanded, type CarSense, type CarCmd } from '../logic/suspectCar';
 import { character, onCharacter, setCharacter } from '../entities/Character';
-import { STATION, hubAllowed } from '../logic/station';
+import { STATION, hubAllowed, repairTime } from '../logic/station';
+import {
+  WEAPON_PRICE,
+  GARAGE,
+  buyWeapon,
+  buyUpgrade,
+  equipOwned,
+  buyFailAr,
+  missionBoardRow,
+  engineBonus,
+  armoredHit,
+  brakeMul,
+  sirenRangeBonus,
+  type GarageId
+} from '../logic/hub';
 import { ARMOR_MAX } from '../logic/combat';
 import { resolveFoot, avenueBuildingBoxes, type OBB } from '../logic/collide';
 import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from '../logic/missions';
@@ -81,6 +95,8 @@ import {
   rank,
   isPatrol,
   RANKS,
+  setOwnedWeapons,
+  setGarage,
   type LevelDef,
   type Line,
   type Behaviour
@@ -694,7 +710,7 @@ export class StreetPlay {
     this.msTarget.copy(g.position);
     this.msHasTarget = true;
     if (!this.pullStopped) {
-      const v = speederSpeed(18 + rank().car, this.spTurn, dist) * (this.inCar ? 1 : 0.3);
+      const v = speederSpeed(18 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }), this.spTurn, dist) * (this.inCar ? 1 : 0.3);
       let head = followPath(g.position, this.spPath, v * dt);
       if (head === null) {
         const f = farNode(g.position.x, g.position.z);
@@ -909,37 +925,64 @@ export class StreetPlay {
   private hubEl: HTMLElement | null = null;
 
   /** Station hub: missions board, garage, armory, locker room. */
-  private openHub(tab: 'main' | 'missions' | 'armory' = 'main') {
+  private openHub(tab: 'main' | 'missions' | 'armory' | 'garage' = 'main') {
     if (!this.hubEl && tab === 'main') this.vestTaken = false;
     if (this.hubEl) this.hubEl.remove();
     const el = document.createElement('div');
     el.id = 'street-hub';
     const c = character();
-    const body =
-      tab === 'missions'
-        ? `<h2>📋 لوحة المهام</h2><div class="hub-list">${LEVELS.map((l) => {
-            const locked = l.id > progress.unlocked,
-              st = progress.stars[l.id] ?? 0;
-            return `<button type="button" data-lv="${l.id}" ${locked ? 'disabled' : ''}>${locked ? '🔒' : '▶'} ${l.id}. ${l.title} <small>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</small></button>`;
-          }).join(
-            ''
-          )}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية)</button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button></div>`
-        : tab === 'armory'
-          ? `<h2>🔫 مخزن السلاح</h2><div class="hub-list">${(Object.keys(WEAPONS) as WeaponId[])
-              .map(
-                (k) =>
-                  `<button type="button" data-wp="${k}" class="${c.weapon === k ? 'on' : ''}">${WEAPONS[k].name} <small>${WEAPONS[k].desc}</small></button>`
-              )
-              .join(
-                ''
-              )}<button type="button" data-vest="1" ${this.vestTaken ? 'disabled' : ''}>🛡 سترة واقية <small>${this.vestTaken ? 'أخذت واحدة هذه الزيارة' : 'درع كامل — مجاناً مرة كل زيارة'}</small></button><button type="button" data-ammo="1">📦 تعبئة ذخيرة <small>مخزن + احتياطي</small></button></div>`
-          : `<h2>🏢 قسم الشرطة</h2><p class="hub-sub">رتبتك: ${rank().name} · الدورية ${100 - this.damage}%</p>
+    const money = progress.money ?? 0;
+    const owned = progress.ownedWeapons ?? ['pistol'];
+    const garage = progress.garage ?? { engine: 0, armor: 0, brakes: 0 };
+    let body: string;
+    if (tab === 'missions') {
+      const rows = LEVELS.map((l) => {
+        const row = missionBoardRow({
+          id: l.id,
+          title: l.title,
+          reward: l.reward,
+          unlocked: progress.unlocked,
+          stars: progress.stars[l.id] ?? 0
+        });
+        return `<button type="button" data-lv="${l.id}" class="${row.locked ? 'locked' : ''}" ${row.locked ? 'disabled' : ''}>${row.locked ? '🔒' : '▶'} ${l.id}. ${l.title} <small>${row.starText} · ${row.hint}</small></button>`;
+      }).join('');
+      body = `<h2>📋 لوحة المهام</h2><p class="hub-sub">💵 $${money.toLocaleString()} · رتبتك: ${rank().name}</p><div class="hub-list">${rows}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية) <small>مكافأة متغيرة</small></button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button></div>`;
+    } else if (tab === 'armory') {
+      const guns = (Object.keys(WEAPONS) as WeaponId[])
+        .map((k) => {
+          const have = owned.includes(k);
+          const eq = c.weapon === k;
+          const price = WEAPON_PRICE[k];
+          const label = !have
+            ? `اشترِ · $${price.toLocaleString()}`
+            : eq
+              ? 'مجهّز'
+              : 'تجهيز (مجاناً)';
+          return `<button type="button" data-wp="${k}" class="${eq ? 'on' : ''}" ${!have && money < price ? 'data-broke="1"' : ''}>${WEAPONS[k].name} <small>${WEAPONS[k].desc} · ${label}</small></button>`;
+        })
+        .join('');
+      body = `<h2>🔫 مخزن السلاح</h2><p class="hub-sub">💵 $${money.toLocaleString()}</p><div class="hub-list">${guns}<button type="button" data-vest="1" ${this.vestTaken ? 'disabled' : ''}>🛡 سترة واقية <small>${this.vestTaken ? 'أخذت في هذه الزيارة' : 'درع كامل — مجاناً مرة كل زيارة'}</small></button><button type="button" data-ammo="1">📦 تعبئة ذخيرة <small>مخزن + احتياطي — مجاناً</small></button></div>`;
+    } else if (tab === 'garage') {
+      const dmg = this.damage;
+      const ups = GARAGE.map((g) => {
+        const lv = garage[g.id] ?? 0;
+        if (lv >= g.max) {
+          return `<button type="button" disabled data-up="${g.id}">${g.name} <small>المستوى ${lv}/${g.max} · ${g.desc}</small></button>`;
+        }
+        const price = g.costs[lv]!;
+        return `<button type="button" data-up="${g.id}" ${money < price ? 'data-broke="1"' : ''}>${g.name} <small>المستوى ${lv}→${lv + 1} · $${price.toLocaleString()} · ${g.desc}</small></button>`;
+      }).join('');
+      const wait = repairTime(dmg);
+      body = `<h2>🔧 الجراج</h2><p class="hub-sub">💵 $${money.toLocaleString()} · الدورية ${100 - dmg}%</p><div class="hub-list"><button type="button" data-repair="1" ${dmg ? '' : 'disabled'}>🩹 تصليح مجاني <small>${dmg ? (wait ? `جاهز خلال ~${wait} ث` : 'تصليح فوري') : 'الدورية سليمة'}</small></button>${ups}</div>`;
+    } else {
+      body = `<h2>🏢 قسم الشرطة</h2><p class="hub-sub">رتبتك: ${rank().name} · 💵 $${money.toLocaleString()} · الدورية ${100 - this.damage}%</p>
           <div class="hub-grid">
             <button type="button" data-hub="missions">📋<b>لوحة المهام</b><small>اختار مهمتك</small></button>
-            <button type="button" data-hub="garage">🔧<b>الجراج</b><small>${this.damage ? 'صلّح الدورية' : 'الدورية سليمة'}</small></button>
+            <button type="button" data-hub="garage">🔧<b>الجراج</b><small>${this.damage ? 'تصليح وتحسينات' : 'تحسينات الدورية'}</small></button>
             <button type="button" data-hub="armory">🔫<b>مخزن السلاح</b><small>${WEAPONS[c.weapon].name} · ذخيرة كاملة</small></button>
             <button type="button" data-hub="locker">👮<b>غرفة الملابس</b><small>غيّر شكلك</small></button>
           </div>`;
+    }
     el.innerHTML = `<div class="street-result-card hub-card">${body}<button type="button" class="hub-close" data-hub="${tab === 'main' ? 'close' : 'main'}">${tab === 'main' ? 'اطلع للشارع' : 'رجوع'}</button></div>`;
     document.getElementById('app')!.appendChild(el);
     this.hubEl = el;
@@ -949,16 +992,8 @@ export class StreetPlay {
         audio.click();
         const a = b.dataset.hub!;
         if (a === 'close') this.closeHub();
-        else if (a === 'main' || a === 'missions' || a === 'armory') this.openHub(a);
-        else if (a === 'garage') {
-          this.damage = 0;
-          this.car.position.set(STATION.parking.x, 0, STATION.parking.z);
-          this.car.rotation.y = 0;
-          this.speed = 0;
-          this.squad.resetPlayer();
-          this.setStatus('🔧 الدورية اتصلحت ومركونة قدام القسم.');
-          this.openHub('main');
-        } else if (a === 'locker') {
+        else if (a === 'main' || a === 'missions' || a === 'armory' || a === 'garage') this.openHub(a);
+        else if (a === 'locker') {
           el.innerHTML = '';
           openCreator(el, { first: false, done: () => this.openHub('main') });
         }
@@ -966,10 +1001,77 @@ export class StreetPlay {
     );
     el.querySelectorAll<HTMLButtonElement>('[data-wp]').forEach((b) =>
       b.addEventListener('click', () => {
-        setCharacter({ ...character(), weapon: b.dataset.wp as WeaponId });
+        const id = b.dataset.wp as WeaponId;
+        const have = (progress.ownedWeapons ?? ['pistol']).includes(id);
+        if (have) {
+          const eq = equipOwned(progress.ownedWeapons ?? ['pistol'], id);
+          if (!eq) return;
+          setCharacter({ ...character(), weapon: eq });
+          this.squad.resetPlayer();
+          this.squad.restockAmmo();
+          audio.sample('confirm', 0.7);
+          this.setStatus(`🔫 جهّزت: ${WEAPONS[id].name}`);
+          this.openHub('armory');
+          return;
+        }
+        const res = buyWeapon(
+          {
+            money: progress.money ?? 0,
+            ownedWeapons: progress.ownedWeapons ?? ['pistol'],
+            garage: progress.garage ?? { engine: 0, armor: 0, brakes: 0 }
+          },
+          id
+        );
+        if (!res.ok) {
+          this.setStatus(`❌ ${buyFailAr(res.reason, res.need ?? 0)}`);
+          audio.click();
+          return;
+        }
+        progress.money = res.money;
+        setOwnedWeapons(res.ownedWeapons);
+        setCharacter({ ...character(), weapon: res.weapon });
+        this.squad.resetPlayer();
+        this.squad.restockAmmo();
+        audio.sample('confirm', 0.7);
+        this.setStatus(`✅ اشتريت ${WEAPONS[id].name} واتجهّز — الذخيرة مليانة.`);
+        this.openHub('armory');
+      })
+    );
+    el.querySelectorAll<HTMLButtonElement>('[data-up]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const id = b.dataset.up as GarageId;
+        const res = buyUpgrade(
+          {
+            money: progress.money ?? 0,
+            ownedWeapons: progress.ownedWeapons ?? ['pistol'],
+            garage: progress.garage ?? { engine: 0, armor: 0, brakes: 0 }
+          },
+          id
+        );
+        if (!res.ok) {
+          this.setStatus(`❌ ${buyFailAr(res.reason, res.need ?? 0)}`);
+          audio.click();
+          return;
+        }
+        progress.money = res.money;
+        setGarage(res.garage);
+        audio.sample('confirm', 0.7);
+        const def = GARAGE.find((g) => g.id === id)!;
+        this.setStatus(`✅ ${def.name} → مستوى ${res.level}`);
+        this.openHub('garage');
+      })
+    );
+    el.querySelectorAll<HTMLButtonElement>('[data-repair]').forEach((b) =>
+      b.addEventListener('click', () => {
+        if (!this.damage) return;
+        this.damage = 0;
+        this.car.position.set(STATION.parking.x, 0, STATION.parking.z);
+        this.car.rotation.y = 0;
+        this.speed = 0;
         this.squad.resetPlayer();
         audio.sample('confirm', 0.7);
-        this.openHub('armory');
+        this.setStatus('🔧 الدورية اتصلحت ومركونة قدام القسم.');
+        this.openHub('garage');
       })
     );
     el.querySelectorAll<HTMLButtonElement>('[data-vest]').forEach((b) =>
@@ -1004,7 +1106,7 @@ export class StreetPlay {
       })
     );
   }
-  private closeHub() {
+    private closeHub() {
     this.hubEl?.remove();
     this.hubEl = null;
   }
@@ -2844,7 +2946,7 @@ export class StreetPlay {
 
     if (this.inCar) {
       // arcade handling: analog stick or keys, handbrake (run button / Space) drifts
-      const max = (this.chasing ? 20 : 16) + rank().car;
+      const max = (this.chasing ? 20 : 16) + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 });
       this.carMax = max;
       const thr = this.travel ? throttle : this.stick.y || throttle;
       this.steerCur = this.travel ? 0 : smoothSteer(this.steerCur, -this.stick.x || turn, this.speed, dt);
@@ -2858,6 +2960,12 @@ export class StreetPlay {
       if (this.travel) {
         cs.yaw = this.yaw;
         cs.velYaw = this.yaw;
+      }
+      // sport brakes: scrub a bit more when coasting reverse throttle or handbrake
+      const bm = brakeMul(progress.garage ?? { engine: 0, armor: 0, brakes: 0 });
+      if (bm > 1 && (hb || thr < -0.05)) {
+        const scrub = (bm - 1) * 14 * dt;
+        cs.speed -= Math.sign(cs.speed) * Math.min(Math.abs(cs.speed), scrub);
       }
       this.speed = cs.speed;
       this.yaw = cs.yaw;
@@ -3091,7 +3199,9 @@ export class StreetPlay {
       }
       // siren: cars nearby ease to the kerb and stop to let you through
       const near = Math.hypot(C.x - t.mesh.position.x, C.z - z);
-      const want = this.inCar ? pullOver(this.siren || this.chasing, near) : 0;
+      const want = this.inCar
+        ? pullOver(this.siren || this.chasing, near - sirenRangeBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }))
+        : 0;
       t.side = (t.side ?? 0) + (want - (t.side ?? 0)) * Math.min(1, dt * 2);
       if (want > 0 && near < 22) stop = true;
       const kerb = t.laneX > 0 ? 1 : -1;
@@ -3170,7 +3280,7 @@ export class StreetPlay {
     if (this.hitCool > 0) return;
     const dmg = hitDamage(v);
     if (dmg <= 0) return;
-    this.damage = Math.min(100, this.damage + dmg);
+    this.damage = Math.min(100, this.damage + armoredHit(dmg, progress.garage ?? { engine: 0, armor: 0, brakes: 0 }));
     this.hitCool = 0.6;
     audio.sample('crash', Math.min(1, v / 15));
     this.recoil = Math.min(1, v / 10);
@@ -3187,7 +3297,7 @@ export class StreetPlay {
     const flee = fleeSpeed({
       t: this.chaseClock,
       k: this.chaseSpeed,
-      playerMax: topSpeed(18 + rank().car, this.damage),
+      playerMax: topSpeed(18 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }), this.damage),
       dist,
       turn: this.chaseTurn
     });

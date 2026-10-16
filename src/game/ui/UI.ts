@@ -232,7 +232,8 @@ export class UI {
     if (kind === 'street') {
       if (this.city.street && !this.city.street.onReport)
         this.city.street.onReport = (r) => {
-          this.game.AddRewards(r.money, r.rep);
+          // street purse (progress.money) is credited in completeLevel; command center only tracks reputation
+          this.game.AddRewards(0, r.rep);
           if (r.success) this.game.state.incidentsResolved += 1;
           else this.game.state.incidentsFailed += 1;
         };

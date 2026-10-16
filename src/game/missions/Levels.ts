@@ -1,5 +1,15 @@
 /** Story campaign: 12 scripted missions (see docs/GAME_DESIGN.md). Unlocks, stars, XP/rank saved locally (and synced when signed in). */
 import { rankForXp, starsFor, xpFor } from '../logic/rewards';
+import {
+  START_MONEY,
+  DEFAULT_GARAGE,
+  DEFAULT_OWNED,
+  sanitizeGarage,
+  sanitizeOwned,
+  sanitizeMoney,
+  type GarageLevels
+} from '../logic/hub';
+import type { WeaponId } from '../logic/character';
 export type Who = 'mona' | 'hamed' | 'yasser' | 'suspect' | 'informant' | 'boss';
 export interface Line {
   who: Who;
@@ -339,18 +349,40 @@ export const LEVELS: LevelDef[] = [
 ];
 
 const KEY = 'pc.levels.v1';
-interface Progress {
+export interface Progress {
   unlocked: number;
   stars: Record<number, number>;
   current: number;
   xp?: number;
+  /** Street purse (mission payouts). Same dollars shown on the result card. */
+  money: number;
+  ownedWeapons: WeaponId[];
+  garage: GarageLevels;
 }
 
 function load(): Progress {
   try {
-    return { unlocked: 1, stars: {}, current: 1, xp: 0, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    const raw = JSON.parse(localStorage.getItem(KEY) || '{}') as Partial<Progress>;
+    return {
+      unlocked: 1,
+      stars: {},
+      current: 1,
+      xp: 0,
+      ...raw,
+      money: sanitizeMoney(raw.money),
+      ownedWeapons: sanitizeOwned(raw.ownedWeapons),
+      garage: sanitizeGarage(raw.garage)
+    };
   } catch {
-    return { unlocked: 1, stars: {}, current: 1, xp: 0 };
+    return {
+      unlocked: 1,
+      stars: {},
+      current: 1,
+      xp: 0,
+      money: START_MONEY,
+      ownedWeapons: [...DEFAULT_OWNED],
+      garage: { ...DEFAULT_GARAGE }
+    };
   }
 }
 
@@ -380,11 +412,12 @@ export function rank() {
   return rankForXp(progress.xp ?? 0);
 }
 
-/** Record a result; returns earned stars (0 on fail). */
+/** Record a result; returns earned stars (0 on fail). Credits mission reward to the street purse. */
 export function completeLevel(id: number, success: boolean, seconds: number) {
   if (!success) return 0;
   const l = levelById(id);
   const stars = starsFor(seconds, l.stars);
+  progress.money = (progress.money ?? START_MONEY) + l.reward;
   if (isPatrol(id)) {
     progress.xp = (progress.xp ?? 0) + xpFor(stars, true);
     saveProgress();
@@ -398,4 +431,22 @@ export function completeLevel(id: number, success: boolean, seconds: number) {
   progress.current = Math.min(LEVELS.length, id + 1);
   saveProgress();
   return stars;
+}
+
+/** Spend from the street purse; returns false when broke. */
+export function spendMoney(amount: number): boolean {
+  if (amount < 0 || (progress.money ?? 0) < amount) return false;
+  progress.money -= amount;
+  saveProgress();
+  return true;
+}
+
+export function setOwnedWeapons(list: WeaponId[]) {
+  progress.ownedWeapons = sanitizeOwned(list);
+  saveProgress();
+}
+
+export function setGarage(g: GarageLevels) {
+  progress.garage = sanitizeGarage(g);
+  saveProgress();
 }
