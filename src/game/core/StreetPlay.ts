@@ -28,7 +28,7 @@ import { newCarAi, stepCarAi, carCmd, ramLanded, type CarSense, type CarCmd } fr
 import { character, onCharacter, setCharacter } from '../entities/Character';
 import { STATION, hubAllowed } from '../logic/station';
 import { ARMOR_MAX } from '../logic/combat';
-import { resolve as collide, type OBB } from '../logic/collide';
+import { resolveFoot, avenueBuildingBoxes, type OBB } from '../logic/collide';
 import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from '../logic/missions';
 import { openCreator } from '../ui/CharacterCreator';
 import { modelFor, recolorFor, WEAPONS, type WeaponId } from '../logic/character';
@@ -465,6 +465,7 @@ export class StreetPlay {
 
 
     this.buildStreetRows();
+    this.buildingBoxes = avenueBuildingBoxes(STATION);
     for (const place of STREET_PLACES) {
       this.buildBlock(place);
       this.addCrosswalk(place.z + 12);
@@ -759,10 +760,12 @@ export class StreetPlay {
   }
 
   private boxes: OBB[] = [];
-  /** oriented boxes of every vehicle the officer can bump into */
-  private vehicleBoxes() {
+  private buildingBoxes: OBB[] = [];
+  /** cars, cover crates and avenue fronts the officer cannot walk through */
+  private solidBoxes() {
     const b = this.boxes;
     b.length = 0;
+    for (const o of this.buildingBoxes) b.push(o);
     const add = (g: THREE.Object3D | null | undefined, hw = 1.0, hl = 2.3) => {
       if (g && g.visible) b.push({ x: g.position.x, z: g.position.z, yaw: g.rotation.y, hw, hl });
     };
@@ -771,6 +774,7 @@ export class StreetPlay {
     for (const t of this.cross) add(t.mesh);
     add(this.suspect);
     add(this.speeder);
+    this.squad.appendCrateBoxes(b);
     return b;
   }
 
@@ -2958,9 +2962,9 @@ export class StreetPlay {
         this.vel.x = 0;
         this.vel.z = 0;
       }
-      // solid vehicles: push the officer out and let him slide along the body
-      const hit = collide(P.x, P.z, 0.42, this.vehicleBoxes());
-      if (hit.hit && onFoot(hit.x, hit.z)) {
+      // solid cars, crates and building fronts: push out and slide along the body
+      const hit = resolveFoot(P.x, P.z, 0.42, this.solidBoxes(), onFoot);
+      if (hit.hit) {
         const nx = hit.x - P.x,
           nz = hit.z - P.z,
           nl = Math.hypot(nx, nz) || 1;
