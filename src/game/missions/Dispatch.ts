@@ -4,9 +4,24 @@
  */
 import { AVENUES_X, CROSS_Z, districtAt, DISTRICT_NAMES } from '../world/City';
 import { patrolCalls, rank, type LevelDef, type SuspectSpec, type Step, type Behaviour } from './Levels';
+import { callLimit, callReward, raidPlan, trapCount, waveText, type CallKind } from '../logic/calls';
 
-export type Kind = 'robbery' | 'chase' | 'gang' | 'hostage' | 'runner' | 'speeder' | 'route';
-const KINDS: Kind[] = ['robbery', 'chase', 'gang', 'hostage', 'runner', 'robbery', 'chase', 'gang', 'speeder', 'route'];
+export type Kind = CallKind;
+const KINDS: Kind[] = [
+  'robbery',
+  'chase',
+  'gang',
+  'hostage',
+  'runner',
+  'robbery',
+  'chase',
+  'gang',
+  'speeder',
+  'route',
+  'dui',
+  'trap',
+  'raid'
+];
 const TITLES: Record<Kind, string[]> = {
   robbery: ['سطو على صيدلية', 'سرقة سوبر ماركت', 'سطو على محل دهب'],
   chase: ['عربية مسروقة', 'سواق متهور', 'هروب من كمين'],
@@ -14,7 +29,10 @@ const TITLES: Record<Kind, string[]> = {
   hostage: ['رهينة في محل', 'احتجاز موظف'],
   runner: ['نشال هارب', 'مشتبه به بيجري'],
   speeder: ['مخالفة سرعة', 'سواق طاير', 'عربية بتسابق'],
-  route: ['دورية تفقدية', 'تأمين الشوارع', 'لفة أمنية']
+  route: ['دورية تفقدية', 'تأمين الشوارع', 'لفة أمنية'],
+  dui: ['سواق سكران', 'عربية بتتمايل', 'قيادة تحت تأثير'],
+  trap: ['كمين رادار', 'رادار السرعة', 'كمين مرور'],
+  raid: ['مداهمة وكر مخدرات', 'مداهمة بيت العقرب', 'مداهمة مخزن']
 };
 
 let seq = 0;
@@ -55,6 +73,7 @@ export function newCall(px: number, pz: number, seed = Date.now(), force?: Kind)
     dz: -dir * (2 + i * 3)
   });
   let steps: Step[];
+  let count = -1; // speeders / suspects for pay and time (defaults to the suspect list)
   const radio = (text: string): Step => ({ t: 'radio', lines: [{ who: 'mona', text }] });
   switch (kind) {
     case 'chase':
@@ -79,6 +98,41 @@ export function newCall(px: number, pz: number, seed = Date.now(), force?: Kind)
         { t: 'pullover', text: 'شغّل السارينة وخليك وراها' }
       ];
       break;
+    case 'dui':
+      steps = [
+        radio(`بلاغ عن عربية بتتمايل في ${where} — غالبًا السواق سكران. وقّفها قبل ما تعمل حادثة.`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح ${where}` },
+        { t: 'pullover', dui: true, text: 'شغّل السارينة وخليك ورا العربية اللي بتتمايل' }
+      ];
+      count = 1;
+      break;
+    case 'trap': {
+      const n = trapCount(lvl);
+      steps = [
+        radio(`المرور محتاجك: اركن الدورية عند نقطة الرادار في ${where} واقفش ${n === 1 ? 'أول مسرع' : `${n} مسرعين`}.`),
+        { t: 'car' },
+        { t: 'trap', x: x - 3.4, z: gz, n, text: 'اركن في دايرة الرادار' }
+      ];
+      count = n;
+      break;
+    }
+    case 'raid': {
+      const waves = raidPlan(lvl, [r(), r(), r(), r(), r(), r(), r(), r(), r()]);
+      steps = [
+        radio(`مداهمة وكر مخدرات في ${where}. فيه ${waves.length === 2 ? 'موجتين' : `${waves.length} موجات`} جوه البيت — اتحامى وخلّص على كل موجة.`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح ${where}` }
+      ];
+      waves.forEach((w, i) => {
+        // each wave steps out a little deeper from the door so it never stacks on the last one
+        const specs = w.roles.map((b, k) => ({ ...mk(b, k), dz: -dir * (3 + i * 2.5 + k * 2.5) }));
+        if (i > 0) steps.push(radio(waveText(i, waves.length)));
+        steps.push({ t: 'suspects', x, z, cover: true, list: specs, text: `حيّد الموجة ${i + 1}/${waves.length}` });
+        list.push(...specs);
+      });
+      break;
+    }
     case 'route': {
       // 4 intersections in a loop near the call
       const ax = AVENUES_X.filter((a) => Math.abs(a - x) <= 60);
@@ -136,8 +190,8 @@ export function newCall(px: number, pz: number, seed = Date.now(), force?: Kind)
     placeId: districtAt(z),
     title: `بلاغ: ${title}`,
     brief: `بلاغ من العمليات في ${where}.`,
-    limit: 150 + list.length * 15,
-    reward: 1200 + lvl * 400 + list.length * 300,
+    limit: callLimit(kind, count < 0 ? list.length : count),
+    reward: callReward(kind, lvl, count < 0 ? list.length : count),
     rep: 3 + lvl,
     stars: [60, 100],
     speed: 1,

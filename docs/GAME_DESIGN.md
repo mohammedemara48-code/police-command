@@ -79,6 +79,15 @@ The officer's health reaches 0. A suspect escapes (out of range or time limit). 
 11. **هجوم على القسم (Precinct Attack):** 5 armed attackers downtown.
 12. **الزعيم (The Boss):** the suburb villa. 3 guards, then Al-Zaeem himself (8 HP), who surrenders at low health. You arrest him, and the ending dialogue plays.
 
+## 7b. Patrol calls
+Free patrol (and the precinct mission board) hands out random calls placed on a real avenue 60–200 m away. Pay = base + 400 × rank level + a per-suspect amount, times a risk multiplier (`src/game/logic/calls.ts`).
+- **Robbery / runner / gang / hostage / chase:** the story scenarios on a random street.
+- **Speeder:** siren on its bumper for 3 s, it pulls over, walk up and write the ticket.
+- **Checkpoint route:** drive through 4 intersections.
+- **DUI stop (سواق سكران):** the car weaves across its lane and the drunk driver reacts slower to the siren (meter fills at 60%, drains faster). Once stopped, walk up: the driver gets out on the kerb side and either gives up (order + cuff) or staggers off on foot (15% as a rookie, up to 50%).
+- **Speed trap (كمين رادار):** park inside the yellow radar ring. After 2.5 s stopped the radar clocks a speeder (well over the 60 km/h limit) who pulls away ahead of you; siren on and pull it over like a speeder. 1 speeder as a rookie, 2 from sergeant, 3 from captain.
+- **Drug-house raid (مداهمة وكر):** 2 waves (3 from sergeant) of 2–3 people come out of the house one after another, each wave a little deeper from the door and with its own crates. Wave 1 is all gunmen; later waves can include a runner or someone who gives up. At most 8 in total.
+
 ## 8. Tech constraints
 - One ~250×340 m city, built from instanced blocks, culled per block.
 - Phones default to low quality, but always use the realistic (Quaternius) character set, with fewer pedestrians on low.
