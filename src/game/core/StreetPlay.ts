@@ -44,6 +44,18 @@ import {
 import { ARMOR_MAX } from '../logic/combat';
 import { resolveFoot, avenueBuildingBoxes, type OBB } from '../logic/collide';
 import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from '../logic/missions';
+import {
+  duiWeave,
+  stepPullDui,
+  duiDriver,
+  DUI_TALK_R,
+  stepTrap,
+  radarKmh,
+  TRAP_R,
+  TRAP_PARK_V,
+  TRAP_WAIT,
+  TRAP_LIMIT_KMH
+} from '../logic/calls';
 import { openCreator } from '../ui/CharacterCreator';
 import { modelFor, recolorFor, WEAPONS, type WeaponId } from '../logic/character';
 import {
@@ -678,12 +690,24 @@ export class StreetPlay {
   private pullM = 0;
   private pullStopped = false;
   private spTurn = 0;
-  private beginPullover() {
+  /** drunk driver: weaves, reacts slowly to the siren and has to be arrested, not ticketed */
+  private spDui = false;
+  private spT = 0;
+  private spW = 0;
+  private duiArrest = false;
+  /** reused per-frame inputs for the pull-over and radar meters (no allocations in the tick) */
+  private pullSense = { siren: false, inCar: false, dist: 0 };
+  private trapSense = { inCar: false, speed: 0, dist: 0 };
+  private freeSuspect() {
+    for (const x of this.squad.list) if (x.state !== 'cuffed' && x.state !== 'down') return x;
+    return null;
+  }
+  private beginPullover(dui = false, gap = 30) {
     this.endPullover();
     const g = this.makeSuspectCar();
     const dir = this.car.position.z < 120 ? 1 : -1;
     const ax = Math.round(this.car.position.x / 60) * 60;
-    g.position.set(ax + 1.6 * -dir, 0, this.car.position.z + dir * 30);
+    g.position.set(ax + 1.6 * -dir, 0, this.car.position.z + dir * gap);
     g.rotation.y = dir > 0 ? 0 : Math.PI;
     const far = farNode(g.position.x, g.position.z);
     this.spPath = trimBehind(
@@ -696,15 +720,25 @@ export class StreetPlay {
     this.speeder = g;
     this.pullM = 0;
     this.pullStopped = false;
-    this.setStatus('🚗💨 العربية المسرعة قدامك. شغّل السارينة 🚨 وقرّب منها.');
+    this.spDui = dui;
+    this.spT = 0;
+    this.spW = 0;
+    this.duiArrest = false;
+    this.setStatus(
+      dui
+        ? '⚠ العربية اللي بتتمايل قدامك. شغّل السارينة 🚨 وخليك وراها — السواق رد فعله بطيء.'
+        : '🚗💨 العربية المسرعة قدامك. شغّل السارينة 🚨 وقرّب منها.'
+    );
   }
   private endPullover() {
     if (this.speeder) this.group.remove(this.speeder);
     this.speeder = null;
+    this.duiArrest = false;
   }
-  private tickPullover(dt: number, text: string) {
+  /** returns true once the stop is finished (ticket written or drunk driver arrested) */
+  private tickPullover(dt: number, text: string): boolean {
     const g = this.speeder;
-    if (!g) return;
+    if (!g) return false;
     const me = this.inCar ? this.car.position : this.player.position;
     const dist = Math.hypot(g.position.x - me.x, g.position.z - me.z);
     this.msTarget.copy(g.position);
@@ -719,16 +753,33 @@ export class StreetPlay {
       }
       if (head !== null) {
         this.spTurn = wrapAngle(head - g.rotation.y);
-        g.rotation.y = approachAngle(g.rotation.y, head, dt * 5);
+        // a drunk driver's nose wanders with the swerve
+        const wob = this.spDui ? Math.cos(this.spT * 2) * 0.12 : 0;
+        g.rotation.y = approachAngle(g.rotation.y, head + wob, dt * 5);
+      }
+      if (this.spDui && v > 0.5) {
+        this.spT += dt;
+        const w = duiWeave(this.spT);
+        const d = w - this.spW;
+        this.spW = w;
+        g.position.x += Math.cos(g.rotation.y) * d;
+        g.position.z -= Math.sin(g.rotation.y) * d;
       }
       if (this.inCar) this.carVsCar(g, Math.sin(g.rotation.y) * v, Math.cos(g.rotation.y) * v, 1, 2.35);
-      this.pullM = stepPull(this.pullM, { siren: this.siren, inCar: this.inCar, dist }, dt);
+      const sense = this.pullSense;
+      sense.siren = this.siren;
+      sense.inCar = this.inCar;
+      sense.dist = dist;
+      this.pullM = this.spDui ? stepPullDui(this.pullM, sense, dt) : stepPull(this.pullM, sense, dt);
       if (this.pullM >= PULL_T) {
         this.pullStopped = true;
-        // ease to the kerb
-        g.position.x += Math.cos(g.rotation.y) * 1.2;
+        // ease to the kerb (the car's right-hand side)
+        g.position.x -= Math.cos(g.rotation.y) * 1.2;
+        g.position.z += Math.sin(g.rotation.y) * 1.2;
         audio.sample('confirm', 0.6);
-        this.setStatus('العربية وقفت على جنب. انزل واكتب المخالفة 📝');
+        this.setStatus(
+          this.spDui ? 'العربية وقفت. انزل وروح للسواق — خلي بالك.' : 'العربية وقفت على جنب. انزل واكتب المخالفة 📝'
+        );
       }
       const pct = Math.round((this.pullM / PULL_T) * 100);
       this.msText = !this.inCar
@@ -738,17 +789,47 @@ export class StreetPlay {
           : pct > 0
             ? `🚨 خليك وراها… ${pct}%`
             : text;
+    } else if (this.duiArrest) {
+      if (this.inCar) this.carVsCar(g, 0, 0, 1, 2.35);
+      const t = this.freeSuspect();
+      if (t) this.msTarget.copy(t.g.position);
+      this.msText = this.inCar ? 'انزل واقبض على السواق السكران' : 'اقبض على السواق السكران';
+      if (this.squad.done()) {
+        audio.sample('success', 0.6);
+        this.setStatus('🚔 السواق السكران اتقبض عليه قبل ما يأذي حد.');
+        if (this.siren) this.toggleSiren(false);
+        this.endPullover();
+        return true;
+      }
     } else {
       if (this.inCar) this.carVsCar(g, 0, 0, 1, 2.35);
+      if (this.spDui) {
+        this.msText = this.inCar ? 'انزل وروح للسواق' : 'روح للسواق';
+        if (!this.inCar && dist < DUI_TALK_R) {
+          // the driver stumbles out on the kerb side: gives up, or tries to run off on foot
+          const b = duiDriver(RANKS.indexOf(rank()) + 1, Math.random());
+          const c = Math.cos(g.rotation.y),
+            sn = Math.sin(g.rotation.y);
+          this.squad.spawnOne(b, g.position.x - c * 1.9, g.position.z + sn * 1.9);
+          this.duiArrest = true;
+          this.setStatus(
+            b === 'flee'
+              ? '⚠ السواق نزل يجري وهو بيترنح! الحقه.'
+              : 'السواق سكران ومش قادر يقف. اضغط «استسلم!» وبعدين كلبشه.'
+          );
+        }
+        return false;
+      }
       this.msText = this.inCar ? 'انزل واكتب المخالفة' : 'روح للسواق واكتب المخالفة';
       if (!this.inCar && dist < TICKET_R) {
         audio.sample('success', 0.6);
         this.setStatus('📝 المخالفة اتكتبت. شغل نضيف!');
         if (this.siren) this.toggleSiren(false);
         this.endPullover();
-        this.nextStep();
+        return true;
       }
     }
+    return false;
   }
 
   // ---- patrol checkpoints
@@ -760,6 +841,9 @@ export class StreetPlay {
       this.clearCheckpoint();
       return;
     }
+    this.showRing(p.x, p.z);
+  }
+  private showRing(x: number, z: number) {
     if (!this.cpRing) {
       this.cpRing = new THREE.Mesh(
         new THREE.TorusGeometry(3.2, 0.25, 8, 40),
@@ -768,11 +852,53 @@ export class StreetPlay {
       this.cpRing.rotation.x = -Math.PI / 2;
       this.group.add(this.cpRing);
     }
-    this.cpRing.position.set(p.x, 0.3, p.z);
+    this.cpRing.position.set(x, 0.3, z);
     this.cpRing.visible = true;
   }
   private clearCheckpoint() {
     if (this.cpRing) this.cpRing.visible = false;
+  }
+
+  // ---- speed trap: park on the radar spot, then pull over each speeder it clocks
+  private trapT = 0;
+  private trapCaught = 0;
+  private tickTrap(dt: number, st: { x: number; z: number; n: number; text: string }) {
+    if (this.speeder) {
+      if (!this.tickPullover(dt, '🚨 الحق المسرع ووقّفه')) return;
+      this.trapCaught++;
+      if (this.trapCaught >= st.n) {
+        this.clearCheckpoint();
+        this.nextStep();
+        return;
+      }
+      this.showRing(st.x, st.z);
+      this.setStatus(`✔ مخالفة ${this.trapCaught}/${st.n}. ارجع لنقطة الرادار.`);
+      return;
+    }
+    const c = this.car.position;
+    const d = Math.hypot(st.x - c.x, st.z - c.z);
+    const sense = this.trapSense;
+    sense.inCar = this.inCar;
+    sense.speed = this.speed;
+    sense.dist = d;
+    this.trapT = stepTrap(this.trapT, sense, dt);
+    this.msTarget.set(st.x, 0, st.z);
+    this.msHasTarget = true;
+    this.msText = !this.inCar
+      ? 'اركب الدورية'
+      : d >= TRAP_R
+        ? `${st.text} (${this.trapCaught}/${st.n})`
+        : Math.abs(this.speed) >= TRAP_PARK_V
+          ? 'وقّف العربية — الرادار شغال'
+          : `📡 الرادار بيقيس… ${Math.max(0, Math.ceil(TRAP_WAIT - this.trapT))}ث`;
+    if (this.trapT >= TRAP_WAIT) {
+      this.trapT = 0;
+      this.clearCheckpoint();
+      const kmh = radarKmh(RANKS.indexOf(rank()) + 1, Math.random());
+      this.beginPullover(false, 18);
+      audio.sample('confirm', 0.7);
+      this.setStatus(`📡 الرادار قفش عربية بـ ${kmh} كم/س (الحد ${TRAP_LIMIT_KMH})! الحقها ووقّفها.`);
+    }
   }
 
   private boxes: OBB[] = [];
@@ -946,7 +1072,7 @@ export class StreetPlay {
         });
         return `<button type="button" data-lv="${l.id}" class="${row.locked ? 'locked' : ''}" ${row.locked ? 'disabled' : ''}>${row.locked ? '🔒' : '▶'} ${l.id}. ${l.title} <small>${row.starText} · ${row.hint}</small></button>`;
       }).join('');
-      body = `<h2>📋 لوحة المهام</h2><p class="hub-sub">💵 $${money.toLocaleString()} · رتبتك: ${rank().name}</p><div class="hub-list">${rows}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية) <small>مكافأة متغيرة</small></button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button></div>`;
+      body = `<h2>📋 لوحة المهام</h2><p class="hub-sub">💵 $${money.toLocaleString()} · رتبتك: ${rank().name}</p><div class="hub-list">${rows}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية) <small>مكافأة متغيرة</small></button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button><button type="button" data-call="dui">🚘 سواق سكران <small>وقّف العربية اللي بتتمايل واقبض عليه</small></button><button type="button" data-call="trap">📡 كمين رادار <small>اركن واقفش المسرعين</small></button><button type="button" data-call="raid">🏚 مداهمة وكر <small>موجات مسلحين ورا بعض</small></button></div>`;
     } else if (tab === 'armory') {
       const guns = (Object.keys(WEAPONS) as WeaponId[])
         .map((k) => {
@@ -1531,7 +1657,13 @@ export class StreetPlay {
         break;
       case 'pullover':
         this.msText = st.text;
-        this.beginPullover();
+        this.beginPullover(!!st.dui);
+        break;
+      case 'trap':
+        this.msText = st.text;
+        this.trapT = 0;
+        this.trapCaught = 0;
+        this.showRing(st.x, st.z);
         break;
       case 'checkpoints':
         this.msText = st.text;
@@ -1576,7 +1708,10 @@ export class StreetPlay {
         }
         break;
       case 'pullover':
-        this.tickPullover(dt, st.text);
+        if (this.tickPullover(dt, st.text)) this.nextStep();
+        break;
+      case 'trap':
+        this.tickTrap(dt, st);
         break;
       case 'checkpoints': {
         const n = passCheckpoint(this.cpIdx, st.pts, pos.x, pos.z, this.inCar);

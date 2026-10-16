@@ -27,7 +27,8 @@ export type Step =
   | { t: 'car'; text?: string }
   | { t: 'goto'; x: number; z: number; r?: number; text: string }
   | { t: 'chase'; speed: number; limit: number; then?: Behaviour; text?: string }
-  | { t: 'pullover'; text: string }
+  | { t: 'pullover'; text: string; dui?: boolean }
+  | { t: 'trap'; x: number; z: number; n: number; text: string }
   | { t: 'checkpoints'; pts: { x: number; z: number }[]; text: string }
   | { t: 'suspects'; x: number; z: number; list: SuspectSpec[]; hostage?: boolean; cover?: boolean; text: string };
 
