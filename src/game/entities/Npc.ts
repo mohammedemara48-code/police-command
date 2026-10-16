@@ -21,6 +21,7 @@ import {
   type Gunman,
   type FootSense
 } from '../logic/cover';
+import type { OBB } from '../logic/collide';
 import {
   rollHitZone,
   zoneDamage,
@@ -184,6 +185,12 @@ export class Squad {
       cuffT: 0,
       path: []
     };
+  }
+
+
+  /** Cover crates as oriented boxes for on-foot collision (mutates `out`). */
+  appendCrateBoxes(out: OBB[]) {
+    for (const c of this.covers) out.push({ x: c.x, z: c.z, yaw: 0, hw: 0.85, hl: 0.4 });
   }
 
   private addCrate(x: number, z: number) {
