@@ -2,9 +2,10 @@
  * Procedural dispatch: endless radio calls for free patrol after (or alongside) the story.
  * Each call becomes a LevelDef with the same step-script the story uses, placed on a real road.
  */
-import { AVENUES_X, CROSS_Z, districtAt, DISTRICT_NAMES } from '../world/City';
+import { AVENUES_X, CROSS_Z, districtAt, DISTRICT_NAMES, NODES } from '../world/City';
 import { patrolCalls, rank, type LevelDef, type SuspectSpec, type Step, type Behaviour } from './Levels';
 import { callLimit, callReward, raidPlan, trapCount, waveText, type CallKind } from '../logic/calls';
+import { ambushPlan, ambushCount, vipDestination, VIP_WHO, VIP_DEST } from '../logic/escort';
 
 export type Kind = CallKind;
 const KINDS: Kind[] = [
@@ -20,7 +21,8 @@ const KINDS: Kind[] = [
   'route',
   'dui',
   'trap',
-  'raid'
+  'raid',
+  'vip'
 ];
 const TITLES: Record<Kind, string[]> = {
   robbery: ['سطو على صيدلية', 'سرقة سوبر ماركت', 'سطو على محل دهب'],
@@ -32,7 +34,8 @@ const TITLES: Record<Kind, string[]> = {
   route: ['دورية تفقدية', 'تأمين الشوارع', 'لفة أمنية'],
   dui: ['سواق سكران', 'عربية بتتمايل', 'قيادة تحت تأثير'],
   trap: ['كمين رادار', 'رادار السرعة', 'كمين مرور'],
-  raid: ['مداهمة وكر مخدرات', 'مداهمة بيت العقرب', 'مداهمة مخزن']
+  raid: ['مداهمة وكر مخدرات', 'مداهمة بيت العقرب', 'مداهمة مخزن'],
+  vip: ['تأمين موكب', 'حراسة شخصية مهمة', 'موكب رسمي']
 };
 
 let seq = 0;
@@ -131,6 +134,21 @@ export function newCall(px: number, pz: number, seed = Date.now(), force?: Kind)
         steps.push({ t: 'suspects', x, z, cover: true, list: specs, text: `حيّد الموجة ${i + 1}/${waves.length}` });
         list.push(...specs);
       });
+      break;
+    }
+    case 'vip': {
+      // the VIP car waits at the call spot; escort it along the road graph to a destination 110–220 m away
+      const plan = ambushPlan(lvl, [r(), r(), r(), r(), r(), r(), r(), r(), r(), r()]);
+      const dest = vipDestination({ x, z }, NODES, r());
+      const who = pick(VIP_WHO);
+      const to = pick(VIP_DEST);
+      steps = [
+        radio(`موكب ${who} مستني في ${where} ورايح ${to}. خليك لازق في العربية السودا — العقرب ممكن يعمل كمين في السكة.`),
+        { t: 'car' },
+        { t: 'goto', x, z: gz, text: `روح للموكب في ${where}` },
+        { t: 'escort', x, z, tx: dest.x, tz: dest.z, dest: to, ambush: plan, text: `رافق الموكب لحد ${to}` }
+      ];
+      count = ambushCount(plan);
       break;
     }
     case 'route': {

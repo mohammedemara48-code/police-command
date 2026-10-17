@@ -1,4 +1,5 @@
 /** Story campaign: 12 scripted missions (see docs/GAME_DESIGN.md; intro/outro cutscenes live in src/story/cutscenes.ts). Unlocks, stars, XP/rank saved locally (and synced when signed in). */
+import type { Ambush } from '../logic/escort';
 import { rankForXp, starsFor, xpFor } from '../logic/rewards';
 import {
   START_MONEY,
@@ -29,6 +30,7 @@ export type Step =
   | { t: 'chase'; speed: number; limit: number; then?: Behaviour; text?: string }
   | { t: 'pullover'; text: string; dui?: boolean }
   | { t: 'trap'; x: number; z: number; n: number; text: string }
+  | { t: 'escort'; x: number; z: number; tx: number; tz: number; dest: string; ambush: Ambush[]; text: string }
   | { t: 'checkpoints'; pts: { x: number; z: number }[]; text: string }
   | { t: 'suspects'; x: number; z: number; list: SuspectSpec[]; hostage?: boolean; cover?: boolean; text: string };
 

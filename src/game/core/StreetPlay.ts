@@ -56,6 +56,20 @@ import {
   TRAP_WAIT,
   TRAP_LIMIT_KMH
 } from '../logic/calls';
+import {
+  vipSpeed,
+  ambushSpot,
+  routeLength,
+  vipShotDamage,
+  vipCrashDamage,
+  VIP_HP,
+  VIP_LANE,
+  VIP_ARRIVE_R,
+  ESCORT_NEAR,
+  ESCORT_FAR,
+  type Pt,
+  type Ambush
+} from '../logic/escort';
 import { openCreator } from '../ui/CharacterCreator';
 import { CutscenePlayer, type CutsceneFrames } from '../ui/Cutscene';
 import type { Pose } from '../logic/cutscene';
@@ -911,6 +925,221 @@ export class StreetPlay {
     }
   }
 
+  // ---- VIP escort: the VIP car follows the road graph to its destination; ambushes spring on the way
+  private vip: THREE.Group | null = null;
+  /** road-centre track point the car follows (the mesh sits one lane to its right) */
+  private vipPt = { x: 0, z: 0 };
+  private vipPath: Pt[] = [];
+  private vipRoute: Pt[] = [];
+  private vipTotal = 1;
+  private vipS = 0;
+  private vipTurn = 0;
+  private vipHp = VIP_HP;
+  private vipHitT = 0;
+  private vipCrashT = 0;
+  private ambIdx = 0;
+  private ambLive = false;
+  private vipSense = { escort: 0, ambush: false, toGo: 0, turn: 0, blocked: false };
+  private static vipTex: THREE.CanvasTexture | null = null;
+  private makeVipCar() {
+    const g = new THREE.Group();
+    g.add(this.box(1.75, 0.45, 4.3, this.mat(0x0b0d10, { metalness: 0.7, roughness: 0.2 }), 0, 0.55, 0));
+    // two small Egyptian pennants on the front wings (red / white / black)
+    const flagC = document.createElement('canvas');
+    flagC.width = 24;
+    flagC.height = 18;
+    const fc = flagC.getContext('2d')!;
+    ['#ce1126', '#ffffff', '#111111'].forEach((c, i) => {
+      fc.fillStyle = c;
+      fc.fillRect(0, i * 6, 24, 6);
+    });
+    fc.fillStyle = '#c09300';
+    fc.fillRect(10, 7, 4, 4);
+    const flagT = new THREE.CanvasTexture(flagC);
+    flagT.colorSpace = THREE.SRGBColorSpace;
+    const flagM = new THREE.MeshBasicMaterial({ map: flagT, side: THREE.DoubleSide });
+    const poleM = this.mat(0xd8d8d8, { metalness: 0.8, roughness: 0.3 });
+    for (const sx of [-0.78, 0.78]) {
+      const pole = this.box(0.03, 0.42, 0.03, poleM, sx, 1.02, 1.75);
+      pole.userData.keep = true;
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.24), flagM);
+      flag.position.set(sx, 1.12, 1.58);
+      flag.rotation.y = Math.PI / 2;
+      flag.userData.keep = true;
+      g.add(pole, flag);
+    }
+    // gold star marker over the roof so the car reads at a glance
+    if (!StreetPlay.vipTex) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const x = c.getContext('2d')!;
+      x.fillStyle = '#ffc93ccc';
+      x.beginPath();
+      x.arc(32, 32, 30, 0, Math.PI * 2);
+      x.fill();
+      x.font = '34px sans-serif';
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      x.fillText('⭐', 32, 35);
+      StreetPlay.vipTex = new THREE.CanvasTexture(c);
+    }
+    const star = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: StreetPlay.vipTex, depthTest: false, transparent: true })
+    );
+    star.scale.setScalar(0.95);
+    star.position.y = 2.9;
+    star.renderOrder = 10;
+    star.userData.keep = true;
+    g.add(star);
+    // graphite black: official-looking but still readable on dark asphalt
+    models.dress(g, 'car-sedan2', { length: 4.9, tint: 0x2b3038 });
+    return g;
+  }
+  /** park the VIP car at the pickup (shown while you drive there, so it never pops in next to you) */
+  private parkVip(st: { x: number; z: number; tx: number; tz: number }) {
+    this.endEscort();
+    this.vipPath = findPath(st.x, st.z, st.tx, st.tz);
+    this.vipRoute = [{ x: st.x, z: st.z }, ...this.vipPath];
+    this.vipTotal = Math.max(1, routeLength(this.vipRoute));
+    this.vipPt.x = st.x;
+    this.vipPt.z = st.z;
+    const g = this.makeVipCar();
+    const n = this.vipPath[0] ?? { x: st.tx, z: st.tz };
+    g.rotation.y = Math.atan2(n.x - st.x, n.z - st.z);
+    this.placeVip(g);
+    this.group.add(g);
+    this.vip = g;
+    this.vipHp = VIP_HP;
+  }
+  private beginEscort(st: { x: number; z: number; tx: number; tz: number }) {
+    if (!this.vip) this.parkVip(st);
+    const g = this.vip!;
+    this.vipS = 0;
+    this.vipTurn = 0;
+    this.vipHp = VIP_HP;
+    this.vipHitT = 0;
+    this.vipCrashT = 0;
+    this.ambIdx = 0;
+    this.ambLive = false;
+    this.squad.ward = g.position;
+    this.squad.wardShot = vipShotDamage(RANKS.indexOf(rank()) + 1);
+    this.squad.wardDmg = 0;
+    audio.sample('confirm', 0.6);
+    this.setStatus('⭐ الموكب اتحرك. خليك جنبه — لو بعدت العربية هتقف تستناك.');
+  }
+  /** VIP car mesh = track point + one lane to the right of its heading */
+  private placeVip(g: THREE.Object3D) {
+    const h = g.rotation.y;
+    g.position.set(this.vipPt.x - Math.cos(h) * VIP_LANE, 0, this.vipPt.z + Math.sin(h) * VIP_LANE);
+  }
+  private endEscort() {
+    if (this.vip) this.group.remove(this.vip);
+    this.vip = null;
+    this.ambLive = false;
+    this.squad.ward = null;
+    this.squad.wardDmg = 0;
+  }
+  private tickEscort(dt: number, st: { tx: number; tz: number; dest: string; ambush: Ambush[]; text: string }) {
+    const g = this.vip;
+    if (!g) return;
+    const me = this.inCar ? this.car.position : this.player.position;
+    const escort = Math.hypot(g.position.x - me.x, g.position.z - me.z);
+    // ambushes: spring ahead of the car at their route fraction, clear when every attacker is down or cuffed
+    if (this.ambLive && this.squad.done()) {
+      this.ambLive = false;
+      audio.sample('success', 0.5);
+      this.setStatus('✔ الكمين اتأمن. كمّل مع الموكب.');
+    } else if (!this.ambLive && this.ambIdx < st.ambush.length && this.vipS / this.vipTotal >= st.ambush[this.ambIdx]!.at) {
+      const amb = st.ambush[this.ambIdx]!;
+      const spot = ambushSpot(this.vipRoute, this.vipS);
+      // attackers on both sidewalks of the avenue, staggered, each with a crate between him and the convoy
+      const specs = amb.roles.map((b, k) => ({ b, dx: (k % 2 ? 1 : -1) * (6.1 + (k >> 1) * 0.5), dz: (k >> 1) * 3.2 * Math.sign(spot.z - this.vipPt.z || 1) }));
+      this.squad.spawn(spot.x, spot.z, specs, { cover: true, approachZ: this.vipPt.z });
+      this.ambIdx++;
+      this.ambLive = true;
+      audio.setTrack('music');
+      this.radio(
+        [{ who: 'mona', text: `كمين قدام الموكب! ${specs.length} من رجالة العقرب — احمي العربية.` }],
+        null
+      );
+      this.setStatus('💥 كمين! الموكب وقف. حيّد المهاجمين قبل ما يصيبوا العربية.');
+    }
+    // movement along the road graph
+    const sense = this.vipSense;
+    sense.escort = escort;
+    sense.ambush = this.ambLive;
+    sense.toGo = this.vipTotal - this.vipS;
+    sense.turn = this.vipTurn;
+    // the driver brakes for the patrol car or the officer standing in front of it
+    const h0 = g.rotation.y,
+      ax = me.x - g.position.x,
+      az = me.z - g.position.z,
+      ahead = ax * Math.sin(h0) + az * Math.cos(h0);
+    sense.blocked = ahead > 0 && ahead < 7.5 && Math.abs(ax * Math.cos(h0) - az * Math.sin(h0)) < 2.4;
+    const v = vipSpeed(sense);
+    if (v > 0) {
+      const ox = this.vipPt.x,
+        oz = this.vipPt.z;
+      const head = followPath(this.vipPt, this.vipPath, v * dt);
+      this.vipS += Math.hypot(this.vipPt.x - ox, this.vipPt.z - oz);
+      if (head !== null) {
+        this.vipTurn = wrapAngle(head - g.rotation.y);
+        g.rotation.y = approachAngle(g.rotation.y, head, dt * 2.6);
+      }
+      this.placeVip(g);
+      rollWheels(g, v * dt);
+    }
+    if (this.inCar) {
+      const closing = this.carVsCar(g, Math.sin(g.rotation.y) * v, Math.cos(g.rotation.y) * v, 1, 2.45);
+      this.vipCrashT -= dt;
+      const hurt = this.vipCrashT <= 0 ? vipCrashDamage(closing) : 0;
+      if (hurt) {
+        this.vipCrashT = 1;
+        this.vipHp = Math.max(0, this.vipHp - hurt);
+        this.setStatus('⚠ خبطت عربية الموكب! خلي بالك.');
+      }
+    }
+    this.vipHitT -= dt;
+    if (this.squad.wardDmg > 0) {
+      this.vipHp = Math.max(0, this.vipHp - this.squad.wardDmg);
+      this.squad.wardDmg = 0;
+      if (this.vipHitT <= 0) {
+        // throttled so a burst of hits doesn't spam the status line
+        this.vipHitT = 2.5;
+        this.setStatus(`⚠ عربية الموكب بتضرب! ⭐ ${Math.round(this.vipHp)}%`);
+      }
+    }
+    if (this.vipHp <= 0) {
+      this.finishMission(false, 'الشخصية المهمة اتصابت — الموكب وقع.');
+      return;
+    }
+    // objective: the attackers during an ambush, the car when you fall behind, otherwise the destination
+    const left = this.squad.remaining();
+    if (this.ambLive) {
+      const t = this.freeSuspect();
+      if (t) this.msTarget.copy(t.g.position);
+      this.msText = `💥 كمين! حيّد المهاجمين (${left} باقيين) · ⭐ ${Math.round(this.vipHp)}%`;
+    } else if (escort > ESCORT_NEAR) {
+      this.msTarget.copy(g.position);
+      this.msText =
+        escort > ESCORT_FAR
+          ? this.inCar
+            ? 'ارجع جنب الموكب — العربية واقفة مستنياك'
+            : 'اركب الدورية وارجع للموكب'
+          : 'قرّب من الموكب';
+    } else {
+      this.msTarget.set(st.tx, 0, st.tz);
+      this.msText = `${st.text} · ⭐ ${Math.round(this.vipHp)}%`;
+    }
+    this.msHasTarget = true;
+    if (!this.ambLive && Math.hypot(st.tx - this.vipPt.x, st.tz - this.vipPt.z) < VIP_ARRIVE_R) {
+      audio.sample('success', 0.6);
+      this.setStatus(`⭐ الموكب وصل ${st.dest} بالسلامة. شغل محترم!`);
+      this.endEscort();
+      this.nextStep();
+    }
+  }
+
   private boxes: OBB[] = [];
   private buildingBoxes: OBB[] = [];
   /** cars, cover crates and avenue fronts the officer cannot walk through */
@@ -1082,7 +1311,7 @@ export class StreetPlay {
         });
         return `<button type="button" data-lv="${l.id}" class="${row.locked ? 'locked' : ''}" ${row.locked ? 'disabled' : ''}>${row.locked ? '🔒' : '▶'} ${l.id}. ${l.title} <small>${row.starText} · ${row.hint}</small></button>`;
       }).join('');
-      body = `<h2>📋 لوحة المهام</h2><p class="hub-sub">💵 $${money.toLocaleString()} · رتبتك: ${rank().name}</p><div class="hub-list">${rows}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية) <small>مكافأة متغيرة</small></button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button><button type="button" data-call="dui">🚘 سواق سكران <small>وقّف العربية اللي بتتمايل واقبض عليه</small></button><button type="button" data-call="trap">📡 كمين رادار <small>اركن واقفش المسرعين</small></button><button type="button" data-call="raid">🏚 مداهمة وكر <small>موجات مسلحين ورا بعض</small></button></div>`;
+      body = `<h2>📋 لوحة المهام</h2><p class="hub-sub">💵 $${money.toLocaleString()} · رتبتك: ${rank().name}</p><div class="hub-list">${rows}<button type="button" data-lv="-1">🚨 بلاغ عشوائي (دورية) <small>مكافأة متغيرة</small></button><button type="button" data-call="speeder">🚗💨 مخالفة سرعة <small>سارينة ووقّف العربية</small></button><button type="button" data-call="route">🗺 دورية تفقدية <small>عدّي على نقط التفتيش</small></button><button type="button" data-call="dui">🚘 سواق سكران <small>وقّف العربية اللي بتتمايل واقبض عليه</small></button><button type="button" data-call="trap">📡 كمين رادار <small>اركن واقفش المسرعين</small></button><button type="button" data-call="raid">🏚 مداهمة وكر <small>موجات مسلحين ورا بعض</small></button><button type="button" data-call="vip">⭐ تأمين موكب <small>رافق الشخصية المهمة واحميها من الكمين</small></button></div>`;
     } else if (tab === 'armory') {
       const guns = (Object.keys(WEAPONS) as WeaponId[])
         .map((k) => {
@@ -1653,11 +1882,14 @@ export class StreetPlay {
         this.msText = st.text ?? 'اركب الدورية';
         if (this.inCar) this.nextStep();
         break;
-      case 'goto':
+      case 'goto': {
         this.msText = st.text;
         this.msTarget.set(st.x, 0, st.z);
         this.msHasTarget = true;
+        const nx = this.level.steps[this.msIdx + 1];
+        if (nx?.t === 'escort') this.parkVip(nx);
         break;
+      }
       case 'chase':
         this.chaseText = this.msText = st.text ?? 'الحق العربية';
         this.chaseThen = st.then ?? null;
@@ -1674,6 +1906,10 @@ export class StreetPlay {
         this.trapT = 0;
         this.trapCaught = 0;
         this.showRing(st.x, st.z);
+        break;
+      case 'escort':
+        this.msText = st.text;
+        this.beginEscort(st);
         break;
       case 'checkpoints':
         this.msText = st.text;
@@ -1711,6 +1947,8 @@ export class StreetPlay {
         if (this.inCar) this.nextStep();
         break;
       case 'goto':
+        // the parked VIP car is solid while you pull up next to it
+        if (this.vip && this.inCar) this.carVsCar(this.vip, 0, 0, 1, 2.45);
         // 2D distance from whatever the player controls (car or on foot): fixes the old "1 m" stall
         if (Math.hypot(st.x - pos.x, st.z - pos.z) < (st.r ?? 9)) {
           this.setStatus('وصلت.');
@@ -1722,6 +1960,9 @@ export class StreetPlay {
         break;
       case 'trap':
         this.tickTrap(dt, st);
+        break;
+      case 'escort':
+        this.tickEscort(dt, st);
         break;
       case 'checkpoints': {
         const n = passCheckpoint(this.cpIdx, st.pts, pos.x, pos.z, this.inCar);
@@ -1845,6 +2086,7 @@ export class StreetPlay {
     const arPct = (q.armor / ARMOR_MAX) * 100;
     const ammoLabel = q.reloading ? '…' : q.reserve > 0 ? `${q.ammo}/${q.mag}+${q.reserve}` : `${q.ammo}/${q.mag}`;
     const html = `<div class="hud-row">${ring('hp', q.hp, '❤', `الصحة ${Math.round(q.hp)}%`)}${ring('ar', arPct, '🛡', `الدرع ${Math.round(arPct)}%`)}
+${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.round(this.vipHp)}%`) : ''}
       <div class="gun">🔫 <b>${ammoLabel}</b></div></div>
       ${stars ? `<div class="threat">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</div>` : ''}`;
     if (this.hudEl && html !== this.hudHtml) {
@@ -2381,6 +2623,7 @@ export class StreetPlay {
     this.chasing = false;
     this.chaseArrest = false;
     this.endPullover();
+    this.endEscort();
     this.clearCheckpoint();
     this.msIdx = -1;
     this.msText = 'اقرا المهمة واضغط «ابدأ»';
@@ -2809,6 +3052,7 @@ export class StreetPlay {
     this.chasing = false;
     this.chaseArrest = false;
     this.endPullover();
+    this.endEscort();
     this.clearCheckpoint();
     this.firing = false;
     audio.sirenLoop(false);
@@ -3696,6 +3940,11 @@ export class StreetPlay {
     if (this.msHasTarget) dots.push({ x: this.msTarget.x, z: this.msTarget.z, c: '#ffd23d', r: 4 });
     if (this.chasing && this.suspect)
       dots.push({ x: this.suspect.position.x, z: this.suspect.position.z, c: '#ffd23d', r: 4 });
+    if (this.vip) {
+      const st = this.level.steps[this.msIdx];
+      if (st?.t === 'escort') dots.push({ x: st.tx, z: st.tz, c: '#7dff9a', r: 4 });
+      dots.push({ x: this.vip.position.x, z: this.vip.position.z, c: '#ffc93c', r: 4.5 });
+    }
 
     dots.push({ x: pos.x, z: pos.z, c: '#ffffff', r: 4 });
     const m = drawCityMap(ctx, c.width, c.height, dots);

@@ -47,3 +47,6 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 - Egyptian street set (apartment blocks, road signs, striped kerbs, taxi roof sign, microbus roof rack, patrol door decals): drawn in code for this project (`src/game/world/Egypt.ts`), MIT like the rest of the code.
 - Water normal map `waternormals.jpg` and the `Water` shader from the three.js examples (https://github.com/mrdoob/three.js), MIT.
 - Shop windows and their goods, street lamps, palms, trees, benches, bins, signs and the corniche railing are built in code.
+
+## VIP escort (v1.6)
+- No new downloaded assets. The VIP car reuses the existing CC0 sedan model (`car-sedan2`, tinted at runtime); the Egyptian pennants and the ⭐ marker are drawn procedurally on a canvas.

@@ -1,8 +1,8 @@
-/** Patrol call types: drunk-driver stop, speed trap and drug-house raid waves (pure, unit-tested). */
+/** Patrol call types: drunk-driver stop, speed trap and drug-house raid waves (pure, unit-tested). VIP escort: logic/escort.ts. */
 import { PULL_R, PULL_T } from './missions';
 
 export type CallKind =
-  'robbery' | 'chase' | 'gang' | 'hostage' | 'runner' | 'speeder' | 'route' | 'dui' | 'trap' | 'raid';
+  'robbery' | 'chase' | 'gang' | 'hostage' | 'runner' | 'speeder' | 'route' | 'dui' | 'trap' | 'raid' | 'vip';
 
 /** Rank level 1 (rookie) … 6 (major) clamped to the table. */
 const lv = (n: number) => Math.max(1, Math.min(6, Math.floor(n) || 1));
@@ -98,7 +98,8 @@ const PAY: Record<CallKind, { base: number; per: number; mul: number }> = {
   route: { base: 1200, per: 300, mul: 1 },
   dui: { base: 1500, per: 300, mul: 1.1 },
   trap: { base: 900, per: 700, mul: 1 },
-  raid: { base: 1600, per: 300, mul: 1.15 }
+  raid: { base: 1600, per: 300, mul: 1.15 },
+  vip: { base: 1800, per: 300, mul: 1.2 }
 };
 
 /** Call payout: base + rank × 400 + per suspect/speeder, times the call's risk multiplier (rounded to $10). */
@@ -113,5 +114,6 @@ export function callLimit(kind: CallKind, count: number) {
   if (kind === 'trap') return 120 + n * 70;
   if (kind === 'raid') return 170 + n * 18;
   if (kind === 'dui') return 170;
+  if (kind === 'vip') return 210 + n * 20;
   return 150 + n * 15;
 }
