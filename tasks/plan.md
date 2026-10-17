@@ -15,13 +15,14 @@ Week target: publishable GTA-style police game by Tue 20 Oct 2026 20:30 Asia/Riy
 - P1 Precinct hub (#56) — armory purchases (priced revolver/SMG), garage upgrades (engine/armor/brakes) with real driving effects, mission board lock/reward hints; street purse on progress save
 - P1.1 More mission types (#57) — DUI stop (swerving car, slow siren response, driver arrest), speed trap (park on the radar spot, pull over 1–3 clocked speeders), drug-house raid (2–3 gunman waves); in random patrol and on the mission board, pay scales with rank
 - P1.2 Story cutscenes — letterbox intro before and outro after each of the 12 campaign missions: camera rails over the live city, speaker badge + typewriter Egyptian Arabic lines, tap/Space to advance, Skip, HUD hidden and input locked; scripts in `src/story/cutscenes.ts`
+- P1.3 VIP escort call — VIP sedan follows the road graph to a destination, waits for the escort, 1–2 ambushes (gunmen with crates) that also shoot the car, gold ⭐ VIP health ring, fail if it's destroyed; in random patrol and on the mission board (`src/game/logic/escort.ts`)
 
 ## Next
 
-1. VIP escort call (follow the road graph, ambush on the way).
-2. Audio pass (radio chatter, district ambience, threat music).
-3. Visual pass (day/night in street mode, rain, LODs).
-4. Pedestrian / traffic v2 (crosswalks, siren pull-over lanes).
+1. Audio pass (radio chatter, district ambience, threat music).
+2. Visual pass (day/night in street mode, rain, LODs).
+3. Pedestrian / traffic v2 (crosswalks, siren pull-over lanes; traffic yielding to the VIP convoy).
+4. Story hook for the escort: a campaign beat that escorts the Scorpion case's state witness (reuse the `escort` step + a cutscene).
 
 ## Later (publish)
 
