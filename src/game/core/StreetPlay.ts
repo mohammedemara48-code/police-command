@@ -57,6 +57,10 @@ import {
   TRAP_LIMIT_KMH
 } from '../logic/calls';
 import { openCreator } from '../ui/CharacterCreator';
+import { CutscenePlayer, type CutsceneFrames } from '../ui/Cutscene';
+import type { Pose } from '../logic/cutscene';
+import { storyCutscene } from '../../story/cutscenes';
+import { SPEAKERS } from '../../story/speakers';
 import { modelFor, recolorFor, WEAPONS, type WeaponId } from '../logic/character';
 import {
   buildCity,
@@ -250,6 +254,11 @@ export class StreetPlay {
   private radioDone: (() => void) | null = null;
   private radioT = 0;
   private radioEl: HTMLElement | null = null;
+  /** story intro/outro cutscenes (src/story/cutscenes.ts) */
+  private cut!: CutscenePlayer;
+  /** intros already shown this session: retries go straight to the mission */
+  private introSeen = new Set<number>();
+  private outroCleanup: (() => void) | null = null;
   // first-call interactive tutorial (mission 1, until finished or skipped)
   private tutOn = false;
   private tutEl: HTMLElement | null = null;
@@ -432,6 +441,7 @@ export class StreetPlay {
     private carRoot: THREE.Group,
     private markerRoot: THREE.Group
   ) {
+    this.cut = new CutscenePlayer(this.camera);
     this.buildWorld();
     this.scene.add(this.group);
     this.group.visible = false;
@@ -1777,14 +1787,6 @@ export class StreetPlay {
   }
 
   // ---- radio dialogue
-  private static WHO: Record<string, [string, string]> = {
-    mona: ['الرقيب منى · العمليات', '#3aa0ff'],
-    hamed: ['النقيب حامد', '#ffd23d'],
-    yasser: ['ياسر', '#7dff9a'],
-    suspect: ['المشتبه به', '#ff6b81'],
-    informant: ['الواشي', '#c39bff'],
-    boss: ['الزعيم', '#ff3b3b']
-  };
   private radio(lines: Line[], done: (() => void) | null) {
     this.radioQ = [...lines];
     this.radioDone = done;
@@ -1799,7 +1801,7 @@ export class StreetPlay {
       d?.();
       return;
     }
-    const [name, col] = StreetPlay.WHO[l.who] ?? ['', '#fff'];
+    const { name, color: col } = SPEAKERS[l.who] ?? { name: '', color: '#fff' };
     if (this.radioEl) {
       this.radioEl.innerHTML = `<i style="background:${col}">📻</i><div><b style="color:${col}">${name}</b><p>${l.text}</p></div><span>اضغط ▶</span>`;
       this.radioEl.classList.add('show');
@@ -2005,7 +2007,7 @@ export class StreetPlay {
     el.querySelector('[data-ok]')!.addEventListener('click', () => {
       audio.click();
       this.closeResultSilently();
-      this.startMission();
+      this.playIntro(() => this.startMission());
     });
   }
 
@@ -2372,6 +2374,7 @@ export class StreetPlay {
     if (id < 0) id = newCall(here.x, here.z).id;
     const patrol = isPatrol(id);
     const keep = patrol && this.mounted && this.level && isPatrol(this.level.id);
+    this.stopCutscene();
     this.level = levelById(id);
     if (!patrol) progress.current = this.level.id;
     this.missionId = this.level.placeId;
@@ -2412,6 +2415,7 @@ export class StreetPlay {
   }
 
   disengage() {
+    this.stopCutscene();
     this.active = false;
     this.group.visible = false;
     this.root.visible = true;
@@ -2630,6 +2634,7 @@ export class StreetPlay {
   private onKey(e: KeyboardEvent, down: boolean) {
     if (!this.active) return;
     this.keys[down ? 'add' : 'delete'](e.code);
+    if (down && this.cut.active) return;
     if (down && (e.code === 'KeyE' || e.code === 'Enter')) this.toggleCar();
     if (e.code === 'KeyF' || e.code === 'Space') this.firing = down;
     if (down && e.code === 'KeyQ') this.orderSurrender();
@@ -2828,14 +2833,98 @@ export class StreetPlay {
         : `${reason || 'المهمة فشلت.'} جرّب تاني.`
     };
     this.lastResult = { success, levelId: lv.id };
-    setTimeout(() => this.squad.clear(), 1500);
-    if (this.suspect) {
-      this.group.remove(this.suspect);
-      this.suspect = null;
-    }
     this.onReport?.(report);
-    if (success && lv.ending) this.radio(lv.ending, null);
-    this.showResult(report);
+    // progress is already saved above; the outro only delays the result card
+    const outro = success && !isPatrol(lv.id) ? storyCutscene(lv.id, 'outro') : undefined;
+    const cleanup = () => {
+      this.outroCleanup = null;
+      setTimeout(() => this.squad.clear(), 1500);
+      if (this.suspect) {
+        this.group.remove(this.suspect);
+        this.suspect = null;
+      }
+    };
+    const wrapUp = () => {
+      cleanup();
+      this.showResult(report);
+    };
+    if (outro) {
+      this.outroCleanup = cleanup;
+      this.playCutscene(outro, wrapUp);
+    } else wrapUp();
+  }
+
+  /** Cut a running cutscene short without its follow-up (but still tidy the scene if it was an outro). */
+  private stopCutscene() {
+    this.cut.stop();
+    this.outroCleanup?.();
+  }
+
+  // ===================== story cutscenes =====================
+  /** Where the mission happens: the first shootout/arrest spot, else the first GPS destination, else the district. */
+  private sceneSpot(): { x: number; z: number } {
+    const steps = this.level.steps;
+    const sq = steps.find((x) => x.t === 'suspects');
+    if (sq && sq.t === 'suspects') return { x: sq.x, z: sq.z };
+    const go = steps.find((x) => x.t === 'goto');
+    if (go && go.t === 'goto') return { x: go.x, z: go.z };
+    const place = STREET_PLACES.find((p) => p.id === this.level.placeId) || STREET_PLACES[0];
+    return { x: 0, z: place.z };
+  }
+
+  private cutFrames(): CutsceneFrames {
+    const spot = this.sceneSpot();
+    const hero = this.inCar ? this.car.position : this.player.position;
+    return {
+      // along the avenue (never diagonal through blocks), facing away from the officer
+      scene: { x: spot.x, z: spot.z, yaw: spot.z >= hero.z ? 0 : Math.PI },
+      hero: { x: hero.x, z: hero.z, yaw: this.inCar ? this.car.rotation.y : this.yaw },
+      car: { x: this.car.position.x, z: this.car.position.z, yaw: this.car.rotation.y }
+    };
+  }
+
+  /** Low shots must stay over the street: lift the camera above the roofs if a rail ends up inside a block. */
+  private cutAdjust = (p: Pose) => {
+    if (p.py < 14 && !onRoad(p.px, p.pz, 3.2)) p.py = 14;
+  };
+
+  private playCutscene(def: NonNullable<ReturnType<typeof storyCutscene>>, done: () => void) {
+    // drop held input so nothing fires or drives the moment control comes back
+    this.keys.clear();
+    this.hold.f = this.hold.b = this.hold.l = this.hold.r = this.hold.run = false;
+    this.stick.x = this.stick.y = 0;
+    this.firing = false;
+    this.aimDragging = false;
+    this.aimDragId = null;
+    this.closeMap();
+    this.cut.play(
+      def,
+      this.cutFrames(),
+      { title: `مهمة ${this.level.id} · ${this.level.title}`, adjust: this.cutAdjust },
+      () => {
+        // ease the follow camera back from wherever the last shot ended
+        this.camPos.copy(this.camera.position);
+        done();
+      }
+    );
+  }
+
+  /** Story intro before the mission clock starts (once per session per mission; patrol calls have none). */
+  private playIntro(start: () => void) {
+    const id = this.level.id;
+    const def = isPatrol(id) || this.introSeen.has(id) ? undefined : storyCutscene(id, 'intro');
+    if (!def) {
+      start();
+      return;
+    }
+    this.introSeen.add(id);
+    if (!this.inCar) {
+      // face the officer down the avenue towards the call for the close-up
+      const spot = this.sceneSpot();
+      this.yaw = this.camYaw = spot.z >= this.player.position.z ? 0 : Math.PI;
+      this.player.rotation.y = this.yaw;
+    }
+    this.playCutscene(def, start);
   }
 
   private showResult(r: ChaseReport) {
@@ -2989,8 +3078,9 @@ export class StreetPlay {
     this.stepTraffic(dt);
     this.stepChase(dt);
     this.stepTutorial(dt);
-    if (!this.inCar && !this.resultEl && !this.hubEl) this.softAimAssist(dt);
-    if (this.firing && !this.inCar && !this.resultEl) this.squad.shoot(this.player.position, this.yaw);
+    const locked = this.cut.active;
+    if (!this.inCar && !this.resultEl && !this.hubEl && !locked) this.softAimAssist(dt);
+    if (this.firing && !this.inCar && !this.resultEl && !locked) this.squad.shoot(this.player.position, this.yaw);
     this.squad.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
     this.tickMission(dt);
     this.routeT -= dt;
@@ -3033,7 +3123,24 @@ export class StreetPlay {
         this.speedoTxt = txt;
       }
     }
-    // chase camera: trails a touch and widens the view with speed (rigid and fixed with reduced motion)
+    if (locked) {
+      this.cut.update(dt);
+      this.tickOcclusion(dt);
+    } else this.followCamera(dt);
+    this.uiT += dt;
+    if (this.uiT > 0.12) {
+      this.uiT = 0;
+      this.drawMini();
+      this.objective();
+    } else this.objectiveWorld();
+    const here = this.currentPlace();
+    if (here.id !== this.placeId && !this.travel && !this.chasing) {
+      this.placeId = here.id;
+    }
+  }
+
+  /** Gameplay camera: chase cam trails a touch and widens the view with speed (rigid and fixed with reduced motion). */
+  private followCamera(dt: number) {
     const rig = camRig(this.inCar ? this.speed : 0, this.carMax, reducedMotion, this.rig);
     const fovT = 48 + (this.inCar ? rig.fov : 0);
     this.camFov = reducedMotion ? fovT : this.camFov + (fovT - this.camFov) * Math.min(1, dt * 3);
@@ -3047,20 +3154,10 @@ export class StreetPlay {
       this.camera.position.y += this.recoil * 0.05;
       this.camera.rotation.x += this.recoil * 0.012;
     }
-    this.uiT += dt;
-    if (this.uiT > 0.12) {
-      this.uiT = 0;
-      this.drawMini();
-      this.objective();
-    } else this.objectiveWorld();
-    const here = this.currentPlace();
-    if (here.id !== this.placeId && !this.travel && !this.chasing) {
-      this.placeId = here.id;
-    }
   }
 
   private stepActor(dt: number, input: { f: boolean; b: boolean; l: boolean; r: boolean; run: boolean }) {
-    if (this.resultEl || this.hubEl) return;
+    if (this.resultEl || this.hubEl || this.cut.active) return;
     let turn = (input.l ? 1 : 0) - (input.r ? 1 : 0);
     let throttle = (input.f ? 1 : 0) - (input.b ? 1 : 0);
 

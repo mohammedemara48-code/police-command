@@ -1,4 +1,4 @@
-/** Story campaign: 12 scripted missions (see docs/GAME_DESIGN.md). Unlocks, stars, XP/rank saved locally (and synced when signed in). */
+/** Story campaign: 12 scripted missions (see docs/GAME_DESIGN.md; intro/outro cutscenes live in src/story/cutscenes.ts). Unlocks, stars, XP/rank saved locally (and synced when signed in). */
 import { rankForXp, starsFor, xpFor } from '../logic/rewards';
 import {
   START_MONEY,
@@ -44,7 +44,6 @@ export interface LevelDef {
   /** finish under these seconds for 3 / 2 stars */
   stars: [number, number];
   steps: Step[];
-  ending?: Line[];
   // legacy fields still read by older code paths
   speed: number;
   kind?: 'gang';
@@ -80,8 +79,7 @@ export const LEVELS: LevelDef[] = [
         lines: [{ who: 'mona', text: 'المشتبه به قدامك. انزل، وجّه عليه واضغط «استسلم!» وبعدين قرّب وكلبشه.' }]
       },
       { t: 'suspects', x: 0, z: 6, list: [S('surrender', 3, 4)], text: 'اقبض على الحرامي' }
-    ],
-    ending: [{ who: 'mona', text: 'شغل نضيف يا ياسر. ده أول واحد. العقرب لسه قدامنا.' }]
+    ]
   },
   {
     id: 2,
@@ -98,8 +96,7 @@ export const LEVELS: LevelDef[] = [
       { t: 'car' },
       { t: 'goto', x: 0, z: 186, text: 'روح الكورنيش بسرعة' },
       { t: 'suspects', x: 0, z: 192, list: [S('surrender', -3, 2), S('flee', 3, 4)], text: 'اقبض على الحرامية الاتنين' }
-    ],
-    ending: [{ who: 'hamed', text: 'النقيب حامد معاك. الاتنين بيشتغلوا للعقرب. كمّل كده.' }]
+    ]
   },
   {
     id: 3,
@@ -119,8 +116,7 @@ export const LEVELS: LevelDef[] = [
       { t: 'car' },
       { t: 'goto', x: 0, z: 92, text: 'روح الميناء' },
       { t: 'chase', speed: 0.85, limit: 45, then: 'surrender', text: 'الحق العربية السودا' }
-    ],
-    ending: [{ who: 'suspect', text: 'خلاص خلاص! أنا مجرد سواق… الشحنة في الحاويات!' }]
+    ]
   },
   {
     id: 4,
@@ -286,8 +282,7 @@ export const LEVELS: LevelDef[] = [
       { t: 'car' },
       { t: 'goto', x: 0, z: -10, text: 'روح وسط البلد' },
       { t: 'chase', speed: 1.3, limit: 40, then: 'surrender', text: 'الحق سواق الزعيم' }
-    ],
-    ending: [{ who: 'suspect', text: 'الزعيم… في الفيلا في الضاحية. بس الأول هيهاجموا القسم!' }]
+    ]
   },
   {
     id: 11,
@@ -341,10 +336,6 @@ export const LEVELS: LevelDef[] = [
         list: [S('fight', -4, 2), S('fight', 4, 0), S('fight', -2, -3), S('fight', 0, -6, true)],
         text: 'اقبض على الزعيم'
       }
-    ],
-    ending: [
-      { who: 'boss', text: 'خلاص… استسلمت.' },
-      { who: 'hamed', text: 'العقرب انتهى. المدينة ليها حق تنام النهارده. مبروك يا حضرة الرائد ياسر.' }
     ]
   }
 ];
