@@ -2682,6 +2682,9 @@ html.onfoot.can-hub .street-actions button[data-act='hub'] {
 #street-hp .ring.ar .fg {
   stroke: #4aa8ff;
 }
+#street-hp .ring.vip .fg {
+  stroke: #ffc93c;
+}
 #street-hp .ring.low .fg {
   animation: ringpulse 0.8s infinite alternate;
 }

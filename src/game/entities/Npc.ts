@@ -22,6 +22,7 @@ import {
   type FootSense
 } from '../logic/cover';
 import type { OBB } from '../logic/collide';
+import { shootsVip, VIP_HIT, SHOT_R } from '../logic/escort';
 import {
   rollHitZone,
   zoneDamage,
@@ -114,6 +115,12 @@ export class Squad {
     alert: iconTex('❗', '#ff3b3bcc'),
     hostage: iconTex('🆘', '#ffffffcc')
   };
+  /** escort call: the VIP car the gunmen also go for (null otherwise) */
+  ward: THREE.Vector3 | null = null;
+  /** damage per round that hits the ward */
+  wardShot = 7;
+  /** ward damage since the last read (StreetPlay drains it every frame) */
+  wardDmg = 0;
   onGunfire: ((x: number, z: number) => void) | null = null;
   onShot: (() => void) | null = null;
 
@@ -290,6 +297,8 @@ export class Squad {
     this.pickups = [];
     this.hostage = null;
     this.threat = 0;
+    this.ward = null;
+    this.wardDmg = 0;
   }
 
   /** all suspects arrested or neutralised (and the hostage is safe) */
@@ -518,12 +527,15 @@ export class Squad {
           s.g.rotation.y = Math.atan2(dx, dz);
           s.g.userData.forceClip = 'idle';
           break;
-        case 'idle':
-          if ((s.b === 'fight' && d < 26) || (s.b === 'flee' && d < 12)) {
+        case 'idle': {
+          // an ambush wakes up when the officer or the VIP car comes near
+          const near = this.ward ? Math.min(d, Math.hypot(this.ward.x - p.x, this.ward.z - p.z)) : d;
+          if ((s.b === 'fight' && near < 26) || (s.b === 'flee' && d < 12)) {
             s.state = s.b;
             s.icon.visible = true;
           }
           break;
+        }
         case 'flee': {
           if (d < 2.5) {
             this.surrender(s);
@@ -562,7 +574,11 @@ export class Squad {
               p.z = q.z;
             } else if (ai.mode === 'flank') ai.side = -ai.side; // ran into a wall: sidestep the other way
           }
-          if (ai.mode !== 'move') s.g.rotation.y = Math.atan2(dx, dz);
+          const w = this.ward;
+          const wd = w ? Math.hypot(w.x - p.x, w.z - p.z) : Infinity;
+          // face whichever is nearer: the officer or the VIP car he's after
+          if (ai.mode !== 'move')
+            s.g.rotation.y = w && wd < d ? Math.atan2(w.x - p.x, w.z - p.z) : Math.atan2(dx, dz);
           fs.sx = p.x;
           fs.sz = p.z;
           s.hidden = isHidden(ai, this.covers, fs);
@@ -572,7 +588,20 @@ export class Squad {
           s.g.userData.forceClip = s.flinch > 0 ? 'hit' : running ? null : crouch ? 'idle' : 'gun';
           s.cd -= dt;
           const aim = aimFactor(ai.mode);
-          if (aim > 0 && !s.hidden && s.cd <= 0 && d < 24) {
+          if (aim > 0 && !s.hidden && s.cd <= 0 && w && shootsVip(d, wd, Math.random())) {
+            // escort ambush: rounds at the VIP car
+            s.cd = 1.2 + Math.random() * 1.3;
+            const hit = Math.random() < VIP_HIT * aim;
+            tA.set(p.x, 1.35 + p.y, p.z);
+            const miss = hit ? 0 : 2.5;
+            this.tracer(
+              tA,
+              tB.set(w.x + (Math.random() - 0.5) * miss, 0.9, w.z + (Math.random() - 0.5) * miss)
+            );
+            audio.sample('gunshot', 0.35, 1.1);
+            this.onGunfire?.(p.x, p.z);
+            if (hit) this.wardDmg += this.wardShot;
+          } else if (aim > 0 && !s.hidden && s.cd <= 0 && d < SHOT_R) {
             s.cd = 1.2 + Math.random() * 1.3;
             const hit = Math.random() < (inCar ? 0.12 : 0.3) * aim;
             tA.set(p.x, 1.35 + p.y, p.z);
