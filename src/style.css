@@ -3061,3 +3061,192 @@ body[data-play='street'] #street-speedo b {
     max-width: min(40vw, 300px) !important;
   }
 }
+
+/* ===== Story cutscenes: letterbox bars, camera rails, typewriter dialogue ===== */
+html.cutscene #street-ui,
+html.cutscene #street-radio,
+html.cutscene #hud,
+html.cutscene .meta-pause-btn,
+html.cutscene .toast-stack {
+  visibility: hidden !important;
+}
+#cutscene {
+  --cs-bar: clamp(36px, 12vh, 96px);
+  position: fixed;
+  inset: 0;
+  z-index: 7000;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  color: #f2f6ff;
+  font-family: 'Cairo', system-ui, sans-serif;
+}
+#cutscene .cs-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--cs-bar);
+  background: #000;
+  transition: transform 0.38s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+#cutscene .cs-top {
+  top: 0;
+  transform: translateY(-100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: env(safe-area-inset-top) calc(14px + env(safe-area-inset-right)) 0 calc(14px + env(safe-area-inset-left));
+  box-sizing: border-box;
+}
+#cutscene .cs-bottom {
+  bottom: 0;
+  transform: translateY(100%);
+}
+#cutscene.in .cs-top,
+#cutscene.in .cs-bottom {
+  transform: none;
+}
+#cutscene .cs-title {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#cutscene .cs-skip {
+  flex: none;
+  min-width: 88px;
+  min-height: 34px;
+  padding: 4px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+#cutscene .cs-skip:hover,
+#cutscene .cs-skip:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+}
+#cutscene .cs-dlg {
+  --cs-col: #3aa0ff;
+  position: absolute;
+  left: calc(12px + env(safe-area-inset-left));
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(8, 14, 26, 0.82), rgba(4, 8, 16, 0.94));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-inline-start: 3px solid var(--cs-col);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.3s ease 0.15s,
+    transform 0.3s ease 0.15s;
+}
+#cutscene.in .cs-dlg {
+  opacity: 1;
+  transform: none;
+}
+#cutscene .cs-badge {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0a1220;
+  background: radial-gradient(circle at 35% 30%, #fff 0, var(--cs-col) 70%);
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.6),
+    0 0 0 4px var(--cs-col);
+}
+#cutscene .cs-body {
+  flex: 1;
+  min-width: 0;
+}
+#cutscene .cs-name {
+  display: block;
+  font-size: 12px;
+  color: var(--cs-col);
+  line-height: 1.4;
+}
+#cutscene .cs-text {
+  margin: 2px 0 0;
+  font-size: clamp(15px, 2.1vw + 6px, 19px);
+  font-weight: 700;
+  line-height: 1.6;
+  unicode-bidi: plaintext;
+}
+#cutscene .cs-ghost {
+  color: transparent;
+}
+#cutscene .cs-next {
+  flex: none;
+  align-self: flex-end;
+  font-size: 12px;
+  opacity: 0;
+}
+#cutscene .cs-dlg.typed .cs-next {
+  animation: csNext 0.9s ease-in-out infinite;
+}
+#cutscene .cs-dlg.narr {
+  justify-content: center;
+  border-inline-start-width: 1px;
+  background: rgba(0, 0, 0, 0.55);
+}
+#cutscene .cs-dlg.narr .cs-badge,
+#cutscene .cs-dlg.narr .cs-name {
+  display: none;
+}
+#cutscene .cs-dlg.narr .cs-body {
+  flex: 0 1 auto;
+  text-align: center;
+}
+#cutscene .cs-dlg.narr .cs-text {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+@keyframes csNext {
+  50% {
+    opacity: 0.85;
+  }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  #cutscene .cs-dlg {
+    padding: 6px 12px 8px;
+    gap: 10px;
+  }
+  #cutscene .cs-badge {
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+  }
+  #cutscene .cs-text {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #cutscene .cs-bar,
+  #cutscene .cs-dlg {
+    transition: none;
+  }
+}

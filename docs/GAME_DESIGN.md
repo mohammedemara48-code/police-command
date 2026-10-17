@@ -6,6 +6,7 @@ You are **Officer Yasser**, a rookie who has just joined the force in a coastal 
 Tone: a game about arresting people. Non-gory. Suspects drop their weapon and fall over. They surrender when you get control of the scene. Shooting a suspect who has surrendered, or a civilian, is a failure.
 
 ## 2. Core loop
+0. **Intro cutscene** (story missions only, see §2b): sets the scene before the mission clock starts.
 1. **Radio dispatch:** dialogue lines, with who is speaking and portrait colour, set the situation.
 2. **Drive with GPS:** the objective names a destination. The yellow beacon, the edge arrow plus distance and the minimap route all point to it. The step finishes on arrival (within a radius, measured in 2D, on foot or in the car).
 3. **Scripted scenario** (one or more steps):
@@ -14,8 +15,16 @@ Tone: a game about arresting people. Non-gory. Suspects drop their weapon and fa
    - **Car chase:** catch the car before it escapes, then the driver gets out and is arrested. Stay on its bumper to box it in, or nudge its rear quarter while running alongside (PIT) to spin it out and finish sooner.
    - **Shootout:** armed gang members take **cover** behind crates and cars, peek out and shoot. Hits on someone hiding are blocked by the cover.
    - **Hostage:** the captors are hostile and the hostage must not be hit.
-4. **Resolve:** a summary with stars based on time, plus money, reputation and XP.
+4. **Outro + resolve:** after a win a short outro cutscene plays, then a summary with stars based on time, plus money, reputation and XP.
 5. **Rank and unlocks:** XP raises your rank. Rank upgrades the pistol (magazine, damage) and the car (top speed). The next mission unlocks.
+
+## 2b. Story cutscenes
+Every campaign mission has an **intro** (before the clock starts, after «ابدأ المهمة») and a short **outro** (after a win, before the result card). Patrol calls have none.
+- **Look:** black letterbox bars slide in, the HUD, pause button and toasts are hidden, and the camera runs on rails over the live city (traffic and pedestrians keep moving). Shots are framed around the mission spot (`scene`), the officer or the car he's driving (`hero`), or the patrol car (`car`), in a local frame so a script works wherever the mission is. Shots cut or glide (`blend`) from the previous camera; low shots that would end up inside a block are lifted over the roofs.
+- **Dialogue:** speaker name and a round badge in the speaker's colour (same colours as the radio), a typewriter line in Egyptian Arabic (RTL; English text is kept next to each line for when the page is switched to English), and a narrator caption style for place/time cards.
+- **Controls:** tap / click / Space / Enter finishes the line, again goes to the next one; lines also move on by themselves. «تخطي» (top bar, safe-area aware) skips the whole scene. Game input is blocked while it runs; held keys, stick and fire are cleared so nothing carries over.
+- **Flow:** an intro plays once per session per mission (retries go straight in). Progress is saved before the outro, so skipping or closing the tab never loses a result. Leaving street mode or changing level stops a running cutscene.
+- **Data:** scripts live in `src/story/cutscenes.ts` (shot presets + lines per mission), speakers in `src/story/speakers.ts`; the rail maths and dialogue timing are pure functions in `src/game/logic/cutscene.ts` (unit-tested, `tests/cutscene.test.ts`), the overlay is `src/game/ui/Cutscene.ts`.
 
 ## 3. Suspect AI (state machine)
 `idle → (alerted by player within 18 m) → behaviour`
@@ -77,7 +86,7 @@ The officer's health reaches 0. A suspect escapes (out of range or time limit). 
 9. **الواشي (The Informant):** an informant gives you the location of a suburb drug house: 3 armed plus 1 who surrenders.
 10. **طريق الهروب (Escape Road):** the gang's driver, the fastest chase in the game.
 11. **هجوم على القسم (Precinct Attack):** 5 armed attackers downtown.
-12. **الزعيم (The Boss):** the suburb villa. 3 guards, then Al-Zaeem himself (8 HP), who surrenders at low health. You arrest him, and the ending dialogue plays.
+12. **الزعيم (The Boss):** the suburb villa. 3 guards, then Al-Zaeem himself (8 HP), who surrenders at low health. You arrest him, and the ending cutscene plays.
 
 ## 7b. Patrol calls
 Free patrol (and the precinct mission board) hands out random calls placed on a real avenue 60–200 m away. Pay = base + 400 × rank level + a per-suspect amount, times a risk multiplier (`src/game/logic/calls.ts`).
