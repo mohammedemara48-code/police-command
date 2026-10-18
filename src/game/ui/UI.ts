@@ -10,7 +10,9 @@ import { IncidentManager } from '../missions/IncidentManager';
 import { CityScene } from '../core/CityScene';
 import { CCTVFeed } from './CCTVFeed';
 import { audio } from '../systems/AudioManager';
-import { LEVELS, levelById, progress, setMissionXpHook } from '../missions/Levels';
+import { LEVELS, levelById, progress, setMissionXpHook, setVehicle } from '../missions/Levels';
+import { VEHICLES, VEHICLE_IDS, sanitizeVehicle } from '../logic/vehicles';
+import { VEHICLE_ICON } from '../logic/vehicleIcons';
 setMissionXpHook(recordWeekly);
 import { settingsHtml, bindSettings } from './Meta';
 import {
@@ -101,16 +103,17 @@ export class UI {
   private launched = false;
   private menuScreen = '';
   private accountHooked = false;
-  private menu(screen: 'main' | 'levels' | 'settings' | 'credits' | 'ach' | 'account' | 'board') {
+  private menu(screen: 'main' | 'levels' | 'vehicle' | 'settings' | 'credits' | 'ach' | 'account' | 'board') {
     const cur = levelById(progress.current);
     const body =
       screen === 'main'
-        ? `<h1>POLICE COMMAND</h1>
-          <p class="sub">قيادة الشرطة — دوريات ومطاردات في مدينة ثلاثية الأبعاد</p>
+        ? `<h1>عفاريت أسفلت القاهرة</h1>
+          <p class="sub"><span dir="ltr">Cairo Asphalt Demons</span> — دوريات ومطاردات في مدينة ثلاثية الأبعاد</p>
           <div class="menu-col">
             <button class="btn menu-big" data-m="play">▶ العب — المستوى ${cur.id}: ${cur.title}</button>
             <button class="btn ghost" data-m="levels">المستويات</button>
             <button class="btn ghost" data-m="character">👮 شخصيتي</button>
+            <button class="btn ghost" data-m="vehicle">${VEHICLE_ICON[sanitizeVehicle(progress.vehicle)]} عربيتي: ${VEHICLES[sanitizeVehicle(progress.vehicle)].name}</button>
             <button class="btn ghost" data-m="patrol">🚨 دورية حرة (بلاغات عشوائية)</button>
             <button class="btn ghost" data-m="board">📊 ترتيب الأسبوع</button>
             <button class="btn ghost" data-m="ach">🏆 الإنجازات</button>
@@ -129,15 +132,23 @@ export class UI {
                 <b>${l.id}</b><span>${l.title}</span><i>${locked ? '🔒' : '★'.repeat(st) + '☆'.repeat(3 - st)}</i></button>`;
             }).join('')}</div>
             <button class="btn ghost" data-m="main">رجوع</button>`
-          : screen === 'account'
-            ? accountHtml()
-            : screen === 'board'
-              ? '<h2>🏆 ترتيب الأسبوع</h2><p class="hint">جاري التحميل…</p><button class="btn ghost" data-m="main">رجوع</button>'
-              : screen === 'ach'
-                ? `${achHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
-                : screen === 'settings'
-                  ? `<h2>الإعدادات</h2>${settingsHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
-                  : `<h2>الحقوق</h2>
+          : screen === 'vehicle'
+            ? `<h2>🚗 اختار عربيتك</h2>
+            <div class="menu-col">${VEHICLE_IDS.map((id) => {
+              const v = VEHICLES[id];
+              const on = id === sanitizeVehicle(progress.vehicle);
+              return `<button class="btn ${on ? '' : 'ghost'}" data-veh="${id}">${VEHICLE_ICON[id]} ${v.name}${on ? ' ✓' : ''}<br><small>${v.blurb}</small></button>`;
+            }).join('')}</div>
+            <button class="btn ghost" data-m="main">رجوع</button>`
+            : screen === 'account'
+              ? accountHtml()
+              : screen === 'board'
+                ? '<h2>🏆 ترتيب الأسبوع</h2><p class="hint">جاري التحميل…</p><button class="btn ghost" data-m="main">رجوع</button>'
+                : screen === 'ach'
+                  ? `${achHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
+                  : screen === 'settings'
+                    ? `<h2>الإعدادات</h2>${settingsHtml()}<button class="btn ghost" data-m="main">رجوع</button>`
+                    : `<h2>الحقوق</h2>
               <p class="credits">الضابط والمشاة وعربية الشرطة: Quaternius (CC0)<br>
               عربية Dodge Challenger: Grzybek عبر Poly Pizza (CC-BY 3.0)<br>
               مباني ومؤثرات صوتية: Kenney.nl (CC0)<br>
@@ -176,6 +187,16 @@ export class UI {
         else this.menu(m as 'main');
       })
     );
+    this.overlay.querySelectorAll<HTMLButtonElement>('[data-veh]').forEach((b) =>
+      b.addEventListener('click', () => {
+        audio.resume();
+        audio.click();
+        const id = sanitizeVehicle(b.dataset.veh);
+        setVehicle(id);
+        this.city.street?.applyVehicle(id);
+        this.menu('vehicle');
+      })
+    );
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-l]').forEach((b) =>
       b.addEventListener('click', () => {
         audio.resume();
@@ -194,7 +215,7 @@ export class UI {
 
   private async launch(kind: 'street' | 'command', level = 1) {
     if (kind === 'street' && !this.city.street) {
-      this.overlay.innerHTML = `<div class="loading-screen" role="progressbar" aria-label="تحميل"><div class="ls-title">🚓 جاري تجهيز الدورية…</div><div class="ls-bar"><i></i></div><div class="ls-tip">نصيحة: «استسلم!» الأول، ومتضربش حد رافع إيده.</div></div>`;
+      this.overlay.innerHTML = `<div class="loading-screen" role="progressbar" aria-label="تحميل"><div class="ls-title">🚓 عفاريت أسفلت القاهرة — جاري تجهيز الشارع…</div><div class="ls-bar"><i></i></div><div class="ls-tip">نصيحة: «استسلم!» الأول، ومتضربش حد رافع إيده.</div></div>`;
       const bar = this.overlay.querySelector('.ls-bar i') as HTMLElement | null;
       const t0 = performance.now();
       const poll = setInterval(() => {
@@ -345,7 +366,7 @@ export class UI {
     const clockHtml = `<div class="res clock phase-${phase}" title="توقيت المدينة"><span class="ico">${phaseIcon}</span><span class="clock-text">${clock}<small>${phaseLabel}</small></span></div>`;
     if (this.isMobile()) {
       top.innerHTML = `
-        <div class="brand">POLICE COMMAND</div>
+        <div class="brand">عفاريت أسفلت القاهرة</div>
         ${clockHtml}
         <div class="res money"><span class="ico">💵</span>$${s.budget.toLocaleString()}</div>
         <div class="res stars"><span class="ico">⭐</span>${s.reputation}</div>
@@ -353,7 +374,7 @@ export class UI {
       `;
     } else {
       top.innerHTML = `
-        <div class="brand">POLICE COMMAND</div>
+        <div class="brand">عفاريت أسفلت القاهرة</div>
         ${clockHtml}
         <div class="res money"><span class="ico">💵</span>$${s.budget.toLocaleString()}</div>
         <div class="res stars"><span class="ico">⭐</span>${s.reputation}</div>

@@ -109,9 +109,8 @@ import {
 } from '../logic/camera';
 import { rearSticker } from '../world/Stickers';
 import { roofRack, taxiSign, rollWheels, makeWheel } from '../world/Egypt';
+import { VEHICLE_ICON } from '../logic/vehicleIcons';
 import { VEHICLES, VEHICLE_IDS, handlingOf, sanitizeVehicle, type VehicleId } from '../logic/vehicles';
-
-const VEHICLE_ICON: Record<VehicleId, string> = { police: '🚓', private: '🚗', microbus: '🚐', tuktuk: '🛺' };
 
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';

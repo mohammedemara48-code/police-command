@@ -1,4 +1,4 @@
-# POLICE COMMAND — Game Design (v2 "Gang City" campaign)
+# عفاريت أسفلت القاهرة (Cairo Asphalt Demons) — Game Design (v2 "Gang City" campaign)
 
 ## 1. Premise
 You are **Officer Yasser**, a rookie who has just joined the force in Cairo. A gang called **Al-Aqrab (the Scorpion)** has bought off half the precinct and controls Shubra, the downtown shops and the Haram drug houses. Sergeant **Mona** (radio dispatch) and Captain **Hamed** guide you through 12 story missions. Each mission strips away one piece of the gang until the final mission: arresting the boss, **Al-Zaeem**, at his villa in Haram.

@@ -7,8 +7,8 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'],
       manifest: {
-        name: 'قيادة الشرطة — POLICE COMMAND',
-        short_name: 'Police Command',
+        name: 'عفاريت أسفلت القاهرة — Cairo Asphalt Demons',
+        short_name: 'عفاريت أسفلت',
         description:
           'لعبة شرطة ثلاثية الأبعاد بالعربي: حملة 12 مهمة، دورية حرة، مطاردات واعتقالات. تشتغل على الموبايل ومن غير نت بعد أول مرة.',
         categories: ['games'],

@@ -1,4 +1,4 @@
-# Police Command (قيادة الشرطة)
+# عفاريت أسفلت القاهرة (Cairo Asphalt Demons)
 
 [![CI](https://github.com/mohammedemara48-code/police-command/actions/workflows/ci.yml/badge.svg)](https://github.com/mohammedemara48-code/police-command/actions/workflows/ci.yml)
 
@@ -13,7 +13,7 @@
   <img src="docs/media/traffic-stop.svg" width="150" alt="traffic stop">
 </p>
 
-Police Command is a 3D police game that runs in the browser. You play a patrol officer in Cairo, with an Arabic (RTL) interface built mobile-first. It's made with Three.js, TypeScript and Vite, and you can install it as a PWA.
+عفاريت أسفلت القاهرة (Cairo Asphalt Demons) is a 3D police game that runs in the browser. You play a patrol officer in Cairo, with an Arabic (RTL) interface built mobile-first. It's made with Three.js, TypeScript and Vite, and you can install it as a PWA.
 
 **Play:** https://police-command.vercel.app/
 
