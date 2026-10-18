@@ -4,7 +4,17 @@
  */
 import * as THREE from 'three';
 import { models, MEN, WOMEN } from './Models';
-import { CROWD_DRAW_CAP, CROWD_RADIUS, DISTRICT_DENSITY, FACE_LOD_DIST, avenueSegments, planCrowd, type CrowdQuality, type CrowdSpec, type ShopSpot } from '../logic/crowd';
+import {
+  CROWD_DRAW_CAP,
+  CROWD_RADIUS,
+  DISTRICT_DENSITY,
+  FACE_LOD_DIST,
+  avenueSegments,
+  planCrowd,
+  type CrowdQuality,
+  type CrowdSpec,
+  type ShopSpot
+} from '../logic/crowd';
 import type { VoiceId } from '../config/barks';
 import type { Speaker } from '../ui/Barks';
 
@@ -70,7 +80,10 @@ export class Crowd {
       top.position.y = 0.74;
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.72, 6), metal);
       leg.position.y = 0.37;
-      const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.09, 8), this.mat(0xd9c28a, { roughness: 0.2 }));
+      const glass = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.035, 0.03, 0.09, 8),
+        this.mat(0xd9c28a, { roughness: 0.2 })
+      );
       glass.position.set(0.1, 0.8, 0.06);
       const glass2 = glass.clone();
       glass2.position.set(-0.12, 0.8, -0.08);
@@ -137,7 +150,8 @@ export class Crowd {
   }
 
   private facing(p: Person): number {
-    if (p.state === 'walk' || p.state === 'cross') return p.spec.axis === 'z' ? (p.dir > 0 ? 0 : Math.PI) : p.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    if (p.state === 'walk' || p.state === 'cross')
+      return p.spec.axis === 'z' ? (p.dir > 0 ? 0 : Math.PI) : p.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
     return p.spec.yaw;
   }
 
@@ -145,13 +159,7 @@ export class Crowd {
    * Advance everyone near the officer; far people stay frozen and hidden.
    * `panic` is a gunshot place: walkers within 30 m run away from it.
    */
-  update(
-    dt: number,
-    me: THREE.Vector3,
-    cam: THREE.Camera,
-    green: boolean,
-    panic: { x: number; z: number; t: number }
-  ) {
+  update(dt: number, me: THREE.Vector3, cam: THREE.Camera, green: boolean, panic: { x: number; z: number; t: number }) {
     cam.getWorldDirection(this.fwd);
     const fl = Math.hypot(this.fwd.x, this.fwd.z) || 1;
     const fx = this.fwd.x / fl,
@@ -159,6 +167,11 @@ export class Crowd {
     const R2 = this.radius * this.radius;
     const cand = this.cand;
     cand.length = 0;
+    // after a teleport or a fast drive most walkers are out of range at once: spread them over the street instead of one band
+    let lost = 0;
+    for (const p of this.people)
+      if (p.spec.kind === 'walk' && (p.g.position.x - me.x) ** 2 + (p.g.position.z - me.z) ** 2 > R2 * 1.3) lost++;
+    const spread = lost >= 5;
     for (const p of this.people) {
       const g = p.g;
       const pos = g.position;
@@ -167,7 +180,7 @@ export class Crowd {
       const d2 = dx * dx + dz * dz;
       p.d2 = d2;
       // avenue walkers that fell far behind are moved ahead of the officer, so the pavements around them stay busy
-      if (p.spec.kind === 'walk' && d2 > R2 * 1.3) this.recycle(p, me, fz);
+      if (p.spec.kind === 'walk' && d2 > R2 * 1.3) this.recycle(p, me, fz, spread);
       // skinned meshes are never frustum-culled by three, so people behind the camera are hidden here
       const behind = (pos.x - cam.position.x) * fx + (pos.z - cam.position.z) * fz < -3 && d2 > 25;
       if (d2 < R2 && !behind) cand.push(p);
@@ -204,10 +217,10 @@ export class Crowd {
   }
 
   /** Put a walker on a pavement 30-38 m ahead (or sometimes behind), more often in the busy districts. */
-  private recycle(p: Person, me: THREE.Vector3, fz: number) {
+  private recycle(p: Person, me: THREE.Vector3, fz: number, spread: boolean) {
     const ahead = Math.abs(fz) > 0.2 ? Math.sign(fz) : Math.random() < 0.5 ? 1 : -1;
     const dir = Math.random() < 0.75 ? ahead : -ahead;
-    const z = me.z + dir * this.radius * (0.7 + Math.random() * 0.22);
+    const z = me.z + dir * this.radius * (spread ? 0.16 + Math.random() * 0.76 : 0.7 + Math.random() * 0.22);
     const seg = this.segs.find((g) => z > g.a + 1 && z < g.b - 1);
     if (!seg || Math.random() > DISTRICT_DENSITY[seg.d] / 1.5) return;
     const side = Math.random() < 0.5 ? -1 : 1;
