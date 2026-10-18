@@ -1234,52 +1234,172 @@ body[data-play='street'] .hint {
   font-weight: 700;
   margin: 4px 0 8px;
 }
-.map-board {
+.map-card {
+  width: min(880px, 96vw) !important;
+}
+.map-body {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+.map-view {
   position: relative;
-  height: 280px;
-  margin: 8px 0;
-  background: #101820;
+  flex: 1.5;
+  min-width: 0;
+  height: min(62vh, 420px);
+  background: #1b2430;
   border-radius: 12px;
   overflow: hidden;
+  border: 1px solid rgba(126, 200, 255, 0.25);
 }
-.map-board .avenue {
-  position: absolute;
-  left: 50%;
-  top: 8%;
-  bottom: 8%;
-  width: 18px;
-  transform: translateX(-50%);
-  background: #2a3848;
-  border-radius: 8px;
+.map-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
 }
-.map-board .pin {
+.map-zoom {
   position: absolute;
-  right: 8%;
-  left: 58%;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.map-zoom button {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(126, 200, 255, 0.4);
+  background: rgba(8, 14, 24, 0.85);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+.map-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.map-side .map-help {
+  margin: 0;
+}
+.map-chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.map-chips .chip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: transparent;
-  border: 0;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(30, 44, 62, 0.8);
+  border: 1px solid rgba(126, 200, 255, 0.25);
+  border-radius: 10px;
   color: #e8f1ff;
   font-family: inherit;
   font-weight: 800;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
 }
-.map-board .pin .dot {
-  width: 12px;
-  height: 12px;
+.map-chips .chip .dot {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: #3aa0ff;
-  box-shadow: 0 0 0 3px rgba(58, 160, 255, 0.25);
+  background: #2f8fe8;
+  flex: none;
 }
-.map-board .pin.mission .dot {
+.map-chips .chip.mission .dot {
   background: #ff4d6d;
-  box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.3);
 }
-.map-board .pin.picked .lab {
+.map-chips .chip em {
+  margin-inline-start: auto;
+  font-style: normal;
+  font-size: 10px;
+  color: #ffb3c0;
+}
+.map-chips .chip.here:not(.mission) em {
+  color: #9fd0ff;
+}
+.map-chips .chip.picked {
+  border-color: #ffd56a;
   color: #ffd56a;
+}
+.map-key {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #9fb3c8;
+}
+.map-key i {
+  display: inline-block;
+  vertical-align: middle;
+  margin-inline-end: 6px;
+}
+.map-key .k-play {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  background: #ffd23d;
+}
+.map-key .k-me,
+.map-key .k-call {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+}
+.map-key .k-call {
+  background: #ff4d6d;
+}
+.map-key .k-bridge {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  background: #cfd9e6;
+}
+.map-side .map-actions {
+  margin-top: auto;
+}
+@media (orientation: portrait), (max-width: 640px) {
+  .map-body {
+    flex-direction: column;
+  }
+  .map-side {
+    display: contents;
+  }
+  .map-side > header {
+    order: 0;
+  }
+  .map-view {
+    order: 1;
+    flex: none;
+    height: 46vh;
+  }
+  .map-side > :not(header) {
+    order: 2;
+  }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .map-card {
+    padding: 8px 10px;
+  }
+  .map-body {
+    margin-top: 0;
+  }
+  .map-view {
+    height: calc(100vh - 38px);
+  }
+  .map-key {
+    display: none;
+  }
 }
 .map-actions {
   display: flex;

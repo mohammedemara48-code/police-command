@@ -55,3 +55,12 @@ Interpretation: the river is narrowed (about 120 m) and the island shortened so 
 ## Trees
 
 Date palm, ficus / acacia type and jacaranda street trees are common in Cairo streets and gardens (https://www.csbe.org/illustrated-list-of-trees, http://aun.aun.edu.eg/Environmental-Researches/aubfer/res5_mar_2015.pdf, https://doi.org/10.21608/zjar.2024.403407). The game uses a broadleaf tree with leaf cards from a real leaf scan and the CC0 date palm model listed in `CREDITS.md`.
+
+## The Cairo map (`src/game/logic/cairoMap.ts`)
+
+Hand-authored and approximate, drawn from common knowledge of where these places are (approximate coordinates checked against public place descriptions such as Wikipedia articles for Cairo Tower, Cairo Opera House, Mesaha Square, Giza Zoo, Ramses Square, Shubra, 6th October Bridge, Faisal Street, Haram Street and the Ring Road). The banks of the Nile, Gezira and Roda, the streets and the squares are simplified polylines, not traced from any map. The map keeps: the Nile, Gezira, Qasr El Nil and Tahrir bridges, 6th of October Bridge, Tahrir, Talaat Harb, Ramses and Mesaha squares, Dokki, Mohandessin, Zamalek, Imbaba, Giza, Faisal, Haram Street, Shubra Street, the western Ring Road, the pyramids and the Cairo Tower.
+Interpretation: positions are good to a few hundred metres at best; street curves are smoothed; many streets are left out; the game's single bridge stands for Tahrir and Qasr El Nil; each playable district is a compressed piece of its real street; the lateral position on the avenue is exaggerated slightly so the dot sits on the line.
+
+## Outskirts and the Haram edge
+
+Photos and descriptions of the Haram Street / Faisal edge (mid-rise informal brick and concrete blocks, palms, walled plots, dust haze) guided the generic blocks, walls and groves in `src/game/world/Outskirts.ts`. Interpretation: the buildings are generic boxes with the existing facade textures, and the walled boulevard at the end of the playable street is visual only.

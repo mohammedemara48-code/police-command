@@ -109,6 +109,7 @@ import {
   type VoiceId
 } from '../config/barks';
 import type { Speaker } from '../ui/Barks';
+import { CairoMap } from '../ui/CairoMap';
 import { Crowd } from './Crowd';
 import { quality } from '../config/Quality';
 import type { ShopSpot } from '../logic/crowd';
@@ -403,6 +404,7 @@ export class StreetPlay {
   private keys = new Set<string>();
   private ui: HTMLElement | null = null;
   private mapEl: HTMLElement | null = null;
+  private mapCleanup: (() => void) | null = null;
   private resultEl: HTMLElement | null = null;
   private mini: HTMLCanvasElement | null = null;
   private statusEl: HTMLElement | null = null;
@@ -3347,43 +3349,83 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const here = this.currentPlace();
     const el = document.createElement('div');
     el.id = 'street-map';
-    const pins = STREET_PLACES.map((p) => {
-      const top = 78 - ((p.z + 80) / 280) * 70;
-      const mission = p.id === this.missionId;
-      return `<button type="button" class="pin ${mission ? 'mission' : ''} ${p.id === here.id ? 'here' : ''}" style="top:${top}%" data-id="${p.id}">
-        <span class="dot"></span>
-        <span class="lab">${p.name}${mission ? ' · مطاردة' : ''}</span>
-      </button>`;
-    }).join('');
+    const chips = STREET_PLACES.slice()
+      .sort((p, q) => p.z - q.z)
+      .map((p) => {
+        const mission = p.id === this.missionId;
+        return `<button type="button" class="chip ${mission ? 'mission' : ''} ${p.id === here.id ? 'here' : ''}" data-id="${p.id}">
+          <span class="dot"></span><span class="lab">${p.name}</span>${mission ? '<em>بلاغ</em>' : p.id === here.id ? '<em>أنت هنا</em>' : ''}
+        </button>`;
+      })
+      .join('');
     el.innerHTML = `
       <div class="map-card">
-        <header>
-          <h2>خريطة المهام</h2>
-          <button type="button" data-close>إغلاق</button>
-        </header>
-        <p class="map-help">اختَر دبوس حي، وبعدين انتقل أو سوق إليه. المطاردة بتبدأ لما توصل وأنت في الدورية.</p>
-        <div class="map-board">
-          <div class="avenue"></div>
-          ${pins}
-        </div>
-        <div class="map-actions">
-          <button type="button" data-go="fast">انتقال سريع</button>
-          <button type="button" data-go="drive">سوق إلى المكان</button>
+        <div class="map-body">
+          <div class="map-view">
+            <canvas class="map-canvas"></canvas>
+            <div class="map-zoom">
+              <button type="button" data-z="in" aria-label="تكبير">+</button>
+              <button type="button" data-z="out" aria-label="تصغير">−</button>
+              <button type="button" data-z="all" aria-label="كل الخريطة">⤢</button>
+            </div>
+          </div>
+          <div class="map-side">
+            <header>
+              <h2>خريطة القاهرة</h2>
+              <button type="button" data-close>إغلاق</button>
+            </header>
+            <p class="map-help">اختَر حي من الخريطة أو من القايمة، وبعدين انتقل أو سوق إليه. المطاردة بتبدأ لما توصل وأنت في الدورية.</p>
+            <div class="map-chips">${chips}</div>
+            <ul class="map-key">
+              <li><i class="k-play"></i>الخط الأصفر: شارع اللعب، وكل حي ماسك جزء من شارعه الحقيقي</li>
+              <li><i class="k-me"></i>سهم أبيض: مكانك &nbsp; <i class="k-call"></i>أحمر: البلاغ</li>
+              <li><i class="k-bridge"></i>الكوبري في اللعبة بيمثّل كوبري التحرير وقصر النيل</li>
+            </ul>
+            <div class="map-actions">
+              <button type="button" data-go="fast">انتقال سريع</button>
+              <button type="button" data-go="drive">سوق إلى المكان</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
     document.getElementById('app')!.appendChild(el);
     this.mapEl = el;
     let picked = this.missionId;
-    el.querySelectorAll('.pin').forEach((pin) => {
-      pin.addEventListener('click', () => {
-        picked = (pin as HTMLElement).dataset.id || picked;
-        el.querySelectorAll('.pin').forEach((p) => p.classList.remove('picked'));
-        pin.classList.add('picked');
+    const canvas = el.querySelector('.map-canvas') as HTMLCanvasElement;
+    const map = new CairoMap(canvas);
+    const me = this.inCar ? this.car : this.player;
+    const sync = (id: string) => {
+      picked = id;
+      el.querySelectorAll('.chip').forEach((c) => c.classList.toggle('picked', (c as HTMLElement).dataset.id === id));
+      map.state.picked = id;
+    };
+    map.state = {
+      player: { x: me.position.x, z: me.position.z, yaw: this.inCar ? this.car.rotation.y : this.yaw },
+      missionId: this.missionId,
+      objective: this.msHasTarget ? { x: this.msTarget.x, z: this.msTarget.z } : null,
+      picked: this.missionId,
+      here: here.id
+    };
+    sync(this.missionId);
+    map.onPick = (id) => {
+      sync(id);
+      map.focus(id, 5);
+    };
+    el.querySelectorAll('.chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const id = (chip as HTMLElement).dataset.id || picked;
+        sync(id);
+        map.focus(id, 5);
       });
     });
-    const missionPin = el.querySelector(`.pin[data-id="${this.missionId}"]`);
-    missionPin?.classList.add('picked');
+    el.querySelector('[data-z="in"]')!.addEventListener('click', () => map.zoomBy(1.6));
+    el.querySelector('[data-z="out"]')!.addEventListener('click', () => map.zoomBy(1 / 1.6));
+    el.querySelector('[data-z="all"]')!.addEventListener('click', () => map.showAll());
+    const onSize = () => map.resize();
+    window.addEventListener('resize', onSize);
+    this.mapCleanup = () => window.removeEventListener('resize', onSize);
+    requestAnimationFrame(() => map.resize());
     el.querySelector('[data-close]')!.addEventListener('click', () => this.closeMap());
     el.querySelector('[data-go="fast"]')!.addEventListener('click', () => this.travelTo(picked, true));
     el.querySelector('[data-go="drive"]')!.addEventListener('click', () => {
@@ -3397,6 +3439,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   private closeMap() {
+    this.mapCleanup?.();
+    this.mapCleanup = null;
     this.mapEl?.remove();
     this.mapEl = null;
   }

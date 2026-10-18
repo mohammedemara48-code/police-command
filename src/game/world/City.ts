@@ -162,8 +162,10 @@ export function drawCityMap(
   h: number,
   dots: { x: number; z: number; c: string; r: number }[]
 ) {
+  // the map runs past the last block so the Nile and the start of the bridge show at the top
+  const zTop = 300;
   const sx = (x: number) => 8 + ((x - CITY.x0) / (CITY.x1 - CITY.x0)) * (w - 16);
-  const sz = (z: number) => h - 8 - ((z - CITY.z0) / (CITY.z1 - CITY.z0)) * (h - 16);
+  const sz = (z: number) => h - 8 - ((z - CITY.z0) / (zTop - CITY.z0)) * (h - 16);
   ctx.fillStyle = 'rgba(6,12,20,0.85)';
   ctx.fillRect(0, 0, w, h);
   const bands: [District, number, number, string][] = [
@@ -172,10 +174,20 @@ export function drawCityMap(
     ['port', 50, 145, DISTRICT_STYLES.port.band],
     ['corniche', 145, CITY.z1, DISTRICT_STYLES.corniche.band]
   ];
+  const nile = ctx.createLinearGradient(0, sz(zTop), 0, sz(CITY.z1 + 8));
+  nile.addColorStop(0, '#2b78c2');
+  nile.addColorStop(1, '#2a6aa8');
+  ctx.fillStyle = nile;
+  ctx.fillRect(0, 0, w, sz(CITY.z1 + 8));
+  ctx.fillStyle = '#5aa6e8';
+  ctx.fillRect(0, sz(CITY.z1 + 8) - 1, w, 1.5);
   for (const [, a, b, c] of bands) {
     ctx.fillStyle = c;
     ctx.fillRect(8, sz(b), w - 16, sz(a) - sz(b));
   }
+  // bridge deck over the river on the main avenue
+  ctx.fillStyle = '#cfd9e6';
+  ctx.fillRect(sx(-2.5), 0, Math.max(3, sx(2.5) - sx(-2.5)), sz(CITY.z1) + 1);
   ctx.fillStyle = '#5c6878';
   for (const r of ROADS)
     ctx.fillRect(sx(r.x0), sz(r.z1), Math.max(2, sx(r.x1) - sx(r.x0)), Math.max(2, sz(r.z0) - sz(r.z1)));
@@ -183,6 +195,8 @@ export function drawCityMap(
   ctx.fillStyle = '#9fb3c8';
   ctx.textAlign = 'right';
   for (const [d, a, b] of bands) ctx.fillText(DISTRICT_NAMES[d], w - 10, (sz(a) + sz(b)) / 2 + 3);
+  ctx.fillStyle = '#d9ecff';
+  ctx.fillText('النيل', w - 10, sz(CITY.z1 + 8) / 2 + 3);
   for (const p of dots) {
     ctx.fillStyle = p.c;
     ctx.beginPath();

@@ -65,3 +65,7 @@ All CC0. Textures were cropped, made seamless where needed, resized (1k, plus a 
 - Embankment and pedestal stone (`stone_*`): Poly Haven "Granite Wall" (https://polyhaven.com/a/granite_wall), CC0. Island park ground (`park_*`): Poly Haven "Grass Path 2" (https://polyhaven.com/a/grass_path_2), CC0. Girder steel (`steel_*`): Poly Haven "Metal Plate" (https://polyhaven.com/a/metal_plate), CC0. Bridge and flyover concrete reuse `concrete_*` and the road / pavement sets above. Resized to 1k (512 px for low quality) WebP.
 - River normal map (`river_normal.webp`): generated for this project from filtered noise (`CC0`, no third-party source).
 - Qasr El Nil Bridge, the lions, the felucca boats, the 6th of October flyover, Gezira island and Cairo Tower are modelled in code (`src/game/world/Nile.ts`, `CairoTower.ts`) from the dimensions and photographs listed in `docs/DISTRICT_REFERENCE.md`. No model or photograph from those sources ships with the game.
+
+## Cairo map
+- The in-game map of Cairo (`src/game/logic/cairoMap.ts`) is hand-drawn for this project from approximate coordinates of well-known places. It uses no OpenStreetMap data, no map tiles and no traced third-party map, so no ODbL attribution applies. If OpenStreetMap-derived data is ever added, it needs "© OpenStreetMap contributors" (ODbL) here and on the map.
+- Speech-bubble lines (`src/game/config/barks.ts`) are original writing for this game.

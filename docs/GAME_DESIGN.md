@@ -110,6 +110,24 @@ Free patrol (and the precinct mission board) hands out random calls placed on a 
 
 Names show up on the HUD, the mission map, patrol calls, the blue gantry signs and the green street-name boards at every cross street.
 
+## 8b. Street life, talk and the map
+
+**Who talks.** Humour never comes from the radio, the dispatcher or the officer. The radio strip (`#street-bark`) only carries short professional traffic (low health, backup called, out of ammo, suspect escapes, mission complete or failed, rank up). Jokes are speech bubbles above ordinary people near the officer: pedestrians, vendors, ahwa customers, shopkeepers, microbus, taxi and car drivers, kids and old men. If nobody fitting is on screen, nobody speaks. Lines live in `src/game/config/barks.ts` (6-10 Egyptian Arabic variants per situation, with `who` roles and optional cooldowns); `logic/barks.ts` picks them with a per-situation cooldown (20 s by default), a 3 s global gap and no immediate repeat. Two-person chatter ("a||b") plays between neighbours, ahwa pals, shopkeepers, kids, elders and students. Situations: uniform, siren, chase, gunfire, crash, badly parked car, cuffing, district, Nile, bridge, Cairo Tower, shops, traffic, time of day and rank.
+
+**Crowd.** `logic/crowd.ts` plans, `core/Crowd.ts` runs. The patrol avenue streams walkers ahead of the officer; shop owners stand at their doors, ahwa tables and vendor carts are placed along the pavements. Density by district (Shubra and Downtown highest) and by quality preset. Far faces are hidden beyond 16 m and each preset has a draw cap on people.
+
+| Preset | People planned | Drawn at most |
+|---|---|---|
+| Low | 52 | 16 |
+| Medium | 88 | 34 |
+| High | 111 | 56 |
+
+**Outskirts.** `logic/outskirts.ts` plans and `world/Outskirts.ts` builds the city beyond the grid: blocks, informal brick housing, palms, walls, lots and a hazy skyline. In Haram the street ends at a walled boulevard on a plateau edge, with the pyramids behind a built-up edge, greenery and dust haze; only the base of the pyramids is sand and rock.
+
+**Camera.** The follow camera shortens its boom against the road edge and buildings (`logic/camera.ts`: pads, minimum boom, wall lift, clamp), and the car is nudged off facades and props so it cannot wedge in them.
+
+**Map.** `logic/cairoMap.ts` holds hand-drawn, approximate geometry (longitude/latitude of well-known places, simplified) and the projection; `ui/CairoMap.ts` draws it on a canvas. The four districts sit where they really are. The playable avenue is one straight street, so each district uses a short stretch of its real street: Haram on Haram Street, Downtown between Talaat Harb and Tahrir squares, Shubra on Shubra Street, Dokki from Mesaha Square, then one bridge that stands for Tahrir and Qasr El Nil, then Gezira and the Cairo Tower. The minimap (local grid) now shows the Nile and bridge deck at its top edge.
+
 ## 9. Tech constraints
 - One ~250×340 m city, built from instanced blocks, culled per block.
 - Phones default to low quality, but always use the realistic (Quaternius) character set, with fewer pedestrians on low.
