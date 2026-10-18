@@ -20,8 +20,8 @@ function playLabel(levelId: number, title: string) {
   const v = sanitizeVehicle(progress.vehicle);
   const mode = modeOf(v);
   if (mode === 'police') return `▶ العب — المستوى ${levelId}: ${title}`;
-  if (mode === 'taxi') return `▶ اشتغل بـ${VEHICLES[v].name} — ركاب وأجرة`;
-  return `▶ لفّة حرة بالـ${VEHICLES[v].name}`;
+  if (mode === 'taxi') return `▶ شغّل ${VEHICLES[v].name} — ركاب وأجرة`;
+  return `▶ لفّة حرة — ${VEHICLES[v].name}`;
 }
 
 /** Loading-screen tip for the chosen vehicle: police tips stay inside police mode. */
@@ -79,6 +79,7 @@ export class UI {
           <p class="sub"><span dir="ltr">Cairo Asphalt Demons</span> — قاهرة واحدة، وعربيتك هي اللي بتحدد شغلك</p>
           <div class="menu-col">
             <button class="btn menu-big" data-m="play">${playLabel(cur.id, cur.title)}</button>
+            <div class="menu-grid">
             <button class="btn ghost" data-m="levels">🚓 مهام الدورية</button>
             <button class="btn ghost" data-m="character">🙂 شخصيتي</button>
             <button class="btn ghost" data-m="vehicle">${VEHICLE_ICON[sanitizeVehicle(progress.vehicle)]} عربيتي: ${VEHICLES[sanitizeVehicle(progress.vehicle)].name}</button>
@@ -87,6 +88,7 @@ export class UI {
             <button class="btn ghost" data-m="account">👤 ${account.user ? 'حسابي' : 'تسجيل الدخول'}</button>
             <button class="btn ghost" data-m="settings">الإعدادات</button>
             <button class="btn ghost" data-m="credits">الحقوق</button>
+            </div>
           </div>
           <p class="hint">كمبيوتر: WASD للحركة · Shift جري · E ركوب · M خريطة · Esc إيقاف — موبايل: الجويستيك والأزرار</p>`
         : screen === 'levels'

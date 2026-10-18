@@ -1638,7 +1638,20 @@ body[data-play='street'] .hint {
   padding: 16px 18px !important;
   box-shadow: 0 0 24px rgba(126, 200, 255, 0.35);
 }
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.menu-grid .btn {
+  padding: 10px 8px;
+  font-size: 14px;
+}
 .menu-card .hint {
+  position: static;
+  background: none;
+  padding: 0;
+  pointer-events: auto;
   opacity: 0.7;
   font-size: 12px;
   margin-top: 10px;
@@ -3478,20 +3491,28 @@ html:not([data-mode='police']) .topbar .res.alerts {
 html:not([data-mode='taxi']) #street-taxi {
   display: none;
 }
-.street-actions button[data-act='veh'] {
-  display: none;
+/* later rules for the on-foot buttons are very specific, so the mode gates are too */
+html body .street-actions button[data-act='veh'] {
+  display: none !important;
 }
-html.onfoot .street-actions button[data-act='veh'] {
-  display: inline-block;
+html.onfoot:not([data-mode='police']) body .street-actions button[data-act='veh'] {
+  display: flex !important;
+}
+html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actions button[data-act='shoot'],
+html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actions button[data-act='order'],
+html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actions button[data-act='cuff'],
+html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actions button[data-act='hub'],
+html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actions button[data-act='siren'] {
+  display: none !important;
 }
 #street-taxi {
   position: absolute;
   top: calc(58px + env(safe-area-inset-top));
   right: 10px;
-  left: 132px;
+  width: min(300px, calc(100vw - 150px));
   z-index: 40;
   pointer-events: none;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-radius: 12px;
   background: rgba(8, 14, 22, 0.82);
   border: 1px solid rgba(255, 210, 61, 0.45);
@@ -3581,9 +3602,15 @@ html.onfoot .street-actions button[data-act='veh'] {
   font-weight: 800;
   font-size: 15px;
 }
+@media (max-height: 700px) {
+  #street-taxi .tx-foot {
+    display: none;
+  }
+}
 @media (max-width: 560px) {
   #street-taxi {
     left: 10px;
+    width: auto;
     top: calc(176px + env(safe-area-inset-top));
   }
 }
