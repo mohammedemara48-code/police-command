@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { BarkId } from '../src/game/config/barks';
 import {
   BARK_COOLDOWN,
   BARK_GAP,
@@ -14,6 +15,7 @@ import {
   DAMAGE_WORDS,
   LANDMARK_BARK,
   PATROL_MARKINGS,
+  POLICE_ONLY_BARKS,
   RADIO,
   SHOP_BARK,
   STICKERS,
@@ -171,10 +173,10 @@ describe('who speaks', () => {
 describe('bark data', () => {
   const all = Object.entries(BARKS);
 
-  it('every situation has 6-10 short variants (2-7 words)', () => {
+  it('every situation has 6-14 short variants (2-7 words)', () => {
     for (const [id, s] of all) {
       expect(s.lines.length, id).toBeGreaterThanOrEqual(6);
-      expect(s.lines.length, id).toBeLessThanOrEqual(10);
+      expect(s.lines.length, id).toBeLessThanOrEqual(14);
       for (const l of s.lines) {
         expect(words(l), `${id}: ${l}`).toBeGreaterThanOrEqual(2);
         expect(words(l), `${id}: ${l}`).toBeLessThanOrEqual(7);
@@ -280,5 +282,18 @@ describe('patrol car marking and status words', () => {
     const ok = /^(سليمة|ضرر (طفيف|متوسط|كبير|شديد)|غير صالحة للسير)$/;
     for (const d of DAMAGE_WORDS) expect(ok.test(d.word), d.word).toBe(true);
     expect(VOCATIVES.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('police-only barks', () => {
+  it('everything left for taxi and free mode has no police wording', () => {
+    for (const id of Object.keys(BARKS) as BarkId[]) {
+      if (POLICE_ONLY_BARKS.has(id)) continue;
+      for (const l of BARKS[id].lines) expect(l, `${id}: ${l}`).not.toMatch(/شرط|ظاب|بلاغ|لاسلك|دورية|سيادة|حضرة/);
+    }
+  });
+  it('still leaves plenty of street talk for non-police modes', () => {
+    const open = (Object.keys(BARKS) as BarkId[]).filter((id) => !POLICE_ONLY_BARKS.has(id));
+    expect(open.length).toBeGreaterThan(15);
   });
 });

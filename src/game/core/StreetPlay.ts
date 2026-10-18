@@ -110,7 +110,20 @@ import {
 import { rearSticker } from '../world/Stickers';
 import { roofRack, taxiSign, rollWheels, makeWheel } from '../world/Egypt';
 import { VEHICLE_ICON } from '../logic/vehicleIcons';
-import { VEHICLES, VEHICLE_IDS, handlingOf, sanitizeVehicle, type VehicleId } from '../logic/vehicles';
+import {
+  VEHICLES,
+  VEHICLE_IDS,
+  CIVIL_BASE_SPEED,
+  FEATURES,
+  handlingOf,
+  modeOf,
+  sanitizeVehicle,
+  type GameMode,
+  type VehicleId
+} from '../logic/vehicles';
+import { TaxiService } from './TaxiService';
+import { isTaxiVehicle, stopSpots, spotOf } from '../logic/taxi';
+import { POLICE_ONLY_BARKS } from '../config/barks';
 
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
@@ -268,6 +281,31 @@ export class StreetPlay {
   /** the car body for each vehicle the officer can drive, built the first time it is chosen */
   private bodies: Partial<Record<VehicleId, THREE.Group>> = {};
   private vehicle: VehicleId = 'police';
+  /** what the vehicle makes the game: police work, taxi work or free driving */
+  mode: GameMode = 'police';
+  private taxi: TaxiService = new TaxiService({
+    group: this.group,
+    uiRoot: () => this.ui,
+    makePerson: (f, d, h) => this.makePerson(f, d, h),
+    car: () => this.car,
+    state: () => ({
+      x: this.car.position.x,
+      z: this.car.position.z,
+      speed: this.speed,
+      yaw: this.yaw,
+      inCar: this.inCar
+    }),
+    say: (who, text, look, delay) => this.barks.sayLine(who, text, look, delay),
+    status: (t) => this.setStatus(t),
+    target: (at) => {
+      if (at) this.msTarget.set(at.x, 0, at.z);
+      this.msHasTarget = !!at;
+    },
+    repair: (a) => {
+      this.damage = Math.max(0, this.damage - a);
+    },
+    idle: (g) => models.setClip(g, 'idle')
+  });
   private suspect: THREE.Group | null = null;
   private rain: THREE.Points | null = null;
   private rainVel: Float32Array | null = null;
@@ -555,7 +593,6 @@ export class StreetPlay {
     models.setClip(this.driver, 'drive');
     this.driver.visible = false;
     this.car.add(this.driver);
-    this.applyVehicle(progress.vehicle ?? 'police');
     this.group.add(this.eventGroup);
     this.squad = new Squad(this.group, (hostage) => {
       const g = hostage
@@ -579,6 +616,7 @@ export class StreetPlay {
       else if (e === 'flee') this.bark('suspectRuns');
       else if (e === 'cuff') this.bark('cuffing');
     };
+    this.applyVehicle(progress.vehicle ?? 'police');
     this.buildGun();
     this.spawnCrowd();
     this.spawnTraffic();
@@ -1183,6 +1221,7 @@ export class StreetPlay {
 
   /** Station hub: missions board, garage, armory, locker room. */
   private openHub(tab: 'main' | 'missions' | 'armory' | 'garage' | 'vehicles' = 'main') {
+    if (this.mode !== 'police') tab = 'vehicles';
     if (!this.hubEl && tab === 'main') this.vestTaken = false;
     if (this.hubEl) this.hubEl.remove();
     const el = document.createElement('div');
@@ -1247,7 +1286,8 @@ export class StreetPlay {
             <button type="button" data-hub="locker">👮<b>غرفة الملابس</b><small>غيّر شكلك</small></button>
           </div>`;
     }
-    el.innerHTML = `<div class="street-result-card hub-card">${body}<button type="button" class="hub-close" data-hub="${tab === 'main' ? 'close' : 'main'}">${tab === 'main' ? 'اطلع للشارع' : 'رجوع'}</button></div>`;
+    const top = tab === 'main' || this.mode !== 'police';
+    el.innerHTML = `<div class="street-result-card hub-card">${body}<button type="button" class="hub-close" data-hub="${top ? 'close' : 'main'}">${top ? (this.mode === 'police' ? 'اطلع للشارع' : 'كمّل سواقة') : 'رجوع'}</button></div>`;
     document.getElementById('app')!.appendChild(el);
     this.hubEl = el;
     audio.sample('door', 0.6);
@@ -1270,8 +1310,12 @@ export class StreetPlay {
         setVehicle(id);
         this.applyVehicle(id);
         audio.sample('confirm', 0.7);
-        this.setStatus(`🚗 ركبت: ${VEHICLES[id].name}`);
-        this.openHub('vehicles');
+        if (modeOf(id) === 'police') {
+          this.closeHub();
+        } else {
+          this.setStatus(`🚗 ركبت: ${VEHICLES[id].name}`);
+          this.openHub('vehicles');
+        }
       })
     );
     el.querySelectorAll<HTMLButtonElement>('[data-wp]').forEach((b) =>
@@ -1455,7 +1499,12 @@ export class StreetPlay {
     const pos = this.inCar ? this.car.position : this.player.position;
     const has = this.msHasTarget && !this.resultEl;
     const dist = has ? Math.hypot(this.msTarget.x - pos.x, this.msTarget.z - pos.z) : 0;
-    if (this.objEl) {
+    if (this.mode !== 'police') {
+      if (this.objEl && this.objHtml) {
+        this.objEl.innerHTML = '';
+        this.objHtml = '';
+      }
+    } else if (this.objEl) {
       const timer =
         this.msIdx >= 0
           ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.msTime))}ث</span>`
@@ -1488,7 +1537,7 @@ export class StreetPlay {
         this.dirEl.style.transform = `translate(-50%,-50%) rotate(${-ang}rad)`;
       }
     }
-    this.renderHud();
+    if (this.mode === 'police') this.renderHud();
   }
 
   // ===================== mission runner =====================
@@ -2176,6 +2225,101 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     return g;
   }
 
+  /** Police work, taxi work or free driving: switches what runs and what the HUD shows. */
+  private setMode(next: GameMode) {
+    const prev = this.mode;
+    this.mode = next;
+    const root = document.documentElement;
+    root.dataset.mode = next;
+    root.classList.remove('can-hub', 'can-order', 'can-cuff');
+    this.gun.visible = next === 'police';
+    this.firing = false;
+    if (next === 'police') {
+      this.taxi.stop();
+      if (prev !== 'police' && this.mounted) this.setLevel(progress.current);
+      return;
+    }
+    this.clearMission();
+    if (next === 'taxi' && isTaxiVehicle(this.vehicle)) this.taxi.start(this.vehicle);
+    else {
+      this.taxi.stop();
+      if (this.mounted) this.setStatus('قيادة حرة — سوق في المدينة زي ما تحب.');
+    }
+  }
+
+  /** Drop everything the police missions had going (suspect, gang, escort, radio, tutorial, result card). */
+  private clearMission() {
+    this.stopCutscene();
+    this.chasing = false;
+    this.chaseArrest = false;
+    this.endPullover();
+    this.endEscort();
+    this.clearCheckpoint();
+    this.msIdx = -1;
+    this.msHasTarget = false;
+    this.endGang();
+    this.radioQ = [];
+    this.radioT = 0;
+    this.radioEl?.classList.remove('show');
+    if (this.suspect) {
+      this.group.remove(this.suspect);
+      this.suspect = null;
+    }
+    this.closeResultSilently();
+    this.tutOn = false;
+    if (this.tutEl) this.tutEl.innerHTML = '';
+    if (this.siren) this.toggleSiren(false);
+    if (this.hubEl) this.closeHub();
+  }
+
+  /** Taxi/free shift start: the vehicle waits a short drive from a rank and you are in it. */
+  private startService() {
+    this.clearMission();
+    this.closeMap();
+    this.msText = '';
+    if (this.mode === 'taxi' && isTaxiVehicle(this.vehicle)) this.taxi.start(this.vehicle);
+    // a quiet stretch of road a short drive before a rank: try a few ranks and distances until the car sits on a carriageway
+    const N = net();
+    const ids = ['dokki', 'mohandessin', 'zamalek', 'ramses', 'tahrir', 'giza'].sort(() => Math.random() - 0.5);
+    let cx = 0,
+      cz = 0,
+      yaw = 0,
+      found = false;
+    for (const id of ids) {
+      const spot = spotOf(id);
+      const n = spot ? N.nearest(spot.x, spot.z, 40) : null;
+      if (!spot || !n || n.e.ring || n.e.bridge) continue;
+      const y = N.at(n.e, n.s).yaw;
+      const right = n.e.half * 0.45;
+      for (const back of [46, 34, 58, 24]) {
+        const x = spot.x - Math.sin(y) * back - Math.cos(y) * right,
+          z = spot.z - Math.cos(y) * back + Math.sin(y) * right;
+        if (onRoad(x, z, -1.5)) {
+          cx = x;
+          cz = z;
+          yaw = y;
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+    if (!found) {
+      const s0 = stopSpots()[0]!;
+      cx = s0.x;
+      cz = s0.z;
+    }
+    this.world.prime(cx, cz);
+    this.car.position.set(cx, 0, cz);
+    this.car.rotation.y = yaw;
+    this.yaw = this.velYaw = yaw;
+    this.speed = 0;
+    this.player.position.set(cx - Math.cos(yaw) * 2, 0, cz + Math.sin(yaw) * 2);
+    if (!this.inCar) this.toggleCar();
+    this.damage = 0;
+    this.snapCamera(1);
+  }
+
   /** Swap the car the officer drives: shows its body, resizes the hit box and seats the driver. */
   applyVehicle(id: VehicleId) {
     const def = VEHICLES[id];
@@ -2189,6 +2333,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     for (const [k, b] of Object.entries(this.bodies)) b!.visible = k === id;
     this.myBox.hw = def.hw;
     this.myBox.hl = def.hl;
+    const next = modeOf(id);
+    if (next !== this.mode || next === 'taxi') this.setMode(next);
     if (this.driver) this.driver.position.set(...def.seat);
     if (!def.siren && this.siren) this.toggleSiren(false);
     const sb = this.ui?.querySelector<HTMLElement>('[data-act="siren"]');
@@ -2361,6 +2507,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
 
   /** Start (or restart) a campaign level: resets positions and points the mission at the level's district. */
   setLevel(id: number) {
+    if (!FEATURES[this.mode].missions) {
+      this.startService();
+      return;
+    }
     const here = this.inCar ? this.car.position : this.player.position;
     if (id < 0) id = newCall(here.x, here.z).id;
     const patrol = isPatrol(id);
@@ -2421,6 +2571,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.markerRoot.visible = true;
     if (this.rain) this.rain.visible = false;
     delete document.body.dataset.play;
+    delete document.documentElement.dataset.mode;
     document.documentElement.classList.remove('onfoot', 'armed');
     audio.engine(false);
     audio.sirenLoop(false);
@@ -2453,6 +2604,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.markerRoot.visible = false;
     if (this.rain) this.rain.visible = true;
     document.body.dataset.play = 'street';
+    document.documentElement.dataset.mode = this.mode;
     document.documentElement.classList.toggle('onfoot', !this.inCar);
     this.mountUi();
     window.addEventListener('keydown', this.boundKeyDown);
@@ -2500,6 +2652,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         <button type="button" data-act="shoot" aria-label="اضرب"><i>🔫</i><span>اضرب</span></button>
         <button type="button" data-act="order" aria-label="استسلم"><i>📢</i><span>استسلم</span></button>
         <button type="button" data-act="cuff" aria-label="كلبش"><i>🔗</i><span>كلبش</span></button>
+        <button type="button" data-act="veh" aria-label="غيّر العربية"><i>🔄</i><span>بدّل</span></button>
         <button type="button" data-act="hub" aria-label="ادخل القسم"><i>🏢</i><span>القسم</span></button>
       </div>
       <div id="street-radio"></div>
@@ -2567,6 +2720,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     });
     ui.querySelector('[data-act="order"]')!.addEventListener('click', () => this.orderSurrender());
     ui.querySelector('[data-act="cuff"]')!.addEventListener('click', () => this.cuffNow());
+    ui.querySelector('[data-act="veh"]')!.addEventListener('click', () => {
+      if (!this.hubEl) this.openHub('vehicles');
+    });
     ui.querySelector('[data-act="hub"]')!.addEventListener('click', () => {
       if (this.canHub) this.openHub();
     });
@@ -2582,7 +2738,13 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     ui.querySelector('[data-act="car"]')!.addEventListener('click', () => this.toggleCar());
     ui.querySelector('[data-act="map"]')!.addEventListener('click', () => this.openMap());
     this.mini!.addEventListener('click', () => this.openMap());
-    this.setStatus('ليل ممطر — امشِ أو اركب الدورية. الخريطة فيها المهام.');
+    this.setStatus(
+      this.mode === 'police'
+        ? 'امشِ أو اركب الدورية. الخريطة فيها المهام.'
+        : `امشِ أو اركب ${VEHICLES[this.vehicle].name}. الخريطة فيها المواقف.`
+    );
+    this.applyVehicle(this.vehicle);
+    this.taxi.remount();
   }
 
   /** Analog virtual joystick for touch screens; maps to the same hold flags as the D-pad. */
@@ -2692,7 +2854,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       this.vel.z = 0;
       document.documentElement.classList.add('onfoot');
       if (this.siren) this.toggleSiren(false);
-      this.setStatus('نزلت من الدورية.');
+      this.setStatus(this.mode === 'police' ? 'نزلت من الدورية.' : `نزلت من ${VEHICLES[this.vehicle].name}.`);
       const btn = this.ui?.querySelector('[data-act="car"]');
       if (btn) btn.innerHTML = `<i>${VEHICLE_ICON[this.vehicle]}</i><span>اركب</span>`;
       const rb = this.ui?.querySelector('[data-act="run"]');
@@ -2701,7 +2863,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     }
     const d = this.player.position.distanceTo(this.car.position);
     if (d > 4.2) {
-      this.setStatus('اقترب من سيارة الشرطة ثم اركب.');
+      this.setStatus(
+        this.mode === 'police'
+          ? 'اقترب من سيارة الشرطة ثم اركب.'
+          : `اقترب من ${VEHICLES[this.vehicle].name} وبعدين اركب.`
+      );
       return;
     }
     this.inCar = true;
@@ -2712,7 +2878,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.yaw = this.car.rotation.y;
     this.velYaw = this.yaw;
     this.speed = 0;
-    this.setStatus('داخل الدورية. امشِ بالأسهم أو الأزرار. صفارة المطاردة لما توصل المهمة.');
+    this.setStatus(
+      this.mode === 'police'
+        ? 'داخل الدورية. امشِ بالأسهم أو الأزرار. صفارة المطاردة لما توصل المهمة.'
+        : `سوق بالأسهم أو الجويستيك. ${this.mode === 'taxi' ? 'روح لأي موقف وخد الركاب.' : 'الشارع كله قدامك.'}`
+    );
     const btn = this.ui?.querySelector('[data-act="car"]');
     if (btn) btn.innerHTML = '<i>🚪</i><span>انزل</span>';
     const rb = this.ui?.querySelector('[data-act="run"]');
@@ -2756,6 +2926,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     focus?: THREE.Vector3,
     only?: (s: { shop: string | null }) => boolean
   ): boolean {
+    if (this.mode !== 'police' && POLICE_ONLY_BARKS.has(id)) return false;
     if (this.quiet(priority) || !this.barks.ready(id, priority)) return false;
     const at = focus ?? (this.inCar ? this.car.position : this.player.position);
     const sp = this.speakerFor(BARKS[id].who, at, only);
@@ -2776,7 +2947,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.sirenWas = this.siren;
     const car = this.car.position;
     // the patrol car left at the junction, across the lane or on the kerb
-    if (Math.abs(this.speed) < 0.3 && !this.chasing) this.parkT += dt;
+    if (this.mode !== 'police') this.parkT = 0;
+    else if (Math.abs(this.speed) < 0.3 && !this.chasing) this.parkT += dt;
     else this.parkT = 0;
     if (this.parkT > 3.5 && this.badlyParked()) {
       this.parkT = -20;
@@ -2834,8 +3006,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       hr < 5 || hr >= 19 ? 'timeNight' : hr < 11 ? 'timeMorning' : hr < 16 ? 'timeNoon' : 'timeSunset';
     picks.push(() => this.bark(time));
     const idx = RANKS.indexOf(rank());
-    if (idx <= 1) picks.push(() => this.bark('rankLow'));
-    else if (idx >= RANKS.length - 2) picks.push(() => this.bark('rankHigh'));
+    if (this.mode === 'police') {
+      if (idx <= 1) picks.push(() => this.bark('rankLow'));
+      else if (idx >= RANKS.length - 2) picks.push(() => this.bark('rankHigh'));
+    }
     const road = net().nearest(me.x, me.z, 30);
     if (road?.e.bridge) picks.push(() => this.bark('bridgeCrossing'));
     else if (inRiver(me.x, me.z, 60)) picks.push(() => this.bark('nileView'));
@@ -2872,6 +3046,28 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   goToWorld(x: number, z: number, fast: boolean) {
     const place = places().reduce((a, b) => (Math.hypot(b.x - x, b.z - z) < Math.hypot(a.x - x, a.z - z) ? b : a));
     this.travelTo(place.id, fast);
+  }
+
+  /** Fast travel to a taxi rank: the vehicle waits a short drive before it, you in it. */
+  private goToRank(id: string) {
+    const spot = spotOf(id);
+    if (!spot || !this.active) return;
+    this.closeMap();
+    const N = net();
+    const n = N.nearest(spot.x, spot.z, 40);
+    const yaw = n ? N.at(n.e, n.s).yaw : 0;
+    const right = (n?.e.half ?? 4) * 0.45;
+    const cx = spot.x - Math.sin(yaw) * 30 - Math.cos(yaw) * right,
+      cz = spot.z - Math.cos(yaw) * 30 + Math.sin(yaw) * right;
+    this.world.prime(cx, cz);
+    this.car.position.set(cx, 0, cz);
+    this.car.rotation.y = yaw;
+    this.yaw = this.velYaw = yaw;
+    this.speed = 0;
+    this.player.position.set(cx - Math.cos(yaw) * 2, 0, cz + Math.sin(yaw) * 2);
+    if (!this.inCar) this.toggleCar();
+    this.snapCamera(1);
+    this.setStatus(`وصلت قدام ${spot.stop.name}.`);
   }
 
   travelTo(id: string, fast: boolean) {
@@ -3099,11 +3295,24 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const here = this.currentPlace();
     const el = document.createElement('div');
     el.id = 'street-map';
-    const chips = places()
-      .slice()
-      .sort((p, q) => p.z - q.z)
+    const police = this.mode === 'police';
+    const taxiMap = this.mode === 'taxi';
+    const rankPins = taxiMap ? this.taxi.pins() : [];
+    const chips = (
+      taxiMap
+        ? rankPins
+            .slice()
+            .sort((p, q) => p.z - q.z)
+            .map((p) => ({ id: p.id, name: p.name, z: p.z, badge: p.badge, color: p.color }))
+        : places()
+            .slice()
+            .sort((p, q) => p.z - q.z)
+            .map((p) => ({ id: p.id, name: p.name, z: p.z, badge: '', color: '' }))
+    )
       .map((p) => {
-        const mission = p.id === this.missionId;
+        if (taxiMap)
+          return `<button type="button" class="chip" data-id="${p.id}"><span class="dot" style="background:${p.color}"></span><span class="lab">${p.name}</span>${p.badge === '↓' ? '<em>وصّل هنا</em>' : p.badge ? `<em>${p.badge} مستنيين</em>` : ''}</button>`;
+        const mission = police && p.id === this.missionId;
         return `<button type="button" class="chip ${mission ? 'mission' : ''} ${p.id === here.id ? 'here' : ''}" data-id="${p.id}">
           <span class="dot"></span><span class="lab">${p.name}</span>${mission ? '<em>بلاغ</em>' : p.id === here.id ? '<em>أنت هنا</em>' : ''}
         </button>`;
@@ -3125,17 +3334,17 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
               <h2>خريطة القاهرة</h2>
               <button type="button" data-close>إغلاق</button>
             </header>
-            <p class="map-help">اختَر حي من الخريطة أو من القايمة، وبعدين انتقل أو سوق إليه. المطاردة بتبدأ لما توصل وأنت في الدورية.</p>
+            <p class="map-help">${taxiMap ? 'دايرة خضرا = موقف فيه ركاب مستنيين، أصفرة = موقف عايزين يوصلوه. اختار موقف وانتقل له أو سوق.' : police ? 'اختَر حي من الخريطة أو من القايمة، وبعدين انتقل أو سوق إليه. المطاردة بتبدأ لما توصل وأنت في الدورية.' : 'اختَر حي من الخريطة أو من القايمة، وبعدين انتقل له أو سوق إليه.'}</p>
             <div class="map-chips">${chips}</div>
             <ul class="map-key">
               <li><i class="k-play"></i>كل الشوارع على الخريطة تقدر تسوق فيها، من الهرم لشبرا ومن الدقي لوسط البلد</li>
-              <li><i class="k-me"></i>سهم أبيض: مكانك &nbsp; <i class="k-call"></i>أحمر: البلاغ</li>
+              <li><i class="k-me"></i>سهم أبيض: مكانك${police ? ' &nbsp; <i class="k-call"></i>أحمر: البلاغ' : ''}</li>
               <li><i class="k-bridge"></i>الكباري بتعدّي النيل فعلاً: قصر النيل والتحرير والجلاء وإمبابة و٦ أكتوبر</li>
               <li class="k-note">الخريطة مرسومة باليد من إحداثيات تقريبية بمقياس مصغّر، مش خريطة رسمية.</li>
             </ul>
             <div class="map-actions">
               <button type="button" data-go="fast">انتقال سريع</button>
-              <button type="button" data-go="drive">سوق إلى المكان</button>
+              ${taxiMap ? '' : '<button type="button" data-go="drive">سوق إلى المكان</button>'}
             </div>
           </div>
         </div>
@@ -3143,7 +3352,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     `;
     document.getElementById('app')!.appendChild(el);
     this.mapEl = el;
-    let picked = this.missionId;
+    const firstRank = taxiMap ? (this.taxi.pins().find((p) => p.badge) ?? rankPins[0])?.id : undefined;
+    let picked = taxiMap ? (firstRank ?? '') : this.missionId;
     const canvas = el.querySelector('.map-canvas') as HTMLCanvasElement;
     const map = new CairoMap(canvas);
     const me = this.inCar ? this.car : this.player;
@@ -3154,12 +3364,13 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     };
     map.state = {
       player: { x: me.position.x, z: me.position.z, yaw: this.inCar ? this.car.rotation.y : this.yaw },
-      missionId: this.missionId,
+      missionId: police ? this.missionId : null,
+      pins: taxiMap ? rankPins : undefined,
       objective: this.msHasTarget ? { x: this.msTarget.x, z: this.msTarget.z } : null,
-      picked: this.missionId,
+      picked: picked,
       here: here.id
     };
-    sync(this.missionId);
+    sync(picked);
     map.onPick = (id) => {
       sync(id);
       map.focus(id, 5);
@@ -3179,10 +3390,14 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.mapCleanup = () => window.removeEventListener('resize', onSize);
     requestAnimationFrame(() => map.resize());
     el.querySelector('[data-close]')!.addEventListener('click', () => this.closeMap());
-    el.querySelector('[data-go="fast"]')!.addEventListener('click', () => this.travelTo(picked, true));
-    el.querySelector('[data-go="drive"]')!.addEventListener('click', () => {
+    el.querySelector('[data-go="fast"]')!.addEventListener('click', () =>
+      taxiMap ? this.goToRank(picked) : this.travelTo(picked, true)
+    );
+    el.querySelector('[data-go="drive"]')?.addEventListener('click', () => {
       if (!this.inCar) {
-        this.setStatus('اركب الدورية الأول عشان تسوق، أو استخدم انتقال سريع.');
+        this.setStatus(
+          `اركب ${police ? 'الدورية' : VEHICLES[this.vehicle].name} الأول عشان تسوق، أو استخدم انتقال سريع.`
+        );
         this.closeMap();
         return;
       }
@@ -3294,13 +3509,19 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       }
     }
     this.stepTraffic(dt);
-    this.stepChase(dt);
-    this.stepTutorial(dt);
+    const F = FEATURES[this.mode];
+    if (F.missions) {
+      this.stepChase(dt);
+      this.stepTutorial(dt);
+    }
     const locked = this.cut.active;
-    if (!this.inCar && !this.resultEl && !this.hubEl && !locked) this.softAimAssist(dt);
-    if (this.firing && !this.inCar && !this.resultEl && !locked) this.squad.shoot(this.player.position, this.yaw);
-    this.squad.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
-    this.tickMission(dt);
+    if (F.policeHud) {
+      if (!this.inCar && !this.resultEl && !this.hubEl && !locked) this.softAimAssist(dt);
+      if (this.firing && !this.inCar && !this.resultEl && !locked) this.squad.shoot(this.player.position, this.yaw);
+      this.squad.update(dt, this.inCar ? this.car.position : this.player.position, this.inCar);
+    }
+    if (F.missions) this.tickMission(dt);
+    if (F.taxi) this.taxi.update(dt);
     this.routeT -= dt;
     if (this.routeT <= 0) {
       this.routeT = 0.5;
@@ -3308,8 +3529,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       this.route = this.msHasTarget ? findPath(me.x, me.z, this.msTarget.x, this.msTarget.z) : [];
     }
     this.tickRadio(dt);
-    this.tickGun(dt);
-    this.tickReticle();
+    if (F.policeHud) {
+      this.tickGun(dt);
+      this.tickReticle();
+    } else this.player.userData.forceClip = null;
     if (this.panicT > 0) this.panicT -= dt;
     this.tickLife(dt);
     this.stepRain(dt);
@@ -3402,8 +3625,20 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       // arcade handling: analog stick or keys, handbrake (run button / Space) drifts
       const H = handlingOf(this.vehicle);
       const max =
-        ((this.chasing ? 20 : 16) + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 })) *
-        H.top;
+        this.mode === 'police'
+          ? ((this.chasing ? 20 : 16) +
+              rank().car +
+              engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 })) *
+            H.top
+          : CIVIL_BASE_SPEED * H.top;
+      // a tuk-tuk is narrow enough to cut over the pavement (slower there); everything else keeps to the carriageway
+      const rp = this.vehicle === 'tuktuk' ? 2 : 0.4;
+      if (
+        this.vehicle === 'tuktuk' &&
+        Math.abs(this.speed) > 7 &&
+        !onRoad(this.car.position.x, this.car.position.z, 0.1)
+      )
+        this.speed *= 1 - Math.min(0.9, dt * 2.2);
       this.carMax = max;
       const thr = this.travel ? throttle : this.stick.y || throttle;
       this.steerCur = this.travel ? 0 : smoothSteer(this.steerCur, -this.stick.x || turn, this.speed, dt);
@@ -3448,13 +3683,13 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       const bump = VEHICLES[this.vehicle].hl - 0.15;
       const nx = C0.x + cmx + Math.sin(this.yaw) * bump * dir,
         nz = C0.z + cmz + Math.cos(this.yaw) * bump * dir;
-      if (!onRoad(C0.x + cmx, C0.z + cmz, 0.4) || !onRoad(nx, nz, 2.4)) {
+      if (!onRoad(C0.x + cmx, C0.z + cmz, rp) || !onRoad(nx, nz, rp + 2)) {
         // kerb/building: lose the speed going into it, keep sliding along it
-        if (onRoad(C0.x + cmx, C0.z, 0.4)) {
+        if (onRoad(C0.x + cmx, C0.z, rp)) {
           C0.x += cmx;
           this.wallHit(0, -Math.sign(cmz));
           this.speed *= 1 - Math.min(0.9, dt * 2.5);
-        } else if (onRoad(C0.x, C0.z + cmz, 0.4)) {
+        } else if (onRoad(C0.x, C0.z + cmz, rp)) {
           C0.z += cmz;
           this.wallHit(-Math.sign(cmx), 0);
           this.speed *= 1 - Math.min(0.9, dt * 2.5);
@@ -3471,14 +3706,14 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         addStat('distance', this.distAcc);
         this.distAcc = 0;
       }
-      if (!onRoad(this.car.position.x, this.car.position.z, 0.4)) {
+      if (!onRoad(this.car.position.x, this.car.position.z, rp)) {
         // hit a kerb/building: back out and bleed speed
         this.car.position.x -= Math.sin(this.yaw) * this.speed * dt * 1.5;
         this.car.position.z -= Math.cos(this.yaw) * this.speed * dt * 1.5;
         this.speed *= -0.25;
       }
       // never stay wedged off the road (pushed by traffic into a block): back to the nearest junction
-      this.offRoadT = onRoad(this.car.position.x, this.car.position.z, 0.4) ? 0 : this.offRoadT + dt;
+      this.offRoadT = onRoad(this.car.position.x, this.car.position.z, rp) ? 0 : this.offRoadT + dt;
       // pressing the gas against a wall without moving for a while also counts as stuck
       const cp = this.car.position;
       if (throttle === 0 || Math.hypot(cp.x - this.stuckX, cp.z - this.stuckZ) > 2.5) {
@@ -3692,8 +3927,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.recoil = Math.min(1, v / 10);
     const word = damageWord(this.damage, DAMAGE_WORDS);
     this.setStatus(
-      this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}% — ${word}`
+      this.damage >= 100
+        ? `💥 ${this.mode === 'police' ? 'الدورية' : VEHICLES[this.vehicle].name} متدمرة — بتمشي ببطء.`
+        : `💥 خبطة! ضرر ${this.mode === 'police' ? 'الدورية' : VEHICLES[this.vehicle].name} ${this.damage}% — ${word}`
     );
+    if (this.mode === 'taxi') this.taxi.crash(v);
     this.bark(dmg >= 14 ? 'crashHeavy' : 'crashLight', false, this.car.position);
   }
 
@@ -3870,15 +4108,17 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const ctx = c.getContext('2d');
     if (!ctx) return;
     const pos = this.inCar ? this.car.position : this.player.position;
-    const dots: { x: number; z: number; c: string; r: number }[] = places().map((p) => ({
+    const dots: { x: number; z: number; c: string; r: number }[] = (this.mode === 'taxi' ? [] : places()).map((p) => ({
       x: p.x,
       z: p.z,
-      c: p.id === this.missionId ? '#ff4d6d' : '#3aa0ff',
-      r: p.id === this.missionId ? 5 : 3
+      c: this.mode === 'police' && p.id === this.missionId ? '#ff4d6d' : '#3aa0ff',
+      r: this.mode === 'police' && p.id === this.missionId ? 5 : 3
     }));
     for (const m of this.squad.list)
       if (m.state !== 'down' && m.state !== 'cuffed')
         dots.push({ x: m.g.position.x, z: m.g.position.z, c: m.state === 'hands' ? '#7dff9a' : '#ff3b3b', r: 2.5 });
+    if (this.mode === 'taxi')
+      for (const p of this.taxi.pins()) dots.push({ x: p.x, z: p.z, c: p.color, r: p.badge ? 5 : 3 });
     if (this.msHasTarget) dots.push({ x: this.msTarget.x, z: this.msTarget.z, c: '#ffd23d', r: 4 });
     if (this.chasing && this.suspect)
       dots.push({ x: this.suspect.position.x, z: this.suspect.position.z, c: '#ffd23d', r: 4 });

@@ -70,9 +70,9 @@ export class Barks {
     return this.bubbles.find((b) => t > b.until) ?? this.bubbles.reduce((a, b) => (a.from < b.from ? a : b));
   }
 
-  private put(who: Speaker, text: string, delayMs = 0) {
+  private put(who: Speaker, text: string, delayMs = 0, look?: { name: string; icon: string; color: string }) {
     const b = this.bubbles.find((x) => x.who?.obj === who.obj && performance.now() < x.until) ?? this.free();
-    const voice = VOICES[who.role];
+    const voice = look ?? VOICES[who.role];
     b.el.replaceChildren();
     const tag = document.createElement('b');
     tag.style.color = voice.color;
@@ -113,6 +113,13 @@ export class Barks {
     });
     if (line) this.put(speaker, line);
     return line;
+  }
+
+  /** Say an exact line (passengers in the cab, people waiting at a rank) with their own name tag. */
+  sayLine(speaker: Speaker, text: string, look: { name: string; icon: string; color: string }, delayMs = 0): boolean {
+    if (!this.strip) return false;
+    this.put(speaker, text, delayMs, look);
+    return true;
   }
 
   /** Two neighbours exchange a line each (the reply follows after a beat). */

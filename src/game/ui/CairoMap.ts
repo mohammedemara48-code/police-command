@@ -65,7 +65,19 @@ const LABEL_AT: Record<District, [number, number]> = {
   corniche: [-40, 4]
 };
 
+/** A pin that replaces the district pins (taxi ranks): where it is, its colour and a small badge. */
+export interface MapPin {
+  id: string;
+  name: string;
+  x: number;
+  z: number;
+  color: string;
+  badge?: string;
+}
+
 export interface MapState {
+  /** when set, these are drawn and picked instead of the four districts */
+  pins?: MapPin[];
   /** officer position on the avenue */
   player: { x: number; z: number; yaw: number };
   /** district of the active call */
@@ -150,7 +162,8 @@ export class CairoMap {
 
   /** Centre on a playable district at a street-level zoom. */
   focus(id: string, zoom = 6) {
-    const c = areaCentre(id as District);
+    const pin = this.state.pins?.find((p) => p.id === id);
+    const c = pin ? gameToMap(pin.x, pin.z) : areaCentre(id as District);
     this.view = clampView({ cx: c.x, cy: c.y, scale: this.fit.scale * zoom }, this.w, this.h);
     this.draw();
   }
@@ -212,6 +225,16 @@ export class CairoMap {
   }
   private tap(sx: number, sy: number) {
     let best: { id: string; d: number } | null = null;
+    const pins = this.state.pins;
+    if (pins) {
+      for (const p of pins) {
+        const s = toScreen(this.view, this.w, this.h, gameToMap(p.x, p.z));
+        const d = Math.hypot(s.x - sx, s.y - sy);
+        if (d < 26 && (!best || d < best.d)) best = { id: p.id, d };
+      }
+      if (best) this.onPick?.(best.id);
+      return;
+    }
     for (const a of playAreas()) {
       const s = toScreen(this.view, this.w, this.h, areaCentre(a.id));
       const d = Math.hypot(s.x - sx, s.y - sy);
@@ -426,7 +449,24 @@ export class CairoMap {
 
     // district pins
     const st = this.state;
-    for (const a of playAreas()) {
+    for (const p of st.pins ?? []) {
+      const s = toScreen(this.view, this.w, this.h, gameToMap(p.x, p.z));
+      const picked = p.id === st.picked;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, picked ? 11 : 9, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.lineWidth = picked ? 3 : 2;
+      ctx.strokeStyle = picked ? '#ffd56a' : '#ffffff';
+      ctx.stroke();
+      ctx.fillStyle = '#10213f';
+      ctx.font = '800 11px Cairo, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.badge ?? '', s.x, s.y + 0.5);
+      this.label(p.name, s.x, s.y - 17, 12, picked ? '#ffd56a' : '#ffffff', 0, 5);
+    }
+    for (const a of st.pins ? [] : playAreas()) {
       const s = toScreen(this.view, this.w, this.h, areaCentre(a.id));
       const mission = a.id === st.missionId,
         picked = a.id === st.picked;

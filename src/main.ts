@@ -6,7 +6,6 @@ if (!location.search.includes('autotest')) inject({ mode: 'production' });
 // Touch devices (also when the browser reports a fine pointer, e.g. 'desktop site' mode) get the joystick UI.
 if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.documentElement.classList.add('touch');
 import { GameManager } from './game/core/GameManager';
-import { IncidentManager } from './game/missions/IncidentManager';
 import { CityScene } from './game/core/CityScene';
 import { UI } from './game/ui/UI';
 import { audio } from './game/systems/AudioManager';
@@ -23,11 +22,10 @@ const game = new GameManager();
 restoreCommand(game);
 startAutosave(game);
 const city = new CityScene(canvas);
-const incidents = new IncidentManager(game, city.pois);
-const ui = new UI(game, incidents, city);
+const ui = new UI(game, city);
 const meta = new Meta(game);
 
-(window as unknown as { __PC: unknown }).__PC = { meta, game, incidents, city, ui, audio };
+(window as unknown as { __PC: unknown }).__PC = { meta, game, city, ui, audio };
 
 let last = performance.now();
 let lastHour = -1;
@@ -39,25 +37,12 @@ function frame(now: number) {
 
   if (meta.active || !game.state.running) {
     game.tick(dt);
-    if (!city.street?.active) incidents.tick(dt);
   }
   meta.check();
   if (meta.paused || meta.over) {
     requestAnimationFrame(frame);
     return;
   }
-  city.syncIncidents(incidents.openIncidents);
-
-  for (const u of game.units) {
-    if (!u.available && u.assignedIncidentId) {
-      const inc = incidents.incidents.find((i) => i.id === u.assignedIncidentId);
-      if (inc && inc.status !== 'resolved' && inc.status !== 'failed') {
-        const spd = u.speed * game.state.responseMul;
-        city.driveUnitToward(u.id, inc.x, inc.z, spd, dt);
-      }
-    }
-  }
-
   if (Math.abs(game.state.cityHour - lastHour) > 0.02 || !!city.street?.active !== lastStreet) {
     lastHour = game.state.cityHour;
     lastStreet = !!city.street?.active;

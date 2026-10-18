@@ -1,4 +1,3 @@
-import { reducedMotion } from '../config/Motion';
 // @source-complete
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -7,10 +6,10 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { loadEnvironment } from '../world/Environment';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
+import { DISTRICTS, ZoneType, type CityPOI } from './types';
 import type { StreetPlay } from './StreetPlay';
 import { Q, quality } from '../config/Quality';
-import { models, fx, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS } from './Models';
+import { models, fx, LOW_BUILDINGS, TOWERS } from './Models';
 
 type CarMesh = THREE.Group & { userData: { unitId?: string; flashing?: boolean; lights?: THREE.PointLight[] } };
 
@@ -22,10 +21,6 @@ export class CityScene {
   root = new THREE.Group();
   markerRoot = new THREE.Group();
   carRoot = new THREE.Group();
-  labelSprites = new Map<string, THREE.Sprite>();
-  incidentMarkers = new Map<string, THREE.Group>();
-  selectedIncidentId: string | null = null;
-  unitCars = new Map<string, CarMesh>();
   pois: CityPOI[] = [];
   clock = new THREE.Clock();
   hqPosition = new THREE.Vector3(0, 0, 0);
@@ -48,31 +43,6 @@ export class CityScene {
   private nightFactor = 0;
   private lineMats: THREE.MeshStandardMaterial[] = [];
   private waterMat: THREE.MeshStandardMaterial | null = null;
-  private cameraLock = false;
-  private fly = {
-    active: false,
-    t0: 0,
-    dur: 1000,
-    fromPos: new THREE.Vector3(),
-    toPos: new THREE.Vector3(),
-    fromTarget: new THREE.Vector3(),
-    toTarget: new THREE.Vector3()
-  };
-  private action: { active: boolean; heat: ActionHeat; x: number; z: number; next: number } = {
-    active: false,
-    heat: 'quiet',
-    x: 0,
-    z: 0,
-    next: 0
-  };
-  private fx: Array<{ obj: THREE.Object3D; life: number; max: number; light?: THREE.PointLight }> = [];
-  private actionCars: Array<{ mesh: CarMesh; tx: number; tz: number; sx: number; sz: number }> = [];
-  /** Pedestrians and officers spawned for the current decision. Public for tests. */
-  crowd: Array<{ mesh: THREE.Object3D; from: THREE.Vector3; to: THREE.Vector3; bob: number }> = [];
-  private actionT0 = 0;
-  private muzzleGeo = new THREE.SphereGeometry(0.22, 8, 8);
-  private muzzleMat = new THREE.MeshBasicMaterial({ color: 0xfff1c4 });
-
   /** street mode is code-split: loaded on first use (see loadStreet) */
   street: StreetPlay | null = null;
   private streetP: Promise<StreetPlay> | null = null;
@@ -125,7 +95,6 @@ export class CityScene {
     this.buildLighting();
     void loadEnvironment(this.renderer, this.scene)?.catch(() => undefined);
     this.buildCity();
-    this.spawnFleetCars();
     this.setTimeOfDay(8);
     // test hook for automated screenshots (only with ?autotest)
     if (location.search.includes('autotest')) (window as unknown as { __city: unknown }).__city = this;
@@ -678,258 +647,6 @@ export class CityScene {
     ];
   }
 
-  private spawnFleetCars() {
-    const spots: Array<[number, number, number]> = [
-      [8, 0, 8],
-      [-10, 0, 6],
-      [12, 0, -8],
-      [-14, 0, -10],
-      [6, 0, -16]
-    ];
-    spots.forEach(([x, , z], i) => {
-      const car = this.makePoliceCar();
-      car.position.set(x, 0.05, z);
-      car.userData.unitId = `fleet-${i}`;
-      this.carRoot.add(car);
-      this.unitCars.set(`fleet-${i}`, car);
-    });
-  }
-
-  focusOn(x: number, z: number, close = false) {
-    if (this.street?.active) {
-      this.street.goToWorld(x, z, true);
-      return;
-    }
-    this.flyTo(x, z, close);
-  }
-
-  /** Smooth camera move. Wall-clock so a slow frame still arrives in ~1s, and the first paint already jumps. */
-  flyTo(x: number, z: number, close = false) {
-    if (this.street?.active) {
-      this.street.goToWorld(x, z, false);
-      return;
-    }
-    this.fly.active = true;
-    this.fly.dur = reducedMotion ? 1 : close ? 1000 : 1300;
-    this.fly.fromPos.copy(this.camera.position);
-    this.fly.fromTarget.copy(this.controls.target);
-    const dist = close ? 18 : 32;
-    const height = close ? 8.5 : 22;
-    this.fly.toTarget.set(x, 1.6, z);
-    this.fly.toPos.set(x + dist * 0.42, height, z + dist * 0.92);
-    this.cameraLock = true;
-    this.controls.enabled = false;
-    const jump = 0.38;
-    this.camera.position.lerpVectors(this.fly.fromPos, this.fly.toPos, jump);
-    this.controls.target.lerpVectors(this.fly.fromTarget, this.fly.toTarget, jump);
-    this.fly.fromPos.copy(this.camera.position);
-    this.fly.fromTarget.copy(this.controls.target);
-    this.fly.t0 = performance.now();
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  private makeWalker(kind: 'ped' | 'cop', shirt: number) {
-    const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.8, 4, 8), this.mat(shirt));
-    body.position.y = 1.08;
-    body.castShadow = true;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), this.mat(0xffd2b5));
-    head.position.y = 1.78;
-    g.add(body, head);
-    if (kind === 'cop') {
-      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.12, 0.46), this.mat(0x0d2a66));
-      cap.position.y = 2.04;
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.55, 0.1), this.mat(0xffd24d));
-      stripe.position.set(0, 1.2, 0.3);
-      g.add(cap, stripe);
-    }
-    models.dress(g, kind === 'cop' ? 'cop_m' : (Q.lowDetailPeople ? PEOPLE : REAL_PEOPLE)[shirt % 4]!, {
-      height: 2.0
-    });
-    return g;
-  }
-
-  beginAction(heat: ActionHeat, x: number, z: number) {
-    this.endAction(false);
-    this.action = { active: true, heat, x, z, next: 0 };
-    this.actionT0 = performance.now();
-    this.cameraLock = true;
-    this.controls.enabled = false;
-
-    const approaches: Array<[number, number, number, number, number]> = [
-      [x + 22, z + 16, x + 2.4, z + 3.2, 0x102040],
-      [x - 20, z + 18, x - 2.2, z + 2.6, 0xf4f7fb]
-    ];
-    for (const [sx, sz, tx, tz, color] of approaches) {
-      const car = this.makePoliceCar(color);
-      car.position.set(sx, 0.05, sz);
-      car.userData.flashing = true;
-      car.lookAt(tx, 0.05, tz);
-      this.carRoot.add(car);
-      if (car.userData.lights) this.flashLights.push(...car.userData.lights);
-      this.actionCars.push({ mesh: car, tx, tz, sx, sz });
-    }
-
-    const peds: Array<[number, number, number]> = [
-      [0xc45a3a, x - 9, z - 7],
-      [0x3d4c58, x + 8, z - 9],
-      [0xd8c6a4, x - 6, z + 10],
-      [0x6e3a48, x + 10, z + 1]
-    ];
-    peds.forEach(([color, px, pz], i) => {
-      const mesh = this.makeWalker('ped', color);
-      mesh.position.set(px, 0, pz);
-      this.carRoot.add(mesh);
-      const ang = (i / peds.length) * Math.PI * 2;
-      this.crowd.push({
-        mesh,
-        from: new THREE.Vector3(px, 0, pz),
-        to: new THREE.Vector3(x + Math.cos(ang) * 3.4, 0, z + Math.sin(ang) * 3.4),
-        bob: i
-      });
-    });
-    (
-      [
-        [x + 15, z - 1],
-        [x + 13, z + 7]
-      ] as Array<[number, number]>
-    ).forEach(([px, pz], i) => {
-      const mesh = this.makeWalker('cop', 0x1a4e9a);
-      mesh.position.set(px, 0, pz);
-      this.carRoot.add(mesh);
-      this.crowd.push({
-        mesh,
-        from: new THREE.Vector3(px, 0, pz),
-        to: new THREE.Vector3(x + 1.4 + i * 1.3, 0, z + 1.1),
-        bob: 10 + i
-      });
-    });
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  endAction(unlock = true) {
-    this.action.active = false;
-    for (const c of this.actionCars) {
-      c.mesh.userData.flashing = false;
-      this.carRoot.remove(c.mesh);
-    }
-    this.actionCars = [];
-    for (const p of this.crowd) this.carRoot.remove(p.mesh);
-    this.crowd = [];
-    if (unlock && !this.fly.active) {
-      this.cameraLock = false;
-      this.controls.enabled = true;
-    }
-  }
-
-  private spawnMuzzle(x: number, y: number, z: number, color = 0xfff1c4) {
-    const mesh = new THREE.Mesh(this.muzzleGeo, this.muzzleMat);
-    mesh.position.set(x, y, z);
-    const light = new THREE.PointLight(color, 14, 16, 2);
-    light.position.set(x, y, z);
-    this.scene.add(mesh, light);
-    this.fx.push({ obj: mesh, light, life: 0.07, max: 0.07 });
-  }
-
-  private spawnTracer(x: number, z: number) {
-    const y = 1.35 + Math.random() * 0.8;
-    const a = new THREE.Vector3(x + (Math.random() - 0.5) * 5, y, z + (Math.random() - 0.5) * 5);
-    const b = a
-      .clone()
-      .add(new THREE.Vector3((Math.random() - 0.5) * 7, (Math.random() - 0.5) * 1.4, (Math.random() - 0.5) * 7));
-    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
-    const mat = new THREE.LineBasicMaterial({
-      color: Math.random() > 0.25 ? 0xfff6cf : 0xff5533,
-      transparent: true,
-      opacity: 0.95
-    });
-    const line = new THREE.Line(geo, mat);
-    this.scene.add(line);
-    this.fx.push({ obj: line, life: 0.11, max: 0.11 });
-  }
-
-  private spawnQuietPulse(x: number, z: number) {
-    const light = new THREE.PointLight(0x3aa0ff, 3.5, 14, 2);
-    light.position.set(x, 2.2, z);
-    this.scene.add(light);
-    this.fx.push({ obj: light, light, life: 0.35, max: 0.35 });
-  }
-
-  private stepAction() {
-    const now = performance.now();
-    if (this.actionT0 && (this.actionCars.length || this.crowd.length)) {
-      const k = Math.min(1, (now - this.actionT0) / 1000);
-      const ease = k * k * (3 - 2 * k);
-      for (const c of this.actionCars) {
-        c.mesh.position.x = c.sx + (c.tx - c.sx) * ease;
-        c.mesh.position.z = c.sz + (c.tz - c.sz) * ease;
-        c.mesh.rotation.y = Math.atan2(c.tx - c.sx, c.tz - c.sz);
-      }
-      for (const p of this.crowd) {
-        p.mesh.position.lerpVectors(p.from, p.to, ease);
-        p.mesh.position.y = Math.abs(Math.sin(now / 140 + p.bob)) * 0.16;
-        p.mesh.rotation.y = Math.atan2(p.to.x - p.from.x, p.to.z - p.from.z);
-      }
-    }
-    if (!this.action.active) return;
-    if (now < this.action.next) return;
-    const { heat, x, z } = this.action;
-    if (heat === 'quiet') {
-      this.spawnQuietPulse(x + (Math.random() - 0.5) * 2, z + (Math.random() - 0.5) * 2);
-      this.action.next = now + 550;
-      return;
-    }
-    const n = heat === 'hot' ? 2 : 1;
-    for (let i = 0; i < n; i++) {
-      const mx = x + (Math.random() - 0.5) * 4.5;
-      const mz = z + (Math.random() - 0.5) * 4.5;
-      this.spawnMuzzle(mx, 1.5 + Math.random() * 1.2, mz, heat === 'hot' ? 0xffe7a0 : 0xffc14d);
-      this.spawnTracer(x, z);
-    }
-    this.action.next = now + (heat === 'hot' ? 90 : 260);
-  }
-
-  private stepFx(dt: number) {
-    for (let i = this.fx.length - 1; i >= 0; i--) {
-      const f = this.fx[i];
-      f.life -= dt;
-      const k = Math.max(0, f.life / f.max);
-      if (f.light) f.light.intensity = 14 * k;
-      const mat = (f.obj as THREE.Line).material as THREE.Material | undefined;
-      if (mat && (mat as THREE.Material & { transparent?: boolean }).transparent && 'opacity' in mat) {
-        (mat as THREE.Material & { opacity: number }).opacity = k;
-      }
-      if (f.life <= 0) {
-        this.scene.remove(f.obj);
-        if (f.light && f.light !== f.obj) this.scene.remove(f.light);
-        const geo = (f.obj as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
-        if (geo && geo !== this.muzzleGeo) geo.dispose();
-        if (f.obj !== f.light) {
-          const m = (f.obj as THREE.Mesh).material as THREE.Material | undefined;
-          if (m && m !== this.muzzleMat) m.dispose();
-        }
-        this.fx.splice(i, 1);
-      }
-    }
-  }
-
-  private stepFly() {
-    if (!this.fly.active) return;
-    const k = Math.min(1, (performance.now() - this.fly.t0) / this.fly.dur);
-    const s = k * k * (3 - 2 * k);
-    this.camera.position.lerpVectors(this.fly.fromPos, this.fly.toPos, s);
-    this.controls.target.lerpVectors(this.fly.fromTarget, this.fly.toTarget, s);
-    if (k >= 1) {
-      this.fly.active = false;
-      this.camera.position.copy(this.fly.toPos);
-      this.controls.target.copy(this.fly.toTarget);
-      if (!this.action.active) {
-        this.cameraLock = false;
-        this.controls.enabled = true;
-      }
-    }
-  }
-
   private sky!: THREE.Mesh;
   private skyU = { top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() } };
   /** Gradient sky dome that follows the camera (cheap on every quality level; the HDRI only lights the scene). */
@@ -1086,110 +803,6 @@ export class CityScene {
     }
   }
 
-  syncIncidents(incidents: Incident[]) {
-    const activeIds = new Set(
-      incidents.filter((i) => i.status !== 'resolved' && i.status !== 'failed').map((i) => i.id)
-    );
-
-    for (const [id, g] of this.incidentMarkers) {
-      if (!activeIds.has(id)) {
-        this.markerRoot.remove(g);
-        this.incidentMarkers.delete(id);
-        const spr = this.labelSprites.get(id);
-        if (spr) {
-          this.markerRoot.remove(spr);
-          this.labelSprites.delete(id);
-        }
-      }
-    }
-
-    for (const inc of incidents) {
-      if (inc.status === 'resolved' || inc.status === 'failed') continue;
-      let g = this.incidentMarkers.get(inc.id);
-      if (!g) {
-        g = this.createIncidentMarker(inc);
-        this.incidentMarkers.set(inc.id, g);
-        this.markerRoot.add(g);
-        const label = this.createTextSprite(`${inc.title} — نشط`, '#ff4d6d');
-        label.position.set(inc.x, 6.5, inc.z);
-        label.userData.labelText = `${inc.title} — نشط`;
-        label.userData.labelColor = '#ff4d6d';
-        this.labelSprites.set(inc.id, label);
-        this.markerRoot.add(label);
-
-        for (let i = 0; i < Math.min(3, 1 + Math.floor(inc.severity / 2)); i++) {
-          const car = this.makePoliceCar(i === 0 ? 0x111111 : 0x1a3a6e);
-          car.userData.flashing = true;
-          car.position.set(inc.x + (i - 1) * 3.2, 0.05, inc.z + 3.5);
-          car.rotation.y = Math.PI * (0.1 * i);
-          g.add(car);
-          this.flashLights.push(...(car.userData.lights || []));
-        }
-      }
-      g.position.set(inc.x, 0, inc.z);
-      const selected = this.selectedIncidentId === inc.id;
-      g.userData.selected = selected;
-      const ring = g.userData.ring as THREE.Mesh | undefined;
-      if (ring) {
-        (ring.material as THREE.MeshBasicMaterial).color.setHex(selected ? 0xffd24d : 0xff3355);
-        ring.scale.setScalar(selected ? 1.25 : 1);
-      }
-      const spr = this.labelSprites.get(inc.id);
-      if (spr) {
-        spr.position.set(inc.x, selected ? 7.2 : 6.5, inc.z);
-        spr.scale.set(selected ? 9.5 : 8, selected ? 2.4 : 2, 1);
-      }
-    }
-  }
-
-  setSelectedIncident(id: string | null) {
-    this.selectedIncidentId = id;
-  }
-
-  updateIncidentLabel(id: string, text: string, color = '#ff4d6d') {
-    const old = this.labelSprites.get(id);
-    if (!old) return;
-    if (old.userData.labelText === text && old.userData.labelColor === color) return;
-    const pos = old.position.clone();
-    this.markerRoot.remove(old);
-    (old.material as THREE.SpriteMaterial).map?.dispose();
-    (old.material as THREE.Material).dispose();
-    const label = this.createTextSprite(text, color);
-    label.position.copy(pos);
-    label.userData.labelText = text;
-    label.userData.labelColor = color;
-    this.labelSprites.set(id, label);
-    this.markerRoot.add(label);
-  }
-
-  private createIncidentMarker(inc: Incident) {
-    const g = new THREE.Group();
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(2.2, 2.8, 40),
-      new THREE.MeshBasicMaterial({ color: 0xff3355, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.12;
-    g.add(ring);
-
-    const beacon = new THREE.PointLight(0xff2244, 2.5, 22, 2);
-    beacon.position.set(0, 4, 0);
-    g.add(beacon);
-    g.userData.beacon = beacon;
-    g.userData.ring = ring;
-    g.userData.severity = inc.severity;
-
-    if (inc.severity >= 4) {
-      const pin = this.createTextSprite('SWAT', '#7b61ff');
-      pin.position.set(3.5, 4.2, 1);
-      g.add(pin);
-      const pin2 = this.createTextSprite('تأمين المحيط', '#3aa0ff');
-      pin2.position.set(-3.5, 3.8, -1);
-      g.add(pin2);
-    }
-    return g;
-  }
-
   createTextSprite(text: string, color = '#ffffff') {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
@@ -1216,31 +829,6 @@ export class CityScene {
     const spr = new THREE.Sprite(mat);
     spr.scale.set(8, 2, 1);
     return spr;
-  }
-
-  /** Move a unit car toward incident; returns true when arrived */
-  driveUnitToward(unitId: string, x: number, z: number, speed: number, dt: number): boolean {
-    let car = this.unitCars.get(unitId);
-    if (!car) {
-      car = this.makePoliceCar();
-      car.position.set(this.hqPosition.x + 4, 0.05, this.hqPosition.z + 8);
-      car.userData.unitId = unitId;
-      car.userData.flashing = true;
-      this.carRoot.add(car);
-      this.unitCars.set(unitId, car);
-      if (car.userData.lights) this.flashLights.push(...car.userData.lights);
-    }
-    car.userData.flashing = true;
-    const pos = car.position;
-    const dx = x - pos.x;
-    const dz = z - pos.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist < 1.2) return true;
-    const step = Math.min(dist, speed * dt);
-    pos.x += (dx / dist) * step;
-    pos.z += (dz / dist) * step;
-    car.rotation.y = Math.atan2(dx, dz);
-    return false;
   }
 
   // adaptive resolution: if the frame rate stays low, lower the render scale step by step (never below 0.6)
@@ -1278,10 +866,7 @@ export class CityScene {
       else this.renderer.render(this.scene, this.camera);
       return;
     }
-    this.stepFly();
-    this.stepAction();
-    this.stepFx(dt);
-    if (!this.cameraLock) this.controls.update();
+    this.controls.update();
     const t = this.clock.elapsedTime;
 
     if (this.helo?.userData.rotors) {
@@ -1296,17 +881,6 @@ export class CityScene {
       const L = this.flashLights[i];
       const on = i % 2 === 0 ? pulse > 0.5 : pulse <= 0.5;
       L.intensity = on ? 3.2 : 0.05;
-    }
-
-    for (const g of this.incidentMarkers.values()) {
-      const ring = g.userData.ring as THREE.Mesh | undefined;
-      if (ring) {
-        const s = 1 + Math.sin(t * 4) * 0.08;
-        ring.scale.set(s, s, s);
-        (ring.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.sin(t * 5) * 0.25;
-      }
-      const beacon = g.userData.beacon as THREE.PointLight | undefined;
-      if (beacon) beacon.intensity = 1.5 + Math.sin(t * 6) * 1.2;
     }
 
     if (this.nightFactor > 0.2) {

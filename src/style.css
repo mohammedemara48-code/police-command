@@ -3457,3 +3457,133 @@ html.cutscene #street-bark,
 html.cutscene .street-bubble {
   visibility: hidden !important;
 }
+
+/* vehicle modes: the police HUD, radio and gun only exist in police mode */
+html:not([data-mode='police']) #street-obj,
+html:not([data-mode='police']) #street-hp,
+html:not([data-mode='police']) #street-radio,
+html:not([data-mode='police']) #street-tut,
+html:not([data-mode='police']) #street-ret,
+html:not([data-mode='police']) #street-bark,
+html:not([data-mode='police']) .street-actions button[data-act='shoot'],
+html:not([data-mode='police']) .street-actions button[data-act='order'],
+html:not([data-mode='police']) .street-actions button[data-act='cuff'],
+html:not([data-mode='police']) .street-actions button[data-act='hub'],
+html:not([data-mode='police']) .street-actions button[data-act='siren'],
+html:not([data-mode='police']) .topbar .res.money,
+html:not([data-mode='police']) .topbar .res.stars,
+html:not([data-mode='police']) .topbar .res.alerts {
+  display: none !important;
+}
+html:not([data-mode='taxi']) #street-taxi {
+  display: none;
+}
+.street-actions button[data-act='veh'] {
+  display: none;
+}
+html.onfoot .street-actions button[data-act='veh'] {
+  display: inline-block;
+}
+#street-taxi {
+  position: absolute;
+  top: calc(58px + env(safe-area-inset-top));
+  right: 10px;
+  left: 132px;
+  z-index: 40;
+  pointer-events: none;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(8, 14, 22, 0.82);
+  border: 1px solid rgba(255, 210, 61, 0.45);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#street-taxi .tx-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #ffd23d;
+  font-weight: 800;
+}
+#street-taxi .tx-day {
+  color: #7dff9a;
+}
+#street-taxi .tx-state b {
+  color: #ffffff;
+}
+#street-taxi .tx-meter {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 2px;
+}
+#street-taxi .tx-meter small {
+  opacity: 0.7;
+}
+#street-taxi .tx-meter b {
+  font-size: 20px;
+  color: #ffd23d;
+  font-variant-numeric: tabular-nums;
+}
+#street-taxi .tx-seats {
+  margin-inline-start: auto;
+  letter-spacing: 1px;
+}
+#street-taxi .tx-riders {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+#street-taxi .tx-riders li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#street-taxi .tx-riders em {
+  opacity: 0.75;
+  font-style: normal;
+  font-size: 11px;
+}
+#street-taxi .pat {
+  margin-inline-start: auto;
+  width: 54px;
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+#street-taxi .pat u {
+  display: block;
+  height: 100%;
+  background: #7dff9a;
+}
+#street-taxi .pat.mid u {
+  background: #ffd23d;
+}
+#street-taxi .pat.low u {
+  background: #ff5a5a;
+}
+#street-taxi .tx-foot {
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+#street-taxi .tx-toast {
+  position: absolute;
+  inset-inline-end: 10px;
+  bottom: -34px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: #1c8a4a;
+  font-weight: 800;
+  font-size: 15px;
+}
+@media (max-width: 560px) {
+  #street-taxi {
+    left: 10px;
+    top: calc(176px + env(safe-area-inset-top));
+  }
+}
