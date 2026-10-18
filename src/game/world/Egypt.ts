@@ -1,9 +1,11 @@
 /**
- * Egyptian street identity, drawn in code: apartment blocks (red-brick and plastered), blue road signs,
- * striped kerbs, the taxi roof sign and microbus roof rack, and rolling wheels for the car models.
+ * Egyptian street identity: apartment blocks (concrete frames with plaster or brick infill, Belle Epoque and
+ * modernist facades), blue road signs, striped kerbs, the taxi roof sign and microbus roof rack, and rolling wheels.
  */
 import * as THREE from 'three';
-import { Batch } from './Environment';
+import { Batch, surface } from './Environment';
+import { facadeMaterial } from './Facade';
+import type { FacadeStyle } from '../logic/districts';
 
 const FLOOR = 3;
 const BAY = 3;
@@ -23,82 +25,52 @@ function canvasTex(c: HTMLCanvasElement, repeat = true) {
   return t;
 }
 
-/** One bay of one floor (3 m x 3 m): wall + window. */
-function facadeCanvas(kind: 'brick' | 'plaster', seed: number) {
-  const [c, x] = canvas(128, 128);
-  if (kind === 'brick') {
-    x.fillStyle = '#9a4a32';
-    x.fillRect(0, 0, 128, 128);
-    for (let r = 0; r < 128 / 6; r++)
-      for (let k = -1; k < 128 / 16 + 1; k++) {
-        const v = 120 + ((r * 31 + k * 17 + seed) % 40);
-        x.fillStyle = `rgb(${v + 20},${v / 2.1},${v / 3.2})`;
-        x.fillRect(k * 16 + (r % 2) * 8 + 1, r * 6 + 1, 14, 4.5);
-      }
-    // grey concrete frame (column + floor slab), the classic unfinished block
-    x.fillStyle = '#9d9a94';
-    x.fillRect(0, 0, 10, 128);
-    x.fillRect(0, 116, 128, 12);
-  } else {
-    x.fillStyle = '#ffffff';
-    x.fillRect(0, 0, 128, 128);
-    x.fillStyle = 'rgba(0,0,0,0.06)';
-    for (let i = 0; i < 40; i++) x.fillRect((i * 37) % 128, (i * 53) % 128, 6, 3);
-    x.fillStyle = 'rgba(0,0,0,0.12)';
-    x.fillRect(0, 118, 128, 3);
-  }
-  // window with shutters / AC-stained frame
-  x.fillStyle = kind === 'brick' ? '#3a2a22' : '#d8d0c0';
-  x.fillRect(34, 26, 60, 70);
-  x.fillStyle = '#1d2a33';
-  x.fillRect(40, 32, 48, 58);
-  x.fillStyle = 'rgba(160,200,230,0.35)';
-  x.fillRect(42, 34, 20, 54);
-  if (kind === 'plaster' && seed % 3 === 0) {
-    x.fillStyle = '#6b4a2a';
-    for (let s = 0; s < 8; s++) x.fillRect(40, 32 + s * 7.5, 48, 4);
-  }
-  return c;
-}
-
-const facadeCache = new Map<string, THREE.MeshStandardMaterial>();
-export function facadeMat(kind: 'brick' | 'plaster', tint: number, seed = 0) {
-  const key = kind + tint + ':' + (seed % 3);
-  let m = facadeCache.get(key);
-  if (!m) {
-    m = new THREE.MeshStandardMaterial({ map: canvasTex(facadeCanvas(kind, seed % 3)), color: tint, roughness: 0.92 });
-    facadeCache.set(key, m);
-  }
-  return m;
-}
-
 const D = {
   slab: new THREE.MeshStandardMaterial({ color: 0xa8a49c, roughness: 0.95 }),
-  rail: new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.5, metalness: 0.5 }),
-  ac: new THREE.MeshStandardMaterial({ color: 0xeeeeea, roughness: 0.6 }),
-  dish: new THREE.MeshStandardMaterial({ color: 0xdcdcd8, roughness: 0.5, metalness: 0.2, side: THREE.DoubleSide }),
+  rail: new THREE.MeshStandardMaterial({ color: 0x2a2b2d, roughness: 0.55, metalness: 0.5 }),
+  ac: new THREE.MeshStandardMaterial({ color: 0xe4e4de, roughness: 0.6 }),
+  dish: new THREE.MeshStandardMaterial({ color: 0xcfcfca, roughness: 0.5, metalness: 0.2, side: THREE.DoubleSide }),
   tank: new THREE.MeshStandardMaterial({ color: 0x2d2d33, roughness: 0.7 }),
-  rebar: new THREE.MeshStandardMaterial({ color: 0x5a3a2a, roughness: 0.8 })
+  rebar: new THREE.MeshStandardMaterial({ color: 0x5a3a2a, roughness: 0.8 }),
+  cornice: new THREE.MeshStandardMaterial({ color: 0xd9d0bc, roughness: 0.9 })
 };
+let concreteMat: THREE.MeshStandardMaterial | null = null;
+/** Bare concrete for balcony slabs, parapets and roof slabs (ambientCG concrete, world-space UVs). */
+function concrete() {
+  if (!concreteMat) {
+    concreteMat = surface('concrete', 0xb4b0a8);
+    concreteMat.userData.uvSize = 1.6;
+  }
+  return concreteMat;
+}
 
-/** Box with UVs scaled so one texture repeat = one 3 m bay x one floor. */
-function wallGeo(w: number, h: number, d: number) {
-  const g = new THREE.BoxGeometry(w, h, d);
-  const uv = g.attributes.uv as THREE.BufferAttribute;
-  // faces: +x,-x,+y,-y,+z,-z (4 verts each)
-  const span = [
-    [d, h],
-    [d, h],
-    [w, d],
-    [w, d],
-    [w, h],
-    [w, h]
-  ];
-  for (let f = 0; f < 6; f++)
-    for (let v = 0; v < 4; v++) {
-      const i = f * 4 + v;
-      uv.setXY(i, (uv.getX(i) * span[f][0]) / BAY, (uv.getY(i) * span[f][1]) / FLOOR);
-    }
+/**
+ * Box with UVs scaled so one texture repeat = one 3 m bay x one floor, bays centred on the wall.
+ * Vertex colours darken the foot of the wall and vary each block a little, so rows of similar blocks differ.
+ */
+export function wallGeo(w: number, h: number, d: number, seed: number) {
+  const floors = Math.max(1, Math.round(h / FLOOR));
+  const g = new THREE.BoxGeometry(w, h, d, 1, floors, 1);
+  const p = g.attributes.position,
+    n = g.attributes.normal,
+    uv = g.attributes.uv as THREE.BufferAttribute;
+  const col = new Float32Array(p.count * 3);
+  const bays = (len: number) => Math.max(1, Math.floor(len / BAY));
+  const tone = 0.9 + (((seed * 37) % 17) / 17) * 0.14;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i),
+      y = p.getY(i) + h / 2,
+      z = p.getZ(i);
+    const nx = Math.abs(n.getX(i)),
+      ny = Math.abs(n.getY(i));
+    if (ny > 0.5) uv.setXY(i, x / BAY, z / BAY);
+    else if (nx > 0.5) uv.setXY(i, (z + d / 2 - (d - bays(d) * BAY) / 2) / BAY, y / FLOOR);
+    else uv.setXY(i, (x + w / 2 - (w - bays(w) * BAY) / 2) / BAY, y / FLOOR);
+    const foot = 0.58 + 0.42 * Math.min(1, y / 3.2);
+    const c = foot * tone * (ny > 0.5 ? 0.85 : 1);
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = c;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return g;
 }
 
@@ -112,40 +84,60 @@ export function egyptBlock(
   dz: number,
   side: number,
   seed: number,
-  look: { brick?: boolean; tint?: number } = {}
+  look: { brick?: boolean; tint?: number; style?: FacadeStyle; rebar?: boolean } = {}
 ) {
   const g = new THREE.Group();
   g.userData.static = true;
   const floors = Math.max(2, Math.round(h / FLOOR));
   const H = floors * FLOOR;
-  const brick = look.brick ?? seed % 3 === 0;
-  const tints = [0xe9d6b4, 0xdcc49a, 0xefe2cc, 0xd9b48a, 0xe6cfa8];
-  const tint = look.tint ?? tints[seed % tints.length];
-  const mat = brick ? facadeMat('brick', 0xffffff, seed) : facadeMat('plaster', tint, seed);
-  const wall = new THREE.Mesh(wallGeo(dx, H, dz), mat);
+  const brick = look.brick ?? seed % 7 === 0;
+  const style: FacadeStyle = brick ? 'brick' : (look.style ?? 'informal');
+  const tints = [0xe6dac2, 0xd6c6a6, 0xcbc8c0, 0xe9e4d8, 0xd1b887];
+  const tint = look.tint ?? tints[seed % tints.length]!;
+  const mat = facadeMaterial(style, tint, seed);
+  const wall = new THREE.Mesh(wallGeo(dx, H, dz, seed), mat);
   wall.position.y = H / 2;
   g.add(wall);
-  // roof slab; unfinished blocks keep rebar stubs sticking up
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(dx + 0.2, 0.25, dz + 0.2), D.slab);
+  // roof slab (a little proud of the wall); unfinished blocks keep rebar stubs sticking up
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(dx + 0.2, 0.25, dz + 0.2), concrete());
   roof.position.y = H + 0.12;
   g.add(roof);
   const b = new Batch();
   const out = -side; // street side, local x
   const fx = (out * dx) / 2;
   const bays = Math.max(1, Math.floor(dz / BAY));
+  const khedival = style === 'khedival';
+  const modern = style === 'modern';
   for (let f = 1; f < floors; f++) {
     for (let k = 0; k < bays; k++) {
       const z = -dz / 2 + BAY / 2 + k * BAY + (dz - bays * BAY) / 2;
       const r = (seed * 7 + f * 13 + k * 29) % 10;
       const y = f * FLOOR;
-      if (!brick && r < 5) {
-        b.box(D.slab, 0.9, 0.14, 2.4, fx + out * 0.45, y, z);
+      if (khedival) {
+        // stone balcony under the tall window on most floors, with an iron rail
+        if (r < 7 && f > 1) {
+          b.box(concrete(), 0.75, 0.16, 1.9, fx + out * 0.37, y, z, 0, 1.6);
+          b.box(D.rail, 0.04, 0.95, 1.9, fx + out * 0.72, y + 0.5, z);
+        }
+      } else if (modern) {
+        if (r < 8) b.box(concrete(), 1.1, 0.14, BAY - 0.2, fx + out * 0.55, y, z, 0, 1.6);
+      } else if (!brick && r < 5) {
+        b.box(concrete(), 0.9, 0.14, 2.4, fx + out * 0.45, y, z, 0, 1.6);
         b.box(D.rail, 0.05, 0.9, 2.4, fx + out * 0.88, y + 0.5, z);
         b.box(D.rail, 0.9, 0.9, 0.05, fx + out * 0.45, y + 0.5, z - 1.18);
         b.box(D.rail, 0.9, 0.9, 0.05, fx + out * 0.45, y + 0.5, z + 1.18);
       }
-      if (r === 6 || r === 8 || (brick && r < 2)) b.box(D.ac, 0.45, 0.42, 0.8, fx + out * 0.24, y + 1.6, z + 1.0);
+      if (!khedival && (r === 6 || r === 8 || (brick && r < 2))) b.box(D.ac, 0.45, 0.42, 0.8, fx + out * 0.24, y + 1.6, z + 1.0);
     }
+  }
+  if (khedival) {
+    // Belle Epoque cornice with a stepped crown, plus a plinth for the ground floor
+    b.box(D.cornice, 0.9, 0.35, dz + 0.3, fx + out * 0.35, H - 0.1, 0);
+    b.box(D.cornice, 0.55, 0.3, dz + 0.5, fx + out * 0.2, H + 0.2, 0);
+    b.box(D.cornice, 0.5, 0.9, dz + 0.1, fx + out * 0.05, H + 0.7, 0);
+  } else {
+    // flat roof parapet along the street edge
+    b.box(D.slab, 0.2, 0.7, dz, fx + out * 0.05, H + 0.6, 0);
   }
   const ry = H + 0.25;
   for (let i = 0; i < 1 + (seed % 3); i++) {
@@ -157,7 +149,7 @@ export function egyptBlock(
     b.box(D.rail, 0.05, 0.8, 0.05, fx * 0.6, ry + 0.4, dzz);
   }
   b.add(new THREE.CylinderGeometry(0.55, 0.55, 1.1, 10).translate(-fx * 0.4, ry + 0.55, 0), D.tank);
-  if (brick)
+  if (look.rebar ?? brick)
     for (const sx of [-1, 1])
       for (const sz of [-1, 1]) b.box(D.rebar, 0.06, 0.9, 0.06, (sx * dx) / 2.2, ry + 0.45, (sz * dz) / 2.2);
   b.flush(g, false);

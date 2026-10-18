@@ -41,16 +41,28 @@ describe('Cairo districts', () => {
     for (let i = 0; i < 100; i++) expect(hash01(i)).toBeLessThan(1);
   });
 
-  it('follows the brick share: Haram is mostly brick, downtown and Dokki mostly plaster', () => {
+  it('keeps bare brick a minority everywhere (Haram is mostly painted and weathered concrete)', () => {
     const share = (id: District) => {
       let n = 0;
       for (let seed = 0; seed < 2000; seed++) if (blockLook(id, seed).brick) n++;
       return n / 2000;
     };
-    expect(share('suburb')).toBeGreaterThan(0.6);
-    expect(share('suburb')).toBeLessThan(0.8);
-    expect(share('downtown')).toBeLessThan(0.2);
-    expect(share('corniche')).toBeLessThan(0.12);
+    expect(share('suburb')).toBeGreaterThan(0.02);
+    expect(share('suburb')).toBeLessThan(0.12);
+    expect(share('downtown')).toBeLessThan(0.06);
+    expect(share('corniche')).toBeLessThan(0.08);
+  });
+
+  it('gives each district its own facade style', () => {
+    const count = (id: District, style: string) => {
+      let n = 0;
+      for (let seed = 0; seed < 2000; seed++) if (blockLook(id, seed).style === style) n++;
+      return n / 2000;
+    };
+    expect(count('downtown', 'khedival')).toBeGreaterThan(0.6);
+    expect(count('suburb', 'khedival')).toBe(0);
+    expect(count('suburb', 'informal')).toBeGreaterThan(0.5);
+    expect(count('corniche', 'modern')).toBeGreaterThan(0.55);
   });
 
   it('builds Haram taller than downtown and Shubra the most crowded', () => {

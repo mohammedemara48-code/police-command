@@ -105,7 +105,7 @@ export class CityScene {
     this.scene.background = new THREE.Color(0x7eb6e8);
     this.scene.fog = new THREE.FogExp2(0x9ec4e8, 0.0045);
 
-    this.camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 400);
+    this.camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 1600);
     this.camera.position.set(42, 38, 48);
 
     this.controls = new OrbitControls(this.camera, canvas);
@@ -1011,12 +1011,15 @@ export class CityScene {
     this.nightFactor = THREE.MathUtils.clamp(0.55 - elev * 0.65, 0, 1);
     const day = 1 - this.nightFactor;
     const sample = this.sampleSky(hour);
+    // Cairo street air is dusty: pull the horizon and fog toward a warm beige while the player is on the street
+    const dusty = sample.fog.clone();
+    if (this.street?.active) dusty.lerp(new THREE.Color(0xd3c5a9), 0.5 * day);
 
     (this.scene.background as THREE.Color).copy(sample.sky);
     this.skyU.top.value.copy(sample.sky);
-    this.skyU.horizon.value.copy(sample.fog).lerp(new THREE.Color(0xffffff), 0.15 * day);
+    this.skyU.horizon.value.copy(dusty).lerp(new THREE.Color(0xffffff), 0.15 * day);
     if (this.scene.fog && this.scene.fog instanceof THREE.FogExp2) {
-      this.scene.fog.color.copy(sample.fog);
+      this.scene.fog.color.copy(dusty);
       this.scene.fog.density = 0.0022 + this.nightFactor * 0.0038;
     }
 
@@ -1035,7 +1038,7 @@ export class CityScene {
       this.sun.intensity *= 0.15;
       this.hemi.intensity *= 0.35;
     }
-    this.street?.setDaylight(day, this.sun.position, sample.sun, sample.fog);
+    this.street?.setDaylight(day, this.sun.position, sample.sun, dusty);
 
     this.ambient.color.set(day > 0.4 ? 0xd8e4f0 : 0x5a6e90);
     this.ambient.intensity = (0.6 + day * 0.35 + this.nightFactor * 0.35) * (this.street?.active ? 0.3 : 1);

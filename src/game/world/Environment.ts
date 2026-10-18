@@ -4,6 +4,7 @@ import { Water } from 'three/examples/jsm/objects/Water.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Q } from '../config/Quality';
+import { palm } from './Trees';
 
 const BASE = (import.meta.env?.BASE_URL ?? '/') + 'textures/';
 const loader = new THREE.TextureLoader();
@@ -21,19 +22,34 @@ function tex(file: string, srgb: boolean) {
   return t;
 }
 
-export type Surface = 'asphalt' | 'paving' | 'concrete' | 'sand' | 'rock';
+export type Surface = 'asphalt' | 'paving' | 'concrete' | 'sand' | 'rock' | 'desert' | 'pyramid';
 const matCache = new Map<string, THREE.MeshStandardMaterial>();
 
-/** Shared PBR material (ambientCG CC0 colour / normal / roughness maps). Geometry needs world-space UVs (see worldUV). */
+/** Texture set per surface: `lo` marks sets that also ship a 512 px colour map for low quality. */
+const SETS: Record<Surface, { base: string; lo: boolean }> = {
+  asphalt: { base: 'road', lo: true },
+  paving: { base: 'sidewalk', lo: true },
+  concrete: { base: 'concrete', lo: false },
+  sand: { base: 'sand', lo: false },
+  rock: { base: 'rock', lo: false },
+  desert: { base: 'desert', lo: true },
+  pyramid: { base: 'pyramid', lo: true }
+};
+
+/**
+ * Shared PBR material (CC0 photo textures from ambientCG and Poly Haven: colour / normal / roughness).
+ * Geometry needs world-space UVs (see worldUV). Low quality uses the small colour map and skips the normal map.
+ */
 export function surface(name: Surface, tint = 0xffffff, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
   const key = name + tint;
   let m = matCache.get(key);
   if (!m) {
+    const set = SETS[name];
     m = new THREE.MeshStandardMaterial({
       color: tint,
-      map: tex(`${name}_color.webp`, true),
-      roughnessMap: tex(`${name}_rough.webp`, false),
-      normalMap: tex(`${name}_normal.webp`, false),
+      map: tex(`${set.base}_color${set.lo && !Q.hdri ? '_lo' : ''}.webp`, true),
+      roughnessMap: tex(`${set.base}_rough.webp`, false),
+      normalMap: Q.hdri ? tex(`${set.base}_normal.webp`, false) : null,
       roughness: 1,
       metalness: 0,
       ...opts
@@ -95,8 +111,8 @@ export class Batch {
   }
   flush(group: THREE.Object3D, shadows = false) {
     for (const [mat, geos] of this.m) {
-      for (const g of geos)
-        for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+      const keep = (mat as THREE.MeshStandardMaterial).vertexColors ? ['position', 'normal', 'uv', 'color'] : ['position', 'normal', 'uv'];
+      for (const g of geos) for (const k of Object.keys(g.attributes)) if (!keep.includes(k)) g.deleteAttribute(k);
       const size = this.uvSize.get(mat);
       if (size) geos.forEach((g) => worldUV(g, size));
       const merged = mergeGeometries(geos, false);
@@ -114,10 +130,6 @@ export class Batch {
 
 // ---------- props ----------
 const M = {
-  trunk: new THREE.MeshStandardMaterial({ color: 0x6b5238, roughness: 0.95 }),
-  palmTrunk: new THREE.MeshStandardMaterial({ color: 0x8a7354, roughness: 0.95 }),
-  leaf: new THREE.MeshStandardMaterial({ color: 0x3f7a35, roughness: 0.8, side: THREE.DoubleSide }),
-  frond: new THREE.MeshStandardMaterial({ color: 0x4d8a3a, roughness: 0.75, side: THREE.DoubleSide }),
   metal: new THREE.MeshStandardMaterial({ color: 0x2b3036, roughness: 0.4, metalness: 0.7 }),
   wood: new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.75 }),
   bin: new THREE.MeshStandardMaterial({ color: 0x2f5f3e, roughness: 0.55, metalness: 0.3 }),
@@ -126,10 +138,10 @@ const M = {
   signBlue: new THREE.MeshStandardMaterial({ color: 0x1f5fb8, roughness: 0.5 }),
   white: new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.5 }),
   paint: new THREE.MeshStandardMaterial({
-    color: 0xe8e8e0,
-    roughness: 0.6,
-    emissive: 0x555555,
-    emissiveIntensity: 0.25
+    color: 0xc4c1b6,
+    roughness: 0.88,
+    emissive: 0x333333,
+    emissiveIntensity: 0.12
   }),
   yellow: new THREE.MeshStandardMaterial({
     color: 0xf0c040,
@@ -139,56 +151,6 @@ const M = {
   })
 };
 export const PROP_MATS = M;
-
-function frondGeo(len: number) {
-  const g = new THREE.PlaneGeometry(0.55, len, 1, 5);
-  g.translate(0, len / 2, 0);
-  g.rotateX(-Math.PI / 2); // lies along +z
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const z = p.getZ(i);
-    p.setY(i, 0.35 * z - 0.28 * z * z); // arc up then droop
-    p.setX(i, p.getX(i) * (1 - (z / len) * 0.75));
-  }
-  g.computeVertexNormals();
-  return g;
-}
-
-export function palm(b: Batch, x: number, z: number, h = 6 + Math.random() * 2) {
-  const lean = (Math.random() - 0.5) * 0.5;
-  const segs = 6;
-  let px = x,
-    py = 0;
-  for (let i = 0; i < segs; i++) {
-    const sh = h / segs;
-    const g = new THREE.CylinderGeometry(0.14 - i * 0.01, 0.2 - i * 0.012, sh, 7);
-    g.translate(px, py + sh / 2, z);
-    b.add(g, M.palmTrunk);
-    py += sh;
-    px += lean * (i / segs) * 0.5;
-  }
-  for (let i = 0; i < 9; i++) {
-    const g = frondGeo(2.4 + Math.random() * 0.6);
-    g.rotateY((i / 9) * Math.PI * 2 + Math.random() * 0.3);
-    g.translate(px, py, z);
-    b.add(g, M.frond);
-  }
-}
-
-export function tree(b: Batch, x: number, z: number) {
-  const h = 3.4 + Math.random() * 0.8;
-  const t = new THREE.CylinderGeometry(0.1, 0.15, h, 6);
-  t.translate(x, h / 2, z);
-  b.add(t, M.trunk);
-  for (let i = 0; i < 3; i++) {
-    const r = 0.75 + Math.random() * 0.3;
-    const f = new THREE.IcosahedronGeometry(r, 1);
-    f.translate(x + (Math.random() - 0.5) * 0.7, h + 0.2 + i * 0.4, z + (Math.random() - 0.5) * 0.7);
-    b.add(f, M.leaf);
-  }
-  // tree pit
-  b.box(M.metal, 1.3, 0.04, 1.3, x, 0.15, z);
-}
 
 export function bench(b: Batch, x: number, z: number, ry: number) {
   const rot = (gx: number, gz: number) => [

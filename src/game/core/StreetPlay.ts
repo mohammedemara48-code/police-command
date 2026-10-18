@@ -90,6 +90,8 @@ import {
   followPath,
   nearestNode
 } from '../world/City';
+import { palm, tree, flushPalms } from '../world/Trees';
+import { setPyramidHaze, updatePyramids } from '../world/Pyramids';
 import { egyptBlock, gantry, streetNameSign, kerbStripeMat, roofRack, taxiSign, rollWheels, type SignDest } from '../world/Egypt';
 import {
   surface,
@@ -101,8 +103,6 @@ import {
   bin,
   bench,
   roadSign,
-  palm,
-  tree,
   buildSea,
   corniche,
   CORNICHE,
@@ -534,9 +534,13 @@ export class StreetPlay {
       if (nearCross(z, 7) || Math.abs(z - STATION.z) < 8) continue;
       for (const side of [-1, 1]) {
         const zz = z + (side > 0 ? 5 : 0);
-        if (districtAt(zz) === 'corniche') palm(props, side * 5.1, zz + 2.5);
-        else if ((Math.floor(zz / 10) & 1) === 0 && (districtAt(zz) !== 'suburb' || (Math.floor(zz / 10) & 3) === 0))
-          tree(props, side * 5.1, zz);
+        const dd = districtAt(zz);
+        const slot = Math.floor(zz / 10);
+        if (dd === 'corniche') {
+          if (slot % 3 === 0) tree(props, side * 5.1, zz);
+          else palm(props, side * 5.1, zz + 2.5);
+        } else if (dd === 'port') tree(props, side * 5.1, zz); // Shubra Street is the old tree-lined avenue
+        else if (dd === 'downtown' ? (slot & 1) === 0 : (slot & 3) === 0) tree(props, side * 5.1, zz);
       }
     }
     props.flush(this.group, Q.shadows);
@@ -549,6 +553,7 @@ export class StreetPlay {
       this.group.add(halo);
       fx.glow(halo, 0xffc56a, 1.8);
     }
+    flushPalms(this.group);
 
     this.buildLights();
     this.buildBeacon();
@@ -599,9 +604,12 @@ export class StreetPlay {
     const take = (m: THREE.Mesh) => {
       const g = m.geometry.clone();
       g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
-      for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
-      if (!g.index) return null;
       const mat = m.material as THREE.Material;
+      const keep = (mat as THREE.MeshStandardMaterial).vertexColors
+        ? ['position', 'normal', 'uv', 'color']
+        : ['position', 'normal', 'uv'];
+      for (const k of Object.keys(g.attributes)) if (!keep.includes(k)) g.deleteAttribute(k);
+      if (!g.index) return null;
       if (!byMat.has(mat)) byMat.set(mat, []);
       byMat.get(mat)!.push(g);
       return true;
@@ -1580,7 +1588,11 @@ export class StreetPlay {
       }
     }
   }
-  private addShop(side: number, z: number, [name, color]: [string, string]) {
+  private addShop(side: number, z: number, [name, rawColor]: [string, string]) {
+    // street-level shop colours are sun-faded paint, not plastic
+    const hsl = { h: 0, s: 0, l: 0 };
+    new THREE.Color(rawColor).getHSL(hsl);
+    const color = '#' + new THREE.Color().setHSL(hsl.h, hsl.s * 0.62, hsl.l * 0.86).getHexString();
     const fx0 = side * 8.25;
     const rot = side > 0 ? -Math.PI / 2 : Math.PI / 2;
     const g = new THREE.Group();
@@ -1654,7 +1666,7 @@ export class StreetPlay {
   }
 
   private addCrosswalk(z: number) {
-    const m = this.mat(0xd8dde6, { roughness: 0.4, emissive: 0x8899aa, emissiveIntensity: 0.15 });
+    const m = this.mat(0x8f8c84, { roughness: 0.9, emissive: 0x222222, emissiveIntensity: 0.08 });
     for (let i = -3; i <= 3; i++) {
       this.group.add(this.box(0.45, 0.02, 7.6, m, i * 0.7, 0.11, z));
     }
@@ -2270,7 +2282,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       this.key.color.copy(sunColor);
       this.key.intensity = 0.35 + day * 1.75;
     }
-    void haze;
+    setPyramidHaze(haze, day);
     // street lamps only glow once the light drops
     const lampOn = THREE.MathUtils.smoothstep(1 - day, 0.25, 0.7);
     for (const h of this.halos) (h as unknown as { intensity: number }).intensity = 2.5 * lampOn;
@@ -3322,6 +3334,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.stepPeds(dt);
     this.stepStrollers(dt);
     this.sea?.update(dt);
+    updatePyramids((this.inCar ? this.car.position : this.player.position).z);
     this.stepTraffic(dt);
     this.stepChase(dt);
     this.stepTutorial(dt);

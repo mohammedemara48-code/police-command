@@ -3,7 +3,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Q } from '../config/Quality';
 import { surface, worldUV, segments, PROP_MATS } from './Environment';
-import { DISTRICT_NAMES, DISTRICT_STYLES, districtAt, type District } from '../logic/districts';
+import { buildPyramids } from './Pyramids';
+import { wallGeo } from './Egypt';
+import { facadeMaterial } from './Facade';
+import { DISTRICT_NAMES, DISTRICT_STYLES, blockLook, districtAt, type District } from '../logic/districts';
 
 export { DISTRICT_NAMES, districtAt, type District };
 
@@ -35,54 +38,7 @@ export function onFoot(x: number, z: number) {
 /** cross streets cut through the main-avenue building rows */
 export const nearCross = (z: number, m = 8) => CROSS_Z.some((c) => Math.abs(c - z) < m);
 
-function windowTex() {
-  const c = document.createElement('canvas');
-  c.width = 64;
-  c.height = 128;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, 64, 128);
-  for (let y = 6; y < 128; y += 16)
-    for (let x = 6; x < 64; x += 14) {
-      const on = Math.random() < 0.45;
-      g.fillStyle = on ? (Math.random() < 0.5 ? '#ffd890' : '#bfe0ff') : '#11161c';
-      g.fillRect(x, y, 8, 9);
-    }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-const BRICK = [0xa04e36, 0x9a4a32, 0xb05a3c, 0x8e4430];
-
-/** Colour of one distant block: red brick with the district's brick share, else one of its plaster tints. */
-function blockColor(d: District, r: number, r2: number) {
-  const st = DISTRICT_STYLES[d];
-  if (r < st.brick) return BRICK[Math.floor(r2 * BRICK.length)];
-  return st.tints[Math.floor(r2 * st.tints.length)];
-}
-
 const FLOOR_H = 3;
-
-/** Three pyramids on the skyline beyond the Haram end of the avenue (three plain meshes, no textures). */
-function addPyramids(group: THREE.Group) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xd8bd88, roughness: 1, flatShading: true });
-  // [x, z, base width, height]
-  for (const [x, z, base, h] of [
-    [55, -175, 92, 57],
-    [-25, -215, 80, 50],
-    [-85, -250, 44, 27]
-  ]) {
-    const g = new THREE.ConeGeometry(base / Math.SQRT2, h, 4, 1);
-    g.rotateY(Math.PI / 4);
-    g.translate(0, h / 2, 0);
-    const m = new THREE.Mesh(g, mat);
-    m.position.set(x, 0, z);
-    m.userData.city = true;
-    group.add(m);
-  }
-}
 
 export function buildCity(group: THREE.Group, _low: boolean) {
   const rnd = mulberry(7);
@@ -132,37 +88,27 @@ export function buildCity(group: THREE.Group, _low: boolean) {
   mk(kerbGeos, surface('concrete', 0xcfcac2), 1.2);
   mk(lineGeos, PROP_MATS.paint);
 
-  // ground plane for block interiors; the Haram end of the avenue is sandy desert ground
-  const gz0 = CITY.z0 - 30,
-    gz1 = CITY.z1 + 10,
+  // ground: dusty earth between the blocks, open desert beyond the Haram end of the avenue
+  const gz1 = CITY.z1 + 10,
     sandEnd = -45;
-  const groundPart = (za: number, zb: number, color: number) => {
-    const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(CITY.x1 - CITY.x0 + 60, zb - za),
-      new THREE.MeshStandardMaterial({ color, roughness: 1 })
-    );
-    m.rotation.x = -Math.PI / 2;
+  const groundPart = (za: number, zb: number, w: number, tint: number, size: number) => {
+    const g = new THREE.PlaneGeometry(w, zb - za);
+    g.rotateX(-Math.PI / 2);
+    worldUV(g, size);
+    const m = new THREE.Mesh(g, surface('desert', tint));
     m.position.set(0, 0.005, (za + zb) / 2);
+    m.receiveShadow = true;
+    m.userData.city = true;
     group.add(m);
   };
-  groundPart(gz0, sandEnd, 0xb59a6a);
-  groundPart(sandEnd, gz1, 0x4d5a48);
-  addPyramids(group);
+  groundPart(CITY.z0 - 30, sandEnd, CITY.x1 - CITY.x0 + 60, 0xd9c8a2, 12);
+  groundPart(sandEnd, gz1, CITY.x1 - CITY.x0 + 60, 0x8f8676, 9);
+  groundPart(-1500, CITY.z0 - 30, 2600, 0xd9c8a2, 16);
+  buildPyramids(group);
 
-  // blocks: one InstancedMesh per block (a chunk), so off-screen blocks are culled as a unit
-  const tex = windowTex();
-  const bmat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 0.75,
-    emissive: 0xffffff,
-    emissiveMap: tex,
-    emissiveIntensity: 0.9
-  });
-  const box = new THREE.BoxGeometry(1, 1, 1);
-  box.translate(0, 0.5, 0);
-  const m4 = new THREE.Matrix4();
-  const col = new THREE.Color();
+  // blocks: merged per city block and facade material, so off-screen blocks are culled as a unit
   let blocks = 0;
+  let seed = 100;
   for (let i = 0; i < AVENUES_X.length - 1; i++) {
     for (let j = 0; j < CROSS_Z.length - 1; j++) {
       const bx0 = AVENUES_X[i] + ROAD_W / 2 + 3,
@@ -171,9 +117,8 @@ export function buildCity(group: THREE.Group, _low: boolean) {
         bz1 = CROSS_Z[j + 1] - ROAD_W / 2 - 3;
       const midZ = (bz0 + bz1) / 2;
       const d = districtAt(midZ);
-      const items: { x: number; z: number; w: number; dd: number; h: number; c: number }[] = [];
+      const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
       const step = d === 'downtown' ? 13 : d === 'suburb' ? 11 : 12;
-      const st = DISTRICT_STYLES[d];
       for (let x = bx0; x < bx1 - 4; x += step) {
         for (let z = bz0; z < bz1 - 4; z += step) {
           // keep the existing main-avenue rows untouched
@@ -182,23 +127,28 @@ export function buildCity(group: THREE.Group, _low: boolean) {
           if (!edge && d !== 'downtown' && d !== 'port') continue; // courtyards in residential blocks
           const w = step - 2 - rnd() * 2,
             dd = step - 2 - rnd() * 2;
-          const c = blockColor(d, rnd(), rnd());
-          const floors = st.floorsMin + Math.floor(rnd() * (st.floorsMax - st.floorsMin + 1));
-          items.push({ x: x + w / 2, z: z + dd / 2, w, dd, h: floors * FLOOR_H, c });
+          const look = blockLook(d, ++seed);
+          const h = look.floors * FLOOR_H;
+          const g = wallGeo(w, h, dd, seed);
+          // roofs are plain dark concrete, not painted wall
+          const nrm = g.attributes.normal,
+            col = g.attributes.color as THREE.BufferAttribute;
+          for (let v = 0; v < nrm.count; v++)
+            if (nrm.getY(v) > 0.5) col.setXYZ(v, 0.42, 0.41, 0.4);
+          g.translate(x + w / 2, h / 2, z + dd / 2);
+          const mat = facadeMaterial(look.style, look.tint, seed);
+          if (!byMat.has(mat)) byMat.set(mat, []);
+          byMat.get(mat)!.push(g);
         }
       }
-      if (!items.length) continue;
-      const im = new THREE.InstancedMesh(box, bmat, items.length);
-      items.forEach((t, k) => {
-        m4.makeScale(t.w, t.h, t.dd).setPosition(t.x, 0, t.z);
-        im.setMatrixAt(k, m4);
-        im.setColorAt(k, col.setHex(t.c));
-      });
-      im.computeBoundingSphere();
-      im.castShadow = false;
-      im.receiveShadow = false;
-      im.userData.city = true;
-      group.add(im);
+      for (const [mat, geos] of byMat) {
+        const mesh = new THREE.Mesh(mergeGeometries(geos, false)!, mat);
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+        mesh.userData.city = true;
+        group.add(mesh);
+        geos.forEach((g) => g.dispose());
+      }
       blocks++;
     }
   }

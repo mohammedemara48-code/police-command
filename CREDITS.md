@@ -42,11 +42,21 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 
 ## Environment
 
-- Road asphalt `Asphalt025C`, sidewalk paving `PavingStones092`, kerbs/sea wall `Concrete034`, beach sand `Ground054` and breakwater rocks `Rock030` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).
+- Kerbs/sea wall `Concrete034`, beach sand `Ground054` and breakwater rocks `Rock030` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).
 - Sky lighting: "Kloofendal 48d Partly Cloudy (Pure Sky)" HDRI from Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky), CC0 (`sky_1k.hdr`).
 - Egyptian street set (apartment blocks, road signs, striped kerbs, taxi roof sign, microbus roof rack, patrol door decals): drawn in code for this project (`src/game/world/Egypt.ts`), MIT like the rest of the code.
 - Water normal map `waternormals.jpg` and the `Water` shader from the three.js examples (https://github.com/mrdoob/three.js), MIT.
-- Shop windows and their goods, street lamps, palms, trees, benches, bins, signs and the corniche railing are built in code.
+- Shop windows and their goods, street lamps, benches, bins, signs and the corniche railing are built in code.
 
 ## VIP escort (v1.6)
 - No new downloaded assets. The VIP car reuses the existing CC0 sedan model (`car-sedan2`, tinted at runtime); the Egyptian pennants and the ⭐ marker are drawn procedurally on a canvas.
+
+## Realistic districts
+All CC0. Textures were cropped, made seamless where needed, resized (1k, plus a 512 px colour map for low quality) and re-encoded as WebP; the road/pavement/ground/pyramid sets also ship normal and roughness maps. Rob Tuytel, Rico Cilliers and the other Poly Haven authors dedicate their work to the public domain.
+- Facade and wall photo textures (`wall_concrete`, `wall_rough`, `wall_stucco`, `wall_peel`, `wall_brick`): Poly Haven "Concrete Layers" (https://polyhaven.com/a/concrete_layers), "Rough Concrete" (https://polyhaven.com/a/rough_concrete), "Beige Wall 002" (https://polyhaven.com/a/beige_wall_002), "White Rough Plaster" (https://polyhaven.com/a/white_rough_plaster) and "Brick Wall 006" (https://polyhaven.com/a/brick_wall_006). Windows, shutters, balconies, stains and cornices are painted over them in code (`src/game/world/Facade.ts`).
+- Road (`road_*`): Poly Haven "Asphalt 02" (https://polyhaven.com/a/asphalt_02). Pavement (`sidewalk_*`): Poly Haven "Concrete Pavement" (https://polyhaven.com/a/concrete_pavement).
+- Pyramid stone (`pyramid_*`): Poly Haven "Sandstone Blocks 05" (https://polyhaven.com/a/sandstone_blocks_05). Desert ground (`desert_*`): Poly Haven "Sand 01" (https://polyhaven.com/a/sand_01).
+- Street tree leaves (`leaves_frond.webp`, three frond scans with alpha) and bark (`bark.webp`): the texture scans of Poly Haven "Jacaranda Tree" (https://polyhaven.com/a/jacaranda_tree). The tree models themselves are built in code from leaf cards (`src/game/world/Trees.ts`).
+- Date palm (`models/palm-date.glb`): "Mature date palm tree" by Innerscene, CC0 - https://www.innerscene.com/tools/library/3d-parts/mature-date-palm-tree-af8bdc6f. Simplified and compressed with glTF-Transform (meshopt, WebP 256 px).
+- The Giza pyramids are modelled in code (`src/game/world/Pyramids.ts`) from published dimensions; see `docs/DISTRICT_REFERENCE.md`.
+- Wikimedia Commons photographs listed in `docs/DISTRICT_REFERENCE.md` were studied as visual reference only; none of them ships with the game.
