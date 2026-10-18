@@ -3253,3 +3253,42 @@ html.cutscene .toast-stack {
     transition: none;
   }
 }
+
+/* ===== Street barks: small speech bubble above the status toast ===== */
+#street-bark {
+  position: fixed;
+  left: 50%;
+  bottom: calc(292px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 6px);
+  max-width: 76vw;
+  width: max-content;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 12px 6px;
+  border-radius: 14px;
+  background: rgba(6, 12, 22, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font:
+    700 14px/1.4 Cairo,
+    sans-serif;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+  z-index: 59;
+}
+#street-bark.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+#street-bark b {
+  font-size: 11px;
+  font-weight: 700;
+}
+html.cutscene #street-bark {
+  visibility: hidden !important;
+}

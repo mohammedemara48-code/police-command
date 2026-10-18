@@ -95,6 +95,10 @@ import { buildNile, type Sea } from '../world/Nile';
 import { setHaze } from '../world/Haze';
 import { LION_SPOTS } from '../logic/nile';
 import { setPyramidHaze, updatePyramids } from '../world/Pyramids';
+import { Barks } from '../ui/Barks';
+import { DAMAGE_WORDS, LANDMARK_BARK, STICKERS, type BarkId } from '../config/barks';
+import { damageWord } from '../logic/barks';
+import { rearSticker } from '../world/Stickers';
 import { egyptBlock, gantry, streetNameSign, kerbStripeMat, roofRack, taxiSign, rollWheels, type SignDest } from '../world/Egypt';
 import {
   surface,
@@ -331,6 +335,12 @@ export class StreetPlay {
   private siren = false;
   private damage = 0;
   private hitCool = 0;
+  // street barks (see config/barks.ts)
+  private barks = new Barks();
+  private hpLow = false;
+  private prevStars = 0;
+  private ambientT = 45;
+  private pedBarkT = 0;
   /** smoothed steering wheel, -1..1 */
   private steerCur = 0;
   private carMax = 16;
@@ -599,6 +609,12 @@ export class StreetPlay {
     };
     this.squad.onShot = () => {
       this.recoil = 1;
+      this.bark('shotFired');
+    };
+    this.squad.onEvent = (e) => {
+      const id: BarkId =
+        e === 'surrender' ? 'suspectSurrender' : e === 'flee' ? 'suspectRuns' : e === 'cuff' ? 'cuffing' : e;
+      this.bark(id);
     };
     this.buildGun();
     this.buildTrafficLights();
@@ -824,6 +840,7 @@ export class StreetPlay {
         g.position.x -= Math.cos(g.rotation.y) * 1.2;
         g.position.z += Math.sin(g.rotation.y) * 1.2;
         audio.sample('confirm', 0.6);
+        if (!this.spDui) this.bark('speederCaught');
         this.setStatus(
           this.spDui ? 'العربية وقفت. انزل وروح للسواق — خلي بالك.' : 'العربية وقفت على جنب. انزل واكتب المخالفة 📝'
         );
@@ -2106,6 +2123,12 @@ export class StreetPlay {
   private renderHud() {
     const q = this.squad;
     const stars = Math.round(q.threat);
+    if (q.hp <= 30 && q.hp > 0 && !this.hpLow) {
+      this.hpLow = true;
+      this.bark('lowHealth');
+    } else if (q.hp > 45) this.hpLow = false;
+    if (stars >= 3 && this.prevStars < 3) this.bark('backupCalled');
+    this.prevStars = stars;
     const ring = (cls: string, pct: number, icon: string, label: string) => {
       const v = Math.max(0, Math.min(100, Math.round(pct)));
       return `<div class="ring ${cls}${v <= 25 ? ' low' : ''}" role="meter" aria-label="${label}" aria-valuenow="${v}" aria-valuemin="0" aria-valuemax="100"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="15.5" pathLength="100"/><circle class="fg" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="${v} 100"/></svg><span>${icon}</span></div>`;
@@ -2533,6 +2556,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       fx.glow(lr, 0xff2244);
       fx.glow(lb, 0x2266ff);
     }
+    // rear-window slogan, one per car
+    g.add(rearSticker(STICKERS.patrol[Math.floor(Math.random() * STICKERS.patrol.length)]!, 1.25, -2.36, 0.78, {
+      ink: '#06142b',
+      fill: 'rgba(235,242,252,0.92)'
+    }));
     // Egyptian-style patrol car: realistic white sedan, blue band and "POLICE / الشرطة" on the doors, roof light bar
     models.dress(g, 'car-sedan2', { length: 4.7, tint: 0xf6f7f8 });
     for (const side of [-1, 1]) {
@@ -2592,6 +2620,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
           const r = roofRack(L * 0.7, 1.55);
           r.position.set(0, 2.17, -0.15);
           g.add(r);
+          g.add(rearSticker(STICKERS.microbus[(i * 3) % STICKERS.microbus.length]!, 1.3, -L / 2 - 0.03, 1.15));
         } else {
           const t = taxiSign();
           t.position.set(0, 1.42, -0.25);
@@ -2829,6 +2858,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.hudEl = ui.querySelector('#street-hp');
     this.hudHtml = '';
     this.radioEl = ui.querySelector('#street-radio');
+    this.barks.mount(ui);
     this.retEl = ui.querySelector('#street-ret');
     this.radioEl!.addEventListener('click', () => {
       this.radioT = 0;
@@ -2984,6 +3014,13 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (rb) rb.innerHTML = '<i>🛞</i><span>فرامل</span>';
   }
 
+  /** Street barks stay out of cutscenes, the tutorial, menus and radio calls; mission results may break in. */
+  private bark(id: BarkId, priority = false): boolean {
+    if (this.cut.active || this.tutOn || this.hubEl) return false;
+    if (!priority && (this.resultEl || this.radioEl?.classList.contains('show'))) return false;
+    return this.barks.say(id, priority) !== null;
+  }
+
   private statusT = 0;
   private setStatus(text: string) {
     if (!this.statusEl) return;
@@ -3074,7 +3111,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.flags = '';
   }
 
-  private finishMission(success: boolean, reason = '') {
+  private finishMission(success: boolean, reason = '', quiet = false) {
     if (this.msIdx < 0 || this.resultEl) return;
     if (this.tutOn) this.endTutorial(success);
     this.msIdx = -1;
@@ -3105,6 +3142,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         ? `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} في ${Math.round(this.msTime)} ثانية. +${100 + 50 * stars} خبرة.${after !== before ? ` 🎖 ترقية: بقيت ${after}!` : ''}`
         : `${reason || 'المهمة فشلت.'} جرّب تاني.`
     };
+    if (success) this.bark(after !== before ? 'rankUp' : 'missionComplete', true);
+    else if (!quiet) this.bark('missionFailed', true);
     this.lastResult = { success, levelId: lv.id };
     this.onReport?.(report);
     // progress is already saved above; the outro only delays the result card
@@ -3368,6 +3407,12 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.tickReticle();
     this.tickLights(dt);
     if (this.panicT > 0) this.panicT -= dt;
+    if (this.pedBarkT > 0) this.pedBarkT -= dt;
+    this.ambientT -= dt;
+    if (this.ambientT <= 0) {
+      this.ambientT = 55 + Math.random() * 40;
+      this.bark('monaQuip');
+    }
     this.stepRain(dt);
     this.stepLights();
     rollWheels(this.car, this.speed * dt);
@@ -3410,6 +3455,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const here = this.currentPlace();
     if (here.id !== this.placeId && !this.travel && !this.chasing) {
       this.placeId = here.id;
+      const landmark = LANDMARK_BARK[here.id];
+      if (landmark) this.bark(landmark);
     }
   }
 
@@ -3620,6 +3667,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       if (this.panicT > 0 && Math.abs(m.z - this.panicAt.z) < 30 && Math.abs(m.x - this.panicAt.x) < 30) {
         p.dir = m.z >= this.panicAt.z ? 1 : -1;
         speed = 4.2;
+        if (Math.abs(me.z - m.z) < 10) this.bark('pedScared');
       }
       m.z += p.dir * speed * dt;
       if (m.z > p.z1) p.dir = -1;
@@ -3634,6 +3682,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         if (Math.abs(dz) < 1.4 && Math.abs(dx) < 0.8 && Math.sign(dz) === p.dir) side += dx >= 0 ? -1 : 1;
       }
       if (!this.inCar && Math.abs(me.z - m.z) < 1.6 && Math.abs(me.x - m.x) < 1) side += me.x >= m.x ? -1.5 : 1.5;
+      if (!this.inCar && this.pedBarkT <= 0 && Math.abs(me.z - m.z) < 2.6 && Math.abs(me.x - m.x) < 2.6) {
+        // someone on the pavement has a word for the officer walking past
+        const r = Math.random();
+        if (this.bark(r < 0.5 ? 'pedGreet' : r < 0.75 ? 'gossipVendor' : 'gossipAhwa')) this.pedBarkT = 18;
+      }
       const home = m.x > 0 ? 6.5 : -6.5;
       m.x += side ? side * 1.6 * dt : (home - m.x) * dt * 0.8;
       m.x = m.x > 0 ? THREE.MathUtils.clamp(m.x, 5, 7.9) : THREE.MathUtils.clamp(m.x, -7.9, -5);
@@ -3709,7 +3762,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         ? pullOver(this.siren || this.chasing, near - sirenRangeBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }))
         : 0;
       t.side = (t.side ?? 0) + (want - (t.side ?? 0)) * Math.min(1, dt * 2);
-      if (want > 0 && near < 22) stop = true;
+      if (want > 0 && near < 22) {
+        stop = true;
+        if (near < 14) this.bark('trafficYields');
+      }
       const kerb = t.laneX > 0 ? 1 : -1;
       const wantX = t.laneX + kerb * (t.side ?? 0);
       t.mesh.position.x += (wantX - t.mesh.position.x) * Math.min(1, dt * 2.5);
@@ -3721,6 +3777,12 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
           t.mesh.position.z -= this.contact.nz * this.contact.depth * (1 - share);
           if (closing > 1) t.bumpT = 1.5;
         }
+      }
+      if (this.inCar && !t.bumpT && Math.abs(this.speed) > 8 && Math.abs(t.mesh.position.z - C.z) < 3.4) {
+        // passing close without touching
+        const gap = Math.abs(t.mesh.position.x - C.x);
+        if (gap > 1.9 && gap < 2.9) this.bark('nearMissCar');
+        else if (near < 7 && t.mesh.userData.vehicle === 'microbus') this.bark('gossipMicrobus');
       }
       if (t.bumpT && t.bumpT > 0) {
         t.bumpT -= dt;
@@ -3786,11 +3848,18 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (this.hitCool > 0) return;
     const dmg = hitDamage(v);
     if (dmg <= 0) return;
+    const was = this.damage;
     this.damage = Math.min(100, this.damage + armoredHit(dmg, progress.garage ?? { engine: 0, armor: 0, brakes: 0 }));
     this.hitCool = 0.6;
     audio.sample('crash', Math.min(1, v / 15));
     this.recoil = Math.min(1, v / 10);
-    this.setStatus(this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}%`);
+    const word = damageWord(this.damage, DAMAGE_WORDS);
+    this.setStatus(
+      this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}% — ${word}`
+    );
+    const band = (d: number) => DAMAGE_WORDS.findIndex((r) => d <= r.upTo);
+    const spoke = this.bark(dmg >= 14 ? 'crashHeavy' : 'crashLight');
+    if (band(this.damage) > band(was) && !spoke && !this.cut.active && !this.tutOn) this.barks.show('patrol', word);
   }
 
   private stepChase(dt: number) {
@@ -3903,8 +3972,13 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       lock: this.chaseLock
     });
     if (r === 'caught') this.caught();
-    else if (r === 'escaped') this.finishMission(false, 'العربية بعدت أوي وهربت.');
-    else if (r === 'timeout') this.finishMission(false, 'الوقت خلص والعربية هربت.');
+    else if (r === 'escaped') {
+      this.bark('suspectEscapes', true);
+      this.finishMission(false, 'العربية بعدت أوي وهربت.', true);
+    } else if (r === 'timeout') {
+      this.bark('suspectEscapes', true);
+      this.finishMission(false, 'الوقت خلص والعربية هربت.', true);
+    }
   }
 
   /** chase won: the car stops, the driver steps out with the scripted behaviour */

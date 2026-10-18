@@ -123,6 +123,8 @@ export class Squad {
   wardDmg = 0;
   onGunfire: ((x: number, z: number) => void) | null = null;
   onShot: (() => void) | null = null;
+  /** story beats the street barks listen for */
+  onEvent: ((e: 'surrender' | 'flee' | 'cuff' | 'reload' | 'outOfAmmo') => void) | null = null;
 
   constructor(
     private group: THREE.Group,
@@ -335,12 +337,12 @@ export class Squad {
   shoot(from: THREE.Vector3, yaw: number) {
     if (this.cool > 0 || this.reloadT > 0) return;
     if (this.ammo <= 0) {
-      this.reloadT = 1.3;
+      this.startReload();
       return;
     }
     this.cool = this.fireCool;
     this.ammo--;
-    if (this.ammo <= 0) this.reloadT = 1.3;
+    if (this.ammo <= 0) this.startReload();
     audio.gunshot();
     addStat('shots');
     this.onShot?.();
@@ -401,6 +403,11 @@ export class Squad {
     } else if (t.state === 'idle') t.state = t.b === 'fight' ? 'fight' : t.b === 'flee' ? 'flee' : 'hands';
   }
 
+  private startReload() {
+    this.reloadT = 1.3;
+    this.onEvent?.(this.reserve <= 0 ? 'outOfAmmo' : 'reload');
+  }
+
   /** frees the gunman's crate for the others */
   private release(s: Suspect) {
     if (s.ai.cover !== -1) this.covers[s.ai.cover]!.by = -1;
@@ -415,6 +422,7 @@ export class Squad {
     s.icon.material.map = this.icons.hands;
     s.icon.material.needsUpdate = true;
     s.icon.visible = true;
+    this.onEvent?.('surrender');
   }
 
   /** «استسلم!» — order the targeted suspect to give up */
@@ -425,6 +433,7 @@ export class Squad {
     if (s.b === 'surrender' || (s.state === 'idle' && s.b !== 'fight')) {
       if (s.b === 'flee' && Math.random() < 0.5) {
         s.state = 'flee';
+        this.onEvent?.('flee');
         return 'بيجري! الحقه.';
       }
       this.surrender(s);
@@ -436,6 +445,7 @@ export class Squad {
         return 'استسلم!';
       }
       s.state = 'flee';
+      this.onEvent?.('flee');
       return 'بيجري! الحقه.';
     }
     s.state = 'fight';
@@ -456,6 +466,7 @@ export class Squad {
     s.icon.visible = true;
     addStat('arrests');
     audio.click();
+    this.onEvent?.('cuff');
   }
 
   private tracer(a: THREE.Vector3, b: THREE.Vector3) {
