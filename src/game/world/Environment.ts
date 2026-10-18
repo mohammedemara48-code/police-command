@@ -1,6 +1,5 @@
 /** Street-level environment: PBR ground materials, kerbs, props, the sea and the corniche promenade. */
 import * as THREE from 'three';
-import { Water } from 'three/examples/jsm/objects/Water.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Q } from '../config/Quality';
@@ -10,7 +9,7 @@ const BASE = (import.meta.env?.BASE_URL ?? '/') + 'textures/';
 const loader = new THREE.TextureLoader();
 const texCache = new Map<string, THREE.Texture>();
 
-function tex(file: string, srgb: boolean) {
+export function tex(file: string, srgb: boolean) {
   let t = texCache.get(file);
   if (!t) {
     t = loader.load(BASE + file);
@@ -22,7 +21,7 @@ function tex(file: string, srgb: boolean) {
   return t;
 }
 
-export type Surface = 'asphalt' | 'paving' | 'concrete' | 'sand' | 'rock' | 'desert' | 'pyramid';
+export type Surface = 'asphalt' | 'paving' | 'concrete' | 'desert' | 'pyramid' | 'stone' | 'park' | 'steel';
 const matCache = new Map<string, THREE.MeshStandardMaterial>();
 
 /** Texture set per surface: `lo` marks sets that also ship a 512 px colour map for low quality. */
@@ -30,10 +29,11 @@ const SETS: Record<Surface, { base: string; lo: boolean }> = {
   asphalt: { base: 'road', lo: true },
   paving: { base: 'sidewalk', lo: true },
   concrete: { base: 'concrete', lo: false },
-  sand: { base: 'sand', lo: false },
-  rock: { base: 'rock', lo: false },
   desert: { base: 'desert', lo: true },
-  pyramid: { base: 'pyramid', lo: true }
+  pyramid: { base: 'pyramid', lo: true },
+  stone: { base: 'stone', lo: true },
+  park: { base: 'park', lo: true },
+  steel: { base: 'steel', lo: false }
 };
 
 /**
@@ -222,105 +222,40 @@ export function loadEnvironment(renderer: THREE.WebGLRenderer, scene: THREE.Scen
   return envP;
 }
 
-// ---------- sea + corniche ----------
+// ---------- corniche promenade ----------
 export const CORNICHE = { x0: -130, x1: 130, z0: 240.6, z1: 250, rail: 250.2 };
+/** half-width of the gap the Qasr El Nil bridge cuts through the promenade, wall and railing */
+export const BRIDGE_GAP = 7.9;
 
-export interface Sea {
-  update(dt: number): void;
-}
-
-export function buildSea(group: THREE.Group, sun: THREE.Vector3): Sea {
+export function buildPromenade(group: THREE.Group) {
   const b = new Batch();
-  const W = 800;
-  // promenade (paving), sea wall, railing
-  b.box(
-    surface('paving', 0xe8dcc8),
-    CORNICHE.x1 - CORNICHE.x0,
-    0.14,
-    CORNICHE.z1 - CORNICHE.z0,
-    0,
-    0.07,
-    (CORNICHE.z0 + CORNICHE.z1) / 2,
-    0,
-    2.2
-  );
-  b.box(surface('concrete', 0xe6dccb), CORNICHE.x1 - CORNICHE.x0, 0.62, 0.38, 0, 0.31, CORNICHE.rail, 0, 1.5);
-  b.box(surface('concrete', 0xd8cbb4), CORNICHE.x1 - CORNICHE.x0, 0.08, 0.5, 0, 0.66, CORNICHE.rail, 0, 1.5);
+  const spans: [number, number][] = [
+    [CORNICHE.x0, -BRIDGE_GAP],
+    [BRIDGE_GAP, CORNICHE.x1]
+  ];
+  const paving = surface('paving', 0xe8dcc8);
+  const wallMat = surface('concrete', 0xe6dccb);
+  const capMat = surface('concrete', 0xd8cbb4);
   const posts = new THREE.CylinderGeometry(0.035, 0.035, 0.6, 6);
-  const rails: THREE.BufferGeometry[] = [];
-  for (let x = CORNICHE.x0; x <= CORNICHE.x1; x += 2.2) {
-    const g = posts.clone();
-    g.translate(x, 1.0, CORNICHE.rail);
-    rails.push(g);
-  }
-  for (const y of [1.3, 0.98]) {
-    const r = new THREE.CylinderGeometry(0.035, 0.035, CORNICHE.x1 - CORNICHE.x0, 6);
-    r.rotateZ(Math.PI / 2);
-    r.translate(0, y, CORNICHE.rail);
-    rails.push(r);
-  }
-  rails.forEach((g) => b.add(g, M.metal));
-  // sand slope down to the waterline, plus a breakwater of rocks
-  const sand = new THREE.PlaneGeometry(W, 16, 1, 1);
-  sand.rotateX(-Math.PI / 2 + Math.atan2(0.9, 16));
-  sand.translate(0, -0.35, CORNICHE.rail + 8.2);
-  b.add(sand, surface('sand'), 3);
-  const rockMat = surface('rock', 0xbbb0a0);
-  for (let i = 0; i < (Q.lowDetailPeople ? 90 : 160); i++) {
-    const r = 0.5 + Math.random() * 0.9;
-    const g = new THREE.DodecahedronGeometry(r, 0);
-    g.scale(1.3, 0.7, 1);
-    g.rotateY(Math.random() * 6);
-    g.translate(-140 + Math.random() * 280, -0.2 + Math.random() * 0.3, CORNICHE.rail + 1.2 + Math.random() * 2.2);
-    b.add(g, rockMat, 1.4);
+  for (const [a, c] of spans) {
+    const w = c - a,
+      cx = (a + c) / 2;
+    b.box(paving, w, 0.14, CORNICHE.z1 - CORNICHE.z0, cx, 0.07, (CORNICHE.z0 + CORNICHE.z1) / 2, 0, 2.2);
+    b.box(wallMat, w, 0.62, 0.38, cx, 0.31, CORNICHE.rail, 0, 1.5);
+    b.box(capMat, w, 0.08, 0.5, cx, 0.66, CORNICHE.rail, 0, 1.5);
+    for (let x = a + 0.4; x <= c; x += 2.2) {
+      const g = posts.clone();
+      g.translate(x, 1.0, CORNICHE.rail);
+      b.add(g, M.metal);
+    }
+    for (const y of [1.3, 0.98]) {
+      const r = new THREE.CylinderGeometry(0.035, 0.035, w, 6);
+      r.rotateZ(Math.PI / 2);
+      r.translate(cx, y, CORNICHE.rail);
+      b.add(r, M.metal);
+    }
   }
   b.flush(group);
-
-  const normals = tex('waternormals.webp', false);
-  const geo = new THREE.PlaneGeometry(W, 420);
-  if (Q.water) {
-    const water = new Water(geo, {
-      textureWidth: 512,
-      textureHeight: 512,
-      waterNormals: normals,
-      sunDirection: sun.clone().normalize(),
-      sunColor: 0xffe2c0,
-      waterColor: 0x1e6a8a,
-      distortionScale: 2.2,
-      fog: true
-    });
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(0, -0.55, CORNICHE.rail + 214);
-    (water.material as THREE.ShaderMaterial).uniforms.size.value = 2.5;
-    group.add(water);
-    return {
-      update(dt) {
-        (water.material as THREE.ShaderMaterial).uniforms.time.value += dt * 0.6;
-      }
-    };
-  }
-  // light fallback: scrolling normal map + environment reflections (no extra render pass)
-  const n2 = normals.clone();
-  n2.repeat.set(60, 30);
-  n2.needsUpdate = true;
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x1d6585,
-    roughness: 0.12,
-    metalness: 0.55,
-    normalMap: n2,
-    normalScale: new THREE.Vector2(0.6, 0.6),
-    envMapIntensity: 1.4
-  });
-  const sea = new THREE.Mesh(geo, mat);
-  sea.rotation.x = -Math.PI / 2;
-  sea.position.set(0, -0.55, CORNICHE.rail + 214);
-  group.add(sea);
-  return {
-    update(dt) {
-      n2.offset.x += dt * 0.006;
-      n2.offset.y += dt * 0.011;
-    }
-  };
 }
 
 /** Corniche furniture: lamps (returned for glows), palms and benches along the promenade. */
@@ -328,6 +263,7 @@ export function corniche(group: THREE.Group) {
   const b = new Batch();
   const heads: THREE.Vector3[] = [];
   for (let x = CORNICHE.x0 + 6; x < CORNICHE.x1; x += 14) {
+    if (Math.abs(x) < 20) continue; // the bridge approach and its lions
     heads.push(...lamp(b, x, CORNICHE.rail - 0.6, 0, true).map((v) => v));
     palm(b, x + 7, CORNICHE.z0 + 1.8);
     bench(b, x + 3.5, CORNICHE.rail - 1.1, Math.PI);
