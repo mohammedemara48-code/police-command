@@ -10,12 +10,13 @@ import { PAVEMENT, ROAD_HALF, SQUARES, WORLD_BOX, toWorld } from '../logic/cairo
 import { blockLook, hash01 } from '../logic/districts';
 import { lots } from '../logic/lots';
 import { inRiver, net, rng } from '../logic/roadnet';
-import { armAxis, axisGreen, signalNodes } from '../logic/signals';
+import { armAxis, axisGreen } from '../logic/signals';
+import { propsIn } from '../logic/props';
 import { Batch, PROP_MATS as M, surface } from './Environment';
 import { wallGeo } from './Egypt';
 import { facadeMaterial } from './Facade';
 import { Soup } from './Soup';
-import { PAVE_Y, cornersAt, edgesIn, endMargins, pourRoads } from './roadMesh';
+import { PAVE_Y, edgesIn, pourRoads } from './roadMesh';
 import { buildWater, groundMats, pourBanks, pourGround } from './riverMesh';
 import { SHOP_COLS, SHOP_ROWS, SHOPS, TreeKit, lampAt, shopAtlas } from './streetKit';
 import { palmInstances, type PalmSpot } from './Trees';
@@ -86,7 +87,6 @@ export class OpenWorld {
   private chunks = new Map<number, Chunk>();
   private kit = new TreeKit();
   private water = buildWater();
-  private signals = signalNodes();
   private clock = 0;
   /** extra solid boxes (monuments, barrier arms, the tower) */
   readonly solids: OBB[] = [];
@@ -253,11 +253,13 @@ export class OpenWorld {
     // ground and the Nile quay
     const desert = new Soup(9, true),
       park = new Soup(9, true),
+      yard = new Soup(9, true),
       wall = new Soup(3.4),
       cap = new Soup(1.6);
-    pourGround(x0, z0, x1, z1, desert, park);
+    pourGround(x0, z0, x1, z1, desert, park, yard);
     pourBanks(x0, z0, x1, z1, wall, cap);
     out(desert, gm.desert);
+    out(yard, gm.yard);
     out(park, gm.park);
     out(wall, m.stone);
     out(cap, m.concrete);
@@ -274,7 +276,7 @@ export class OpenWorld {
       out(acc.paint, m.paint);
       this.bridges(edges, inside, chunk, out);
       this.buildings(x0, z0, x1, z1, chunk);
-      this.props(edges, inside, chunk, x0, z0);
+      this.props(chunk, x0, z0, x1, z1);
       this.perimeter(x0, z0, x1, z1, chunk, out);
     }
     this.group.add(chunk.group);
@@ -485,68 +487,24 @@ export class OpenWorld {
     }
   }
 
-  /** Lamps, trees, palms and traffic-light poles along the streets of the chunk. */
-  private props(
-    edges: ReturnType<typeof edgesIn>,
-    inside: (x: number, z: number) => boolean,
-    chunk: Chunk,
-    x0: number,
-    z0: number
-  ) {
+  /** Lamps, trees, palms and traffic-light poles of the chunk (planned for the whole world, checked against roads, lots and water). */
+  private props(chunk: Chunk, x0: number, z0: number, x1: number, z1: number) {
     const N = net();
     const b = new Batch();
     const palms: PalmSpot[] = [];
-    const L = lots();
-    for (const e of edges) {
-      const r = rng(e.id * 131 + 7);
-      const mg = endMargins(e);
-      const spacing = e.cls === 'arterial' ? 26 : e.cls === 'collector' ? 30 : 42;
-      const corniche = e.name.includes('كورنيش');
-      for (let s = mg.a + 5 + r() * 6, k = 0; s < e.len - mg.b - 5; s += spacing, k++) {
-        const p = N.at(e, s);
-        const sg = k % 2 ? 1 : -1;
-        const nx = -Math.cos(p.yaw) * 0 + Math.cos(p.yaw),
-          nz = -Math.sin(p.yaw);
-        const off = (e.half + 0.95) * sg;
-        const lx = p.x + nx * off,
-          lz = p.z + nz * off;
-        if (e.ring || !inside(lx, lz)) continue;
-        if (e.cls === 'local' && r() < 0.35) continue;
-        chunk.lamps.push(lampAt(b, lx, lz, -nx * sg, -nz * sg));
-      }
-      if (e.ring) continue;
-      const area = N.area(...(Object.values(N.at(e, e.len / 2)).slice(0, 2) as [number, number]));
-      const d = area.district;
-      const step = corniche ? 11 : d === 'downtown' ? 19 : d === 'port' ? 13 : d === 'corniche' ? 15 : 24;
-      const dens = e.cls === 'local' ? 0.45 : 1;
-      for (let s = mg.a + 6 + r() * 4, k = 0; s < e.len - mg.b - 6; s += step * (0.85 + r() * 0.3), k++) {
-        if (r() > dens) continue;
-        const p = N.at(e, s);
-        const sg = corniche ? (k % 2 ? 1 : -1) : k % 2 ? 1 : -1;
-        const nx = Math.cos(p.yaw),
-          nz = -Math.sin(p.yaw);
-        const off = (e.half + 2.1) * sg;
-        const tx = p.x + nx * off,
-          tz = p.z + nz * off;
-        if (!inside(tx, tz) || L.blocked(tx, tz, 0.4) || inRiver(tx, tz)) continue;
-        const seed = Math.floor(e.id * 17 + s);
-        if (corniche || (d === 'corniche' && k % 3 === 1)) {
-          if (!this.kit.palm(b, tx, tz, seed)) palms.push({ x: tx, z: tz, h: 7.5 + r() * 2 });
-        } else this.kit.tree(b, tx, tz, seed);
-      }
-    }
-    // traffic lights at junctions
     const m = materials();
-    for (const n of this.signals) {
-      if (!inside(n.x, n.z)) continue;
-      for (const poly of cornersAt(n.id)) {
-        // a pole on every corner that touches a real street, facing the traffic that approaches along it
-        const cx = (poly[0]!.x + poly[1]!.x + poly[3]!.x + poly[4]!.x) / 4,
-          cz = (poly[0]!.z + poly[1]!.z + poly[3]!.z + poly[4]!.z) / 4;
-        const dx = cx - n.x,
-          dz = cz - n.z;
-        const dl = Math.hypot(dx, dz) || 1;
-        // pick the arm closest in direction (the arm whose pavement owns this corner side)
+    for (const p of propsIn(x0, z0, x1, z1)) {
+      if (p.kind === 'lamp') {
+        chunk.lamps.push(lampAt(b, p.x, p.z, p.fx, p.fz));
+      } else if (p.kind === 'palm') {
+        if (!this.kit.palm(b, p.x, p.z, p.seed)) palms.push({ x: p.x, z: p.z, h: p.h });
+      } else if (p.kind === 'tree') {
+        this.kit.tree(b, p.x, p.z, p.seed);
+      } else {
+        // traffic light: a pole on the pavement corner facing the traffic that approaches along the nearest arm
+        const n = N.nodes[p.node!]!;
+        const dx = p.fx,
+          dz = p.fz;
         let best = N.edges[n.edges[0]!]!;
         let bd = -2;
         for (const id of n.edges) {
@@ -555,7 +513,7 @@ export class OpenWorld {
           const ax = q.x - n.x,
             az = q.z - n.z;
           const al = Math.hypot(ax, az) || 1;
-          const dot = (ax * dx + az * dz) / (al * dl);
+          const dot = (ax * dx + az * dz) / al;
           if (dot > bd) {
             bd = dot;
             best = e;
@@ -563,22 +521,20 @@ export class OpenWorld {
         }
         const axis = armAxis(n, best);
         const yaw = Math.atan2(-dx, -dz);
-        b.box(M.metal, 0.16, 4.4, 0.16, cx, 2.2, cz);
-        b.box(M.metal, 0.4, 0.9, 0.34, cx - (dx / dl) * 0.1, 4.4, cz - (dz / dl) * 0.1, yaw);
+        b.box(M.metal, 0.16, 4.4, 0.16, p.x, 2.2, p.z);
+        b.box(M.metal, 0.4, 0.9, 0.34, p.x - dx * 0.1, 4.4, p.z - dz * 0.1, yaw);
         b.box(
           m.light[axis],
           0.26,
           0.26,
           0.04,
-          cx - (dx / dl) * 0.1 - Math.sin(yaw) * 0.19,
+          p.x - dx * 0.1 - Math.sin(yaw) * 0.19,
           4.55,
-          cz - (dz / dl) * 0.1 - Math.cos(yaw) * 0.19,
+          p.z - dz * 0.1 - Math.cos(yaw) * 0.19,
           yaw
         );
       }
     }
-    void x0;
-    void z0;
     b.flush(chunk.group, Q.shadows);
     chunk.group.traverse((o) => {
       const mesh = o as THREE.Mesh;

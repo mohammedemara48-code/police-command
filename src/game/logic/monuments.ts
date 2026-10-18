@@ -1,5 +1,5 @@
 /** Landmarks that stand in the street plan (pure): the Qasr El Nil lions at the bridgeheads and the Cairo Tower on Gezira. */
-import { toWorld } from './cairo';
+import { TOWER_LL, toWorld } from './cairo';
 import { inRiver, net } from './roadnet';
 import type { OBB } from './collide';
 
@@ -10,7 +10,7 @@ export interface Lion {
   yaw: number;
 }
 
-export const TOWER_AT = toWorld([31.2244, 30.0458]);
+export const TOWER_AT = toWorld(TOWER_LL);
 /** The tower's plaza: kept clear of buildings. */
 export const TOWER_BOX: OBB = { x: TOWER_AT.x, z: TOWER_AT.z, yaw: 0, hw: 17, hl: 17 };
 

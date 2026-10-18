@@ -2,12 +2,16 @@
  * Building lots of the open city (pure, unit-tested): rows of plots along every street, set back behind the pavement,
  * never on a road, in the river or on top of each other. Planned once for the whole world, so chunk borders always agree.
  */
-import { PAVEMENT, type District } from './cairo';
+import { PAVEMENT, type District, type V2 } from './cairo';
+import { cornersAt } from './junctions';
 import { hash01 } from './districts';
-import { inRiver, net, rng, type REdge } from './roadnet';
+import { inPoly, inRiver, net, rng, type REdge } from './roadnet';
 import { STATION_BOX } from './station';
 import { TOWER_BOX, lionBox, lions } from './monuments';
 import type { OBB } from './collide';
+
+/** Spacing (m) at which a lot's outline is tested against streets and pavements, when placing it and when auditing it. */
+export const OUTLINE_STEP = 0.8;
 
 export interface Lot extends OBB {
   id: number;
@@ -94,6 +98,16 @@ export function obbOverlap(a: OBB, b: OBB, gap = 0): boolean {
 export class Lots {
   readonly lots: Lot[] = [];
   private cells = new Map<number, Lot[]>();
+  private cornerGrid = new Map<number, { poly: V2[]; x: number; z: number; r: number }[]>();
+  private cornersNear(x: number, z: number, r: number) {
+    const out: { poly: V2[]; x: number; z: number; r: number }[] = [];
+    const c = 32;
+    for (let i = Math.floor((x - r) / c); i <= Math.floor((x + r) / c); i++)
+      for (let j = Math.floor((z - r) / c); j <= Math.floor((z + r) / c); j++)
+        for (const f of this.cornerGrid.get(this.key(i, j)) ?? [])
+          if (Math.hypot(f.x - x, f.z - z) < r + f.r) out.push(f);
+    return out;
+  }
   private static readonly CELL = 64;
 
   private key(i: number, j: number) {
@@ -166,11 +180,55 @@ export class Lots {
           seen.add(o);
           if (Math.hypot(o.x - l.x, o.z - l.z) < r + Math.hypot(o.hw, o.hl) && obbOverlap(l, o, gap)) return false;
         }
+
+    // the whole outline keeps off the carriageways and the pavements (checked at the same spacing the city audit uses)
+    const edge = (a: number, b: number) => n.clearance(l.x + a * c0 + b * s0, l.z - a * s0 + b * c0) < PAVEMENT;
+    if (edge(0, 0)) return false;
+    const nx = Math.max(1, Math.ceil((l.hw * 2) / OUTLINE_STEP)),
+      nz = Math.max(1, Math.ceil((l.hl * 2) / OUTLINE_STEP));
+    for (let i = 0; i <= nx; i++) {
+      const a = -l.hw + (i / nx) * l.hw * 2;
+      if (edge(a, -l.hl) || edge(a, l.hl)) return false;
+    }
+    for (let j = 1; j < nz; j++) {
+      const b = -l.hl + (j / nz) * l.hl * 2;
+      if (edge(-l.hw, b) || edge(l.hw, b)) return false;
+    }
+    // the pavement corner fills at junctions
+    for (const c of this.cornersNear(l.x, l.z, r)) {
+      if (
+        c.poly.some(
+          (q) =>
+            Math.abs((q.x - l.x) * c0 - (q.z - l.z) * s0) < l.hw && Math.abs((q.x - l.x) * s0 + (q.z - l.z) * c0) < l.hl
+        )
+      )
+        return false;
+      for (let i = 0; i <= nx; i++) {
+        const a = -l.hw + (i / nx) * l.hw * 2;
+        for (const bb of [-l.hl, l.hl])
+          if (inPoly({ x: l.x + a * c0 + bb * s0, z: l.z - a * s0 + bb * c0 }, c.poly)) return false;
+      }
+      for (let j = 1; j < nz; j++) {
+        const bb = -l.hl + (j / nz) * l.hl * 2;
+        for (const a of [-l.hw, l.hw])
+          if (inPoly({ x: l.x + a * c0 + bb * s0, z: l.z - a * s0 + bb * c0 }, c.poly)) return false;
+      }
+    }
     return true;
   }
 
   constructor() {
     const N = net();
+    for (const nd of N.nodes)
+      for (const poly of cornersAt(nd.id)) {
+        const x = poly.reduce((a, q) => a + q.x, 0) / poly.length,
+          z = poly.reduce((a, q) => a + q.z, 0) / poly.length;
+        const f = { poly, x, z, r: Math.max(...poly.map((q) => Math.hypot(q.x - x, q.z - z))) };
+        const k = this.key(Math.floor(x / 32), Math.floor(z / 32));
+        const g = this.cornerGrid.get(k);
+        if (g) g.push(f);
+        else this.cornerGrid.set(k, [f]);
+      }
     const hold = (box: OBB, ghost = false) => {
       const st: Lot = {
         ...box,

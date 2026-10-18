@@ -2,6 +2,8 @@
  * The road network of the open city (pure, unit-tested): the hand-drawn streets of `cairo.ts` plus generated infill streets,
  * cut into edges at every crossing, with a spatial index for "is this a road" tests and a path finder that follows the roads.
  */
+import { resetJunctions } from './junctions';
+import { roadConflicts } from './netcheck';
 import {
   ANCHORS,
   BANK_EAST,
@@ -9,6 +11,7 @@ import {
   ISLANDS,
   PAVEMENT,
   ROAD_HALF,
+  TOWER_LL,
   SQUARES,
   STREETS,
   WORLD_BOX,
@@ -252,6 +255,7 @@ function drawnStrokes(): Stroke[] {
 
 /** Infill streets: a rotated grid inside each zone, kept off the river and the drawn streets it would run along. */
 function infillStrokes(base: Stroke[]): Stroke[] {
+  const tower = toWorld(TOWER_LL);
   const segs = new Hash<{ a: V2; b: V2 }>(24);
   for (const s of base)
     for (let i = 0; i + 1 < s.pts.length; i++) {
@@ -296,6 +300,8 @@ function infillStrokes(base: Stroke[]): Stroke[] {
         if (ok && inRiver(p.x, p.z, 0) === true) ok = false;
         if (ok && nearRiver(p, 9)) ok = false;
         if (ok && squares.some((q) => dist(p, q.c) < q.r + 8)) ok = false;
+        // the Cairo Tower plaza stays free of streets
+        if (ok && Math.abs(p.x - tower.x) < 17 + 14 && Math.abs(p.z - tower.z) < 17 + 14) ok = false;
         if (ok) {
           segs.near(p.x, p.z, 11, tmp);
           for (const s of tmp) {
@@ -363,6 +369,9 @@ export interface NetBuild {
 }
 
 /** Cut all strokes at their crossings and join near endpoints (T junctions). */
+/** Junctions closer together than this become one. */
+const MERGE = 9;
+
 export function buildNet(): NetBuild {
   const drawn = drawnStrokes();
   const strokes = [...drawn, ...infillStrokes(drawn)];
@@ -382,7 +391,8 @@ export function buildNet(): NetBuild {
     }
   });
   // cut points per stroke: [segment index + t, x, z]
-  const cuts: { k: number; x: number; z: number }[][] = strokes.map(() => []);
+  const cuts: { k: number; x: number; z: number; gen?: boolean }[][] = strokes.map(() => []);
+  const drawnCrossings: V2[] = [];
   const tmp: Seg[] = [];
   strokes.forEach((st, s) => {
     for (let i = 0; i + 1 < st.pts.length; i++) {
@@ -395,11 +405,20 @@ export function buildNet(): NetBuild {
         if (!h) continue;
         const x = a.x + (b.x - a.x) * h.t,
           z = a.z + (b.z - a.z) * h.t;
-        cuts[s]!.push({ k: i + h.t, x, z });
-        cuts[o.s]!.push({ k: o.i + h.u, x, z });
+        const gen = st.infill || strokes[o.s]!.infill;
+        cuts[s]!.push({ k: i + h.t, x, z, gen });
+        cuts[o.s]!.push({ k: o.i + h.u, x, z, gen });
+        if (!gen) drawnCrossings.push({ x, z });
       }
     }
   });
+  // a generated street never makes a junction right beside a drawn one (it would have to bend the drawn streets to meet it):
+  // it is left uncut there and dropped below if it then cuts across
+  for (const list of cuts)
+    for (let q = list.length - 1; q >= 0; q--) {
+      const c = list[q]!;
+      if (c.gen && drawnCrossings.some((d) => Math.hypot(d.x - c.x, d.z - c.z) < MERGE * 1.4)) list.splice(q, 1);
+    }
   // T junctions: an end of a stroke that stops just short of another street is joined to it
   strokes.forEach((st, s) => {
     if (st.ring) return;
@@ -421,6 +440,19 @@ export function buildNet(): NetBuild {
         const d = distToSeg(p, o.a, o.b);
         if (d.d < SNAP && (!best || d.d < best.d)) best = { d: d.d, seg: o, t: d.t, x: d.x, z: d.z };
       }
+      if (best && st.infill) {
+        // a generated street joins a nearby junction of the street it meets rather than making a second one beside it
+        let near: { k: number; x: number; z: number } | null = null;
+        let nd = 14;
+        for (const c of cuts[best.seg.s]!) {
+          const d = Math.hypot(c.x - best.x, c.z - best.z);
+          if (d < nd) {
+            nd = d;
+            near = c;
+          }
+        }
+        if (near) best = { ...best, x: near.x, z: near.z, t: near.k - best.seg.i };
+      }
       if (best) {
         cuts[best.seg.s]!.push({ k: best.seg.i + best.t, x: best.x, z: best.z });
         cuts[s]!.push({ k: end === 0 ? 0 : st.pts.length - 1, x: best.x, z: best.z });
@@ -433,9 +465,9 @@ export function buildNet(): NetBuild {
   const nodes: RNode[] = [];
   const nodeHash = new Hash<RNode>(12);
   const nodeAt = (x: number, z: number): RNode => {
-    const near = nodeHash.near(x, z, 5);
+    const near = nodeHash.near(x, z, MERGE);
     let best: RNode | null = null;
-    let bd = 5.5;
+    let bd = MERGE;
     for (const n of near) {
       const d = Math.hypot(n.x - x, n.z - z);
       if (d < bd) {
@@ -461,7 +493,7 @@ export function buildNet(): NetBuild {
     const cs: typeof list = [];
     for (const c of list) {
       const prev = cs[cs.length - 1];
-      if (prev && Math.hypot(prev.x - c.x, prev.z - c.z) < 5.5) {
+      if (prev && Math.hypot(prev.x - c.x, prev.z - c.z) < MERGE) {
         if (c === list[list.length - 1]) cs[cs.length - 1] = c;
         continue;
       }
@@ -485,6 +517,11 @@ export function buildNet(): NetBuild {
           tidy.push(line[i]!);
       tidy.push(line[line.length - 1]!);
       line = tidy;
+      // merging nodes can leave a hairpin at an end (the stroke's old end point lies behind the new node): drop it
+      const back = (a: V2, b: V2, c: V2) => (b.x - a.x) * (c.x - b.x) + (b.z - a.z) * (c.z - b.z) < 0;
+      while (line.length > 2 && back(line[0]!, line[1]!, line[2]!)) line.splice(1, 1);
+      while (line.length > 2 && back(line[line.length - 3]!, line[line.length - 2]!, line[line.length - 1]!))
+        line.splice(line.length - 2, 1);
       const cum = [0];
       for (let i = 1; i < line.length; i++) cum.push(cum[i - 1]! + dist(line[i - 1]!, line[i]!));
       const len = cum[cum.length - 1]!;
@@ -526,6 +563,24 @@ export class RoadNet {
     this.nodes = b.nodes;
     this.edges = b.edges;
     this.prune();
+    this.index();
+    // generated streets that cut across another road, or lie on top of it, are dropped (drawn ones are fixed in the data).
+    // Dropping streets never creates a new conflict, so one pass is enough.
+    const victims = new Set<number>();
+    for (const c of roadConflicts(this, true)) {
+      const v = c.f.infill ? c.f : c.e.infill ? c.e : null;
+      if (v) victims.add(v.id);
+    }
+    if (victims.size) {
+      this.removeEdges(victims);
+      this.prune();
+      this.index();
+    }
+  }
+
+  private index() {
+    resetJunctions(this);
+    this.hash = new Hash<{ e: number; i: number }>(32);
     for (const e of this.edges)
       for (let i = 0; i + 1 < e.pts.length; i++) {
         const a = e.pts[i]!,
@@ -536,6 +591,22 @@ export class RoadNet {
           i
         });
       }
+  }
+
+  private removeEdges(ids: Set<number>) {
+    const edges: REdge[] = [];
+    for (const n of this.nodes) n.edges = [];
+    for (const e of this.edges) {
+      if (ids.has(e.id)) {
+        this.dropped.push(e);
+        continue;
+      }
+      const ne = { ...e, id: edges.length };
+      edges.push(ne);
+      this.nodes[ne.a]!.edges.push(ne.id);
+      this.nodes[ne.b]!.edges.push(ne.id);
+    }
+    this.edges = edges;
   }
 
   /** Keep the largest connected piece of the network (leftovers of the infill would be islands nobody can reach). */
@@ -608,6 +679,11 @@ export class RoadNet {
       }
     }
     return best;
+  }
+
+  /** Road segments (edge id and segment index) whose box lies within `r` of a point; for geometry checks. */
+  segmentsNear(x: number, z: number, r = 0.1): { e: number; i: number }[] {
+    return this.hash.near(x, z, r, []);
   }
 
   /** On a carriageway (pad = extra margin, e.g. the pavement for people on foot). */
