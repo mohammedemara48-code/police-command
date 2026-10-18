@@ -48,7 +48,7 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     id: 'private',
     name: 'ملاكي',
     blurb: 'متوازنة وسهلة في الشارع، من غير سارينة',
-    handling: { top: 0.9, accel: 0.92, brake: 0.95, grip: 0.95, steer: 1, reverse: 1 },
+    handling: { top: 0.85, accel: 0.92, brake: 0.95, grip: 0.95, steer: 1, reverse: 1 },
     hw: 0.9,
     hl: 2.1,
     length: 4.2,
@@ -59,7 +59,7 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     id: 'microbus',
     name: 'ميكروباص',
     blurb: 'تقيل وعريض، بطيء في التسارع والمنعطفات، بيشيل الخبطات',
-    handling: { top: 0.76, accel: 0.62, brake: 0.78, grip: 0.78, steer: 0.72, reverse: 0.9 },
+    handling: { top: 0.78, accel: 0.62, brake: 0.78, grip: 0.78, steer: 0.72, reverse: 0.9 },
     hw: 1.05,
     hl: 2.65,
     length: 5.3,
@@ -70,7 +70,7 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     id: 'tuktuk',
     name: 'توكتوك',
     blurb: 'خفيف وضيق، بيلف في أي حتة بس سرعته القصوى قليلة',
-    handling: { top: 0.5, accel: 0.8, brake: 0.85, grip: 0.82, steer: 1.35, reverse: 0.8 },
+    handling: { top: 0.6, accel: 0.8, brake: 0.85, grip: 0.82, steer: 1.35, reverse: 0.8 },
     hw: 0.65,
     hl: 1.3,
     length: 2.6,
@@ -86,3 +86,34 @@ export function sanitizeVehicle(v: unknown): VehicleId {
 }
 
 export const handlingOf = (id: VehicleId): Handling => VEHICLES[id].handling;
+
+/** What the officer is doing: the chosen vehicle decides the gameplay, in one shared city. */
+export type GameMode = 'police' | 'taxi' | 'free';
+
+export const modeOf = (id: VehicleId): GameMode => (id === 'police' ? 'police' : id === 'private' ? 'free' : 'taxi');
+
+/** Which game systems run in each mode. Police-only things never run in the other two. */
+export interface ModeFeatures {
+  /** story missions and patrol calls */
+  missions: boolean;
+  /** dispatcher radio, wanted level, gun and the police HUD */
+  policeHud: boolean;
+  /** fares, passengers and the cab HUD */
+  taxi: boolean;
+  /** the station hub (armoury, mission board, garage upgrades) */
+  station: boolean;
+}
+
+export const FEATURES: Record<GameMode, ModeFeatures> = {
+  police: { missions: true, policeHud: true, taxi: false, station: true },
+  taxi: { missions: false, policeHud: false, taxi: true, station: false },
+  free: { missions: false, policeHud: false, taxi: false, station: false }
+};
+
+export const featuresOf = (id: VehicleId): ModeFeatures => FEATURES[modeOf(id)];
+
+/** Base top speed (m/s) before the vehicle's own share: the patrol car also gets rank and garage bonuses and the chase boost. */
+export const CIVIL_BASE_SPEED = 18;
+
+/** Taxi vehicles and their seats. */
+export const SEATS: Partial<Record<VehicleId, number>> = { tuktuk: 2, microbus: 6 };

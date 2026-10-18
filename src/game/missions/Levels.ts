@@ -11,6 +11,7 @@ import {
   type GarageLevels
 } from '../logic/hub';
 import type { WeaponId } from '../logic/character';
+import { emptyBook, sanitizeBook, type EarningsBook } from '../logic/taxi';
 import { DEFAULT_VEHICLE, sanitizeVehicle, type VehicleId } from '../logic/vehicles';
 export type Who = 'mona' | 'hamed' | 'yasser' | 'suspect' | 'informant' | 'boss';
 export interface Line {
@@ -357,6 +358,8 @@ export interface Progress {
   garage: GarageLevels;
   /** which vehicle the officer drives */
   vehicle?: VehicleId;
+  /** fares earned in the tuk-tuk and the microbus, kept per vehicle */
+  earnings?: EarningsBook;
 }
 
 function load(): Progress {
@@ -371,7 +374,8 @@ function load(): Progress {
       money: sanitizeMoney(raw.money),
       ownedWeapons: sanitizeOwned(raw.ownedWeapons),
       garage: sanitizeGarage(raw.garage),
-      vehicle: sanitizeVehicle(raw.vehicle)
+      vehicle: sanitizeVehicle(raw.vehicle),
+      earnings: sanitizeBook(raw.earnings)
     };
   } catch {
     return {
@@ -382,7 +386,8 @@ function load(): Progress {
       money: START_MONEY,
       ownedWeapons: [...DEFAULT_OWNED],
       garage: { ...DEFAULT_GARAGE },
-      vehicle: DEFAULT_VEHICLE
+      vehicle: DEFAULT_VEHICLE,
+      earnings: emptyBook()
     };
   }
 }
@@ -449,6 +454,14 @@ export function setOwnedWeapons(list: WeaponId[]) {
 
 export function setVehicle(v: VehicleId) {
   progress.vehicle = sanitizeVehicle(v);
+  saveProgress();
+}
+
+/** Record a fare in the book of the vehicle that earned it. */
+export function bookEarnings(v: 'tuktuk' | 'microbus', f: (e: EarningsBook[typeof v]) => EarningsBook[typeof v]) {
+  const book = sanitizeBook(progress.earnings);
+  book[v] = f(book[v]);
+  progress.earnings = book;
   saveProgress();
 }
 
