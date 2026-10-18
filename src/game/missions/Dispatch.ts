@@ -4,7 +4,7 @@
  */
 import { AVENUES_X, CROSS_Z, districtAt, DISTRICT_NAMES, NODES } from '../world/City';
 import { patrolCalls, rank, type LevelDef, type SuspectSpec, type Step, type Behaviour } from './Levels';
-import { callLimit, callReward, raidPlan, trapCount, waveText, type CallKind } from '../logic/calls';
+import { callLimit, callReward, patrolAnchor, raidPlan, trapCount, waveText, type CallKind } from '../logic/calls';
 import { ambushPlan, ambushCount, vipDestination, VIP_WHO, VIP_DEST } from '../logic/escort';
 
 export type Kind = CallKind;
@@ -64,6 +64,10 @@ export function newCall(px: number, pz: number, seed = Date.now(), force?: Kind)
     z = CROSS_Z[j] + 12 + r() * (CROSS_Z[j + 1] - CROSS_Z[j] - 24);
     const d = Math.hypot(x - px, z - pz);
     if (d > 60 && d < 200) break;
+  }
+  // a patrol loop starts where the officer is, so it is announced in the district they are standing in
+  if (kind === 'route') {
+    ({ x, z } = patrolAnchor(px, pz, AVENUES_X));
   }
   const where = DISTRICT_NAMES[districtAt(z)];
   const dir = pz < z ? -1 : 1; // arrive from the player's side

@@ -14,7 +14,8 @@ import {
   raidPlan,
   waveText,
   callReward,
-  callLimit
+  callLimit,
+  patrolAnchor
 } from '../src/game/logic/calls';
 import { stepPull, PULL_T, PULL_R } from '../src/game/logic/missions';
 
@@ -158,5 +159,13 @@ describe('call pay and time', () => {
     expect(callLimit('trap', 3)).toBeGreaterThan(callLimit('trap', 1));
     expect(callLimit('raid', 8)).toBeGreaterThan(callLimit('raid', 4));
     expect(callLimit('dui', 1)).toBeGreaterThanOrEqual(150);
+  });
+});
+
+describe('patrol anchor', () => {
+  it('keeps the loop on the officer position, on the nearest avenue', () => {
+    const avenues = [-120, -60, 0, 60, 120];
+    expect(patrolAnchor(5, -70, avenues)).toEqual({ x: 0, z: -70 });
+    expect(patrolAnchor(-80, 120, avenues)).toEqual({ x: -60, z: 120 });
   });
 });
