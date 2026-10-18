@@ -91,6 +91,9 @@ import {
   nearestNode
 } from '../world/City';
 import { palm, tree, flushPalms } from '../world/Trees';
+import { buildNile, type Sea } from '../world/Nile';
+import { setHaze } from '../world/Haze';
+import { LION_SPOTS } from '../logic/nile';
 import { setPyramidHaze, updatePyramids } from '../world/Pyramids';
 import { egyptBlock, gantry, streetNameSign, kerbStripeMat, roofRack, taxiSign, rollWheels, type SignDest } from '../world/Egypt';
 import {
@@ -103,10 +106,9 @@ import {
   bin,
   bench,
   roadSign,
-  buildSea,
+  buildPromenade,
   corniche,
-  CORNICHE,
-  type Sea
+  CORNICHE
 } from '../world/Environment';
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
@@ -520,6 +522,7 @@ export class StreetPlay {
     this.buildStreetRows();
     this.buildStreetNames();
     this.buildingBoxes = avenueBuildingBoxes(STATION);
+    for (const [lx, lz] of LION_SPOTS) this.buildingBoxes.push({ x: lx, z: lz, yaw: 0, hw: 1.8, hl: 2.1 });
     for (const place of STREET_PLACES) {
       this.buildBlock(place);
       this.addCrosswalk(place.z + 12);
@@ -544,7 +547,9 @@ export class StreetPlay {
       }
     }
     props.flush(this.group, Q.shadows);
-    this.sea = buildSea(this.group, new THREE.Vector3(-0.4, 0.35, 1));
+    buildPromenade(this.group);
+    const nile = buildNile(this.group, new THREE.Vector3(-0.4, 0.35, 1));
+    this.sea = nile;
     for (const h of corniche(this.group)) {
       const halo = new THREE.Object3D() as THREE.PointLight;
       (halo as unknown as { intensity: number }).intensity = 2.5;
@@ -552,6 +557,14 @@ export class StreetPlay {
       halo.position.copy(h);
       this.group.add(halo);
       fx.glow(halo, 0xffc56a, 1.8);
+    }
+    for (const h of nile.halos) {
+      const halo = new THREE.Object3D() as THREE.PointLight;
+      (halo as unknown as { intensity: number }).intensity = 2.5;
+      this.halos.push(halo);
+      halo.position.copy(h);
+      this.group.add(halo);
+      fx.glow(halo, 0xffc56a, 1.4);
     }
     flushPalms(this.group);
 
@@ -2283,6 +2296,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       this.key.intensity = 0.35 + day * 1.75;
     }
     setPyramidHaze(haze, day);
+    setHaze(haze, day);
     // street lamps only glow once the light drops
     const lampOn = THREE.MathUtils.smoothstep(1 - day, 0.25, 0.7);
     for (const h of this.halos) (h as unknown as { intensity: number }).intensity = 2.5 * lampOn;
@@ -3717,8 +3731,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         t.mesh.position.z += t.speed * dt;
         rollWheels(t.mesh, Math.abs(t.speed) * dt);
       }
-      if (t.mesh.position.z > 250) t.mesh.position.z = -110;
-      if (t.mesh.position.z < -110) t.mesh.position.z = 250;
+      if (t.mesh.position.z > 366) t.mesh.position.z = -110;
+      if (t.mesh.position.z < -110) t.mesh.position.z = 366;
     }
   }
 
