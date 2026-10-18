@@ -1,4 +1,5 @@
 /** Ported from Unity PoliceCommand.Core — TypeScript / Three.js */
+import { DISTRICT_STYLES } from '../logic/districts';
 
 export enum CrimeType {
   Theft = 'Theft',
@@ -90,11 +91,11 @@ export interface DistrictDef {
 
 /** Distinct play locations the camera travels between. */
 export const DISTRICTS: DistrictDef[] = [
-  { id: 'downtown', name: 'وسط البلد', x: -16, z: -16, zone: ZoneType.Downtown },
-  { id: 'port', name: 'الميناء', x: -52, z: 8, zone: ZoneType.Industrial },
-  { id: 'suburb', name: 'الضاحية', x: 42, z: 38, zone: ZoneType.Residential },
+  { id: 'downtown', name: DISTRICT_STYLES.downtown.name, x: -16, z: -16, zone: ZoneType.Downtown },
+  { id: 'port', name: DISTRICT_STYLES.port.name, x: -52, z: 8, zone: ZoneType.Industrial },
+  { id: 'suburb', name: DISTRICT_STYLES.suburb.name, x: 42, z: 38, zone: ZoneType.Residential },
   { id: 'industrial', name: 'المنطقة الصناعية', x: -40, z: -42, zone: ZoneType.Industrial },
-  { id: 'corniche', name: 'الكورنيش', x: 6, z: 48, zone: ZoneType.Street }
+  { id: 'corniche', name: DISTRICT_STYLES.corniche.name, x: 6, z: 48, zone: ZoneType.Street }
 ];
 
 export function districtById(id: string | null | undefined): DistrictDef {

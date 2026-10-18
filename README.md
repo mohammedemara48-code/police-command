@@ -13,14 +13,14 @@
   <img src="docs/media/traffic-stop.svg" width="150" alt="traffic stop">
 </p>
 
-Police Command is a 3D police game that runs in the browser. You play a patrol officer in a coastal city, with an Arabic (RTL) interface built mobile-first. It's made with Three.js, TypeScript and Vite, and you can install it as a PWA.
+Police Command is a 3D police game that runs in the browser. You play a patrol officer in Cairo, with an Arabic (RTL) interface built mobile-first. It's made with Three.js, TypeScript and Vite, and you can install it as a PWA.
 
 **Play:** https://police-command.vercel.app/
 
 ## Features
 
 - **Story campaign:** 12 missions with letterboxed intro/outro cutscenes (camera moves over the city, Egyptian Arabic dialogue), plus free patrol with random calls: robberies, gangs, hostages, chases, speeding stops and checkpoint patrols.
-- **The city:** downtown, suburbs, a port, and a corniche along the sea. It has textured streets, shops with lit display windows, traffic lights, traffic and pedestrians.
+- **The city:** four Cairo districts along one avenue: Haram (red-brick towers with rebar on the roofs, sandy ground, pyramids on the skyline), Downtown (yellow and ochre plaster), Shubra (pink, yellow and blue blocks, the biggest crowds) and Dokki on the Giza corniche (white and grey modernist blocks). Each has its own facade palette, building heights and real street names on green signs. It has textured streets, shops with lit display windows, traffic lights, traffic and pedestrians.
 - **On foot:** third-person movement relative to the camera, collision with cars, aim, shoot, "surrender!" orders and handcuffs.
 - **Driving:** arcade handling with handbrake drifts and a chase camera that trails at speed. Cars are solid and get shoved, crashes cause damage (the bonnet smokes when it's bad), the siren lights up the light bar and makes traffic pull over, and a PIT on a fleeing car spins it out.
 - **Character creator:** body, skin tone, hair, uniform and weapon, with a live 3D preview.
@@ -82,7 +82,7 @@ Add `?autotest` to the URL to expose the game state on `window` for scripted pla
 │   └── game/
 │       ├── config/    quality presets, reduced motion
 │       ├── core/      scene/renderer, game manager, street mode, model loading, types
-│       ├── world/     city grid, road graph (A*), environment, sea and corniche
+│       ├── world/     city grid, road graph (A*), environment, Cairo districts, sea and corniche
 │       ├── entities/  NPCs and the player character
 │       ├── missions/  campaign levels, dispatch calls, incidents
 │       ├── systems/   save, achievements, audio

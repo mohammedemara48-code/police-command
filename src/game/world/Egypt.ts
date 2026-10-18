@@ -106,14 +106,22 @@ function wallGeo(w: number, h: number, d: number) {
  * An Egyptian apartment block standing at the street edge. `side` -1 = west row (faces +x), 1 = east row.
  * Returns a group flagged static so the street merges it with everything else.
  */
-export function egyptBlock(dx: number, h: number, dz: number, side: number, seed: number) {
+export function egyptBlock(
+  dx: number,
+  h: number,
+  dz: number,
+  side: number,
+  seed: number,
+  look: { brick?: boolean; tint?: number } = {}
+) {
   const g = new THREE.Group();
   g.userData.static = true;
   const floors = Math.max(2, Math.round(h / FLOOR));
   const H = floors * FLOOR;
-  const brick = seed % 3 === 0;
+  const brick = look.brick ?? seed % 3 === 0;
   const tints = [0xe9d6b4, 0xdcc49a, 0xefe2cc, 0xd9b48a, 0xe6cfa8];
-  const mat = brick ? facadeMat('brick', 0xffffff, seed) : facadeMat('plaster', tints[seed % tints.length], seed);
+  const tint = look.tint ?? tints[seed % tints.length];
+  const mat = brick ? facadeMat('brick', 0xffffff, seed) : facadeMat('plaster', tint, seed);
   const wall = new THREE.Mesh(wallGeo(dx, H, dz), mat);
   wall.position.y = H / 2;
   g.add(wall);
@@ -154,6 +162,51 @@ export function egyptBlock(dx: number, h: number, dz: number, side: number, seed
       for (const sz of [-1, 1]) b.box(D.rebar, 0.06, 0.9, 0.06, (sx * dx) / 2.2, ry + 0.45, (sz * dz) / 2.2);
   b.flush(g, false);
   for (const c of g.children) c.userData.dynamic = false;
+  return g;
+}
+
+// ---------- street name boards ----------
+const nameBoardCache = new Map<string, THREE.MeshStandardMaterial>();
+function nameBoardMat(top: string, bottom: string) {
+  const key = top + '|' + bottom;
+  let m = nameBoardCache.get(key);
+  if (!m) {
+    const [c, x] = canvas(512, 192);
+    x.fillStyle = '#12684a';
+    x.fillRect(0, 0, 512, 192);
+    x.strokeStyle = '#ffffff';
+    x.lineWidth = 6;
+    x.strokeRect(6, 6, 500, 180);
+    x.fillStyle = '#ffffff';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.direction = 'rtl';
+    x.font = 'bold 66px Cairo, "Noto Sans Arabic", Arial';
+    x.fillText(top, 256, 62);
+    x.fillRect(40, 100, 432, 3);
+    x.font = 'bold 52px Cairo, "Noto Sans Arabic", Arial';
+    x.fillText(bottom, 256, 142);
+    m = new THREE.MeshStandardMaterial({ map: canvasTex(c, false), roughness: 0.6 });
+    nameBoardCache.set(key, m);
+  }
+  return m;
+}
+
+/** Green street-name board on a pole (readable from both directions): main avenue on top, the crossing street below. */
+export function streetNameSign(top: string, bottom: string) {
+  const g = new THREE.Group();
+  g.userData.static = true;
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 3.4, 0.1), poleMat).translateY(1.7));
+  const mat = nameBoardMat(top, bottom);
+  for (const s of [1, -1]) {
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.71), mat);
+    face.position.set(0, 3.2, s * 0.06);
+    face.rotation.y = s > 0 ? 0 : Math.PI;
+    g.add(face);
+  }
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.75, 0.08), poleMat);
+  back.position.y = 3.2;
+  g.add(back);
   return g;
 }
 

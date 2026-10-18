@@ -87,24 +87,24 @@ export const LEVELS: LevelDef[] = [
     id: 2,
     placeId: 'corniche',
     title: 'سرقة جارية',
-    brief: 'اتنين بيسرقوا محل على الكورنيش دلوقتي.',
+    brief: 'اتنين بيسرقوا محل دهب في الدقي دلوقتي.',
     limit: 120,
     reward: 2000,
     rep: 5,
     stars: [50, 85],
     speed: 1,
     steps: [
-      { t: 'radio', lines: [{ who: 'mona', text: 'سرقة جارية على الكورنيش! اتنين. واحد منهم ممكن يجري — متسيبوش.' }] },
+      { t: 'radio', lines: [{ who: 'mona', text: 'سرقة جارية في الدقي! اتنين. واحد منهم ممكن يجري — متسيبوش.' }] },
       { t: 'car' },
-      { t: 'goto', x: 0, z: 186, text: 'روح الكورنيش بسرعة' },
+      { t: 'goto', x: 0, z: 186, text: 'روح الدقي بسرعة' },
       { t: 'suspects', x: 0, z: 192, list: [S('surrender', -3, 2), S('flee', 3, 4)], text: 'اقبض على الحرامية الاتنين' }
     ]
   },
   {
     id: 3,
     placeId: 'port',
-    title: 'مطاردة الميناء',
-    brief: 'عربية مسروقة خارجة من الميناء.',
+    title: 'مطاردة شبرا',
+    brief: 'عربية مسروقة خارجة من شارع شبرا.',
     limit: 90,
     reward: 2600,
     rep: 6,
@@ -113,10 +113,10 @@ export const LEVELS: LevelDef[] = [
     steps: [
       {
         t: 'radio',
-        lines: [{ who: 'mona', text: 'عربية مسروقة طالعة من الميناء. الحقها وقفّل عليها، وبعدين اقبض على السواق.' }]
+        lines: [{ who: 'mona', text: 'عربية مسروقة طالعة من شارع شبرا. الحقها وقفّل عليها، وبعدين اقبض على السواق.' }]
       },
       { t: 'car' },
-      { t: 'goto', x: 0, z: 92, text: 'روح الميناء' },
+      { t: 'goto', x: 0, z: 92, text: 'روح شبرا' },
       { t: 'chase', speed: 0.85, limit: 45, then: 'surrender', text: 'الحق العربية السودا' }
     ]
   },
@@ -124,7 +124,7 @@ export const LEVELS: LevelDef[] = [
     id: 4,
     placeId: 'port',
     title: 'شحنة مهربة',
-    brief: 'رجالة العقرب بيحمّلوا سلاح في الحاويات.',
+    brief: 'رجالة العقرب بيحمّلوا سلاح في مخزن في شبرا.',
     limit: 150,
     reward: 3200,
     rep: 7,
@@ -133,10 +133,10 @@ export const LEVELS: LevelDef[] = [
     steps: [
       {
         t: 'radio',
-        lines: [{ who: 'hamed', text: 'السواق اعترف. فيه 3 مسلحين عند الحاويات. اتحامى ورا الحاجات واضرب بحذر.' }]
+        lines: [{ who: 'hamed', text: 'السواق اعترف. فيه 3 مسلحين عند المخزن. اتحامى ورا الحاجات واضرب بحذر.' }]
       },
       { t: 'car' },
-      { t: 'goto', x: 0, z: 96, text: 'روح الحاويات في الميناء' },
+      { t: 'goto', x: 0, z: 96, text: 'روح المخزن في شبرا' },
       {
         t: 'suspects',
         x: 0,
@@ -198,17 +198,17 @@ export const LEVELS: LevelDef[] = [
   {
     id: 7,
     placeId: 'corniche',
-    title: 'ليلة الكورنيش',
-    brief: 'عربية العقرب على الكورنيش.',
+    title: 'ليلة كورنيش الجيزة',
+    brief: 'عربية العقرب على كورنيش الجيزة.',
     limit: 140,
     reward: 4700,
     rep: 9,
     stars: [55, 95],
     speed: 1.15,
     steps: [
-      { t: 'radio', lines: [{ who: 'mona', text: 'عربية العقرب على الكورنيش، والركاب مسلحين.' }] },
+      { t: 'radio', lines: [{ who: 'mona', text: 'عربية العقرب على كورنيش الجيزة في الدقي، والركاب مسلحين.' }] },
       { t: 'car' },
-      { t: 'goto', x: 0, z: 170, text: 'روح الكورنيش' },
+      { t: 'goto', x: 0, z: 170, text: 'روح كورنيش الجيزة' },
       { t: 'chase', speed: 1.15, limit: 40, then: 'fight', text: 'الحق العربية' }
     ]
   },
@@ -216,7 +216,7 @@ export const LEVELS: LevelDef[] = [
     id: 8,
     placeId: 'port',
     title: 'مخزن العقرب',
-    brief: 'مخزن العصابة على الشارع الشرقي.',
+    brief: 'مخزن العصابة في شارع الخلفاوي.',
     limit: 160,
     reward: 5200,
     rep: 10,
@@ -225,10 +225,10 @@ export const LEVELS: LevelDef[] = [
     steps: [
       {
         t: 'radio',
-        lines: [{ who: 'hamed', text: 'لقينا مخزنهم على الشارع الشرقي جنب الميناء. 4 جوه. واحد هيحاول يهرب.' }]
+        lines: [{ who: 'hamed', text: 'لقينا مخزنهم في شارع الخلفاوي في شبرا. 4 جوه. واحد هيحاول يهرب.' }]
       },
       { t: 'car' },
-      { t: 'goto', x: 60, z: 90, text: 'روح المخزن (الشارع الشرقي)' },
+      { t: 'goto', x: 60, z: 90, text: 'روح المخزن (شارع الخلفاوي)' },
       {
         t: 'suspects',
         x: 60,
@@ -253,12 +253,12 @@ export const LEVELS: LevelDef[] = [
       {
         t: 'radio',
         lines: [
-          { who: 'informant', text: 'أنا مش عايز مشاكل… بيت المخدرات في الضاحية. 4 رجالة، واحد فيهم خواف.' },
+          { who: 'informant', text: 'أنا مش عايز مشاكل… بيت المخدرات في الهرم. 4 رجالة، واحد فيهم خواف.' },
           { who: 'mona', text: 'اتأكد منه يا ياسر. ممكن يكون فخ.' }
         ]
       },
       { t: 'car' },
-      { t: 'goto', x: 0, z: -62, text: 'روح الضاحية' },
+      { t: 'goto', x: 0, z: -62, text: 'روح الهرم' },
       {
         t: 'suspects',
         x: 0,
@@ -314,7 +314,7 @@ export const LEVELS: LevelDef[] = [
     id: 12,
     placeId: 'suburb',
     title: 'الزعيم',
-    brief: 'فيلا الزعيم في الضاحية. النهاية.',
+    brief: 'فيلا الزعيم في الهرم. النهاية.',
     limit: 200,
     reward: 10000,
     rep: 20,

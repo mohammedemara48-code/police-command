@@ -597,26 +597,11 @@ export class CityScene {
     this.root.add(water);
 
     for (const [x, z] of [
-      [-54, 2],
-      [-46, 16]
-    ] as const) {
-      const g = new THREE.Group();
-      g.position.set(x, 0, z);
-      g.add(this.box(0.55, 11, 0.55, this.mat(0xc4552a), 0, 5.5, 0));
-      g.add(this.box(8, 0.4, 0.45, this.mat(0xe07a32), 3, 11, 0));
-      g.add(this.box(0.16, 3.2, 0.16, this.mat(0x222222), 6.2, 9.2, 0));
-      this.root.add(g);
-    }
-
-    for (const [x, z] of [
       [-46, -36],
       [-34, -48]
     ] as const) {
       this.root.add(this.box(1.5, 9, 1.5, this.mat(0x6a5a4a), x, 4.5, z));
     }
-
-    const pier = this.box(16, 0.2, 6, this.mat(0x8a7048, { roughness: 0.8 }), -58, 0.12, 8);
-    this.root.add(pier);
 
     for (const d of DISTRICTS) {
       const label = this.createTextSprite(d.name, '#b9dcff');
@@ -638,10 +623,10 @@ export class CityScene {
         z: -18,
         districtId: 'downtown'
       },
-      { id: 'bank-2', name: 'البنك التجاري', kind: 'bank', zone: ZoneType.Bank, x: 32, z: 14, districtId: 'suburb' },
+      { id: 'bank-2', name: 'بنك فيصل', kind: 'bank', zone: ZoneType.Bank, x: 32, z: 14, districtId: 'suburb' },
       {
         id: 'res-1',
-        name: 'حي النخيل',
+        name: 'حي الخلفاوي',
         kind: 'residential',
         zone: ZoneType.Residential,
         x: -40,
@@ -650,7 +635,7 @@ export class CityScene {
       },
       {
         id: 'res-2',
-        name: 'حي الروضة',
+        name: 'حي الهرم',
         kind: 'residential',
         zone: ZoneType.Residential,
         x: 40,
@@ -659,7 +644,7 @@ export class CityScene {
       },
       {
         id: 'com-1',
-        name: 'المجمع التجاري',
+        name: 'مجمع التحرير',
         kind: 'commercial',
         zone: ZoneType.Commercial,
         x: 18,
@@ -668,14 +653,14 @@ export class CityScene {
       },
       {
         id: 'com-2',
-        name: 'برج الأعمال',
+        name: 'برج قصر النيل',
         kind: 'commercial',
         zone: ZoneType.Downtown,
         x: -18,
         z: 18,
         districtId: 'downtown'
       },
-      { id: 'st-1', name: 'تقاطع الشمال', kind: 'street', zone: ZoneType.Street, x: 0, z: 28, districtId: 'corniche' },
+      { id: 'st-1', name: 'كورنيش الجيزة', kind: 'street', zone: ZoneType.Street, x: 0, z: 28, districtId: 'corniche' },
       {
         id: 'st-2',
         name: 'تقاطع الجنوب',
@@ -685,8 +670,8 @@ export class CityScene {
         z: -28,
         districtId: 'industrial'
       },
-      { id: 'st-3', name: 'الطريق الشرقي', kind: 'street', zone: ZoneType.Street, x: 28, z: 0, districtId: 'suburb' },
-      { id: 'st-4', name: 'الطريق الغربي', kind: 'street', zone: ZoneType.Street, x: -28, z: 0, districtId: 'port' }
+      { id: 'st-3', name: 'الطريق الدائري', kind: 'street', zone: ZoneType.Street, x: 28, z: 0, districtId: 'suburb' },
+      { id: 'st-4', name: 'شارع شبرا', kind: 'street', zone: ZoneType.Street, x: -28, z: 0, districtId: 'port' }
     ];
   }
 

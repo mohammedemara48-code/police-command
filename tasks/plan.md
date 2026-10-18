@@ -17,6 +17,8 @@ Week target: publishable GTA-style police game by Tue 20 Oct 2026 20:30 Asia/Riy
 - P1.2 Story cutscenes — letterbox intro before and outro after each of the 12 campaign missions: camera rails over the live city, speaker badge + typewriter Egyptian Arabic lines, tap/Space to advance, Skip, HUD hidden and input locked; scripts in `src/story/cutscenes.ts`
 - P1.3 VIP escort call — VIP sedan follows the road graph to a destination, waits for the escort, 1–2 ambushes (gunmen with crates) that also shoot the car, gold ⭐ VIP health ring, fail if it's destroyed; in random patrol and on the mission board (`src/game/logic/escort.ts`)
 
+- P1.4 Cairo districts — the four districts are now Haram, Downtown, Shubra and Dokki with their own facade palettes, brick share, floor ranges, crowd density and real street names (`src/game/logic/districts.ts`, green street-name boards, pyramids on the Haram skyline); mission titles and cutscene text updated
+
 ## Next
 
 1. Audio pass (radio chatter, district ambience, threat music).

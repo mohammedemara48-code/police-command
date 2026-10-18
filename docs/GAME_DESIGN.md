@@ -1,7 +1,7 @@
 # POLICE COMMAND — Game Design (v2 "Gang City" campaign)
 
 ## 1. Premise
-You are **Officer Yasser**, a rookie who has just joined the force in a coastal city. A gang called **Al-Aqrab (the Scorpion)** has bought off half the precinct and controls the port, the downtown shops and the suburb drug houses. Sergeant **Mona** (radio dispatch) and Captain **Hamed** guide you through 12 story missions. Each mission strips away one piece of the gang until the final mission: arresting the boss, **Al-Zaeem**, at his suburb villa.
+You are **Officer Yasser**, a rookie who has just joined the force in Cairo. A gang called **Al-Aqrab (the Scorpion)** has bought off half the precinct and controls Shubra, the downtown shops and the Haram drug houses. Sergeant **Mona** (radio dispatch) and Captain **Hamed** guide you through 12 story missions. Each mission strips away one piece of the gang until the final mission: arresting the boss, **Al-Zaeem**, at his villa in Haram.
 
 Tone: a game about arresting people. Non-gory. Suspects drop their weapon and fall over. They surrender when you get control of the scene. Shooting a suspect who has surrendered, or a civilian, is a failure.
 
@@ -76,17 +76,17 @@ The officer's health reaches 0. A suspect escapes (out of range or time limit). 
 
 ## 7. Missions
 1. **أول يوم (First Day):** Mona briefs you. Get in the car and drive to downtown. A shoplifter is there; order him to surrender and cuff him. *(tutorial: driving, GPS, arrest)*
-2. **سرقة جارية (Robbery in Progress):** at a corniche shop. Robber A surrenders; robber B runs on foot.
-3. **مطاردة الميناء (Port Chase):** a stolen car leaves the port. Chase it, then arrest the driver.
-4. **شحنة مهربة (Smuggled Cargo):** a gunfight at the port containers against 3 armed members with cover.
+2. **سرقة جارية (Robbery in Progress):** at a gold shop in Dokki. Robber A surrenders; robber B runs on foot.
+3. **مطاردة شبرا (Shubra Chase):** a stolen car leaves Shubra Street. Chase it, then arrest the driver.
+4. **شحنة مهربة (Smuggled Cargo):** a gunfight at a Shubra warehouse against 3 armed members with cover.
 5. **اضرب واهرب (Hit and Run):** a downtown chase. The driver gets out and runs on foot.
 6. **رهينة (Hostage):** at the downtown bank. 2 captors and 1 hostage.
-7. **ليلة الكورنيش (Corniche Night):** a fast chase followed by 2 armed passengers.
-8. **مخزن العقرب (Scorpion Warehouse):** a warehouse on the east avenue. 4 armed members, one of whom runs.
-9. **الواشي (The Informant):** an informant gives you the location of a suburb drug house: 3 armed plus 1 who surrenders.
+7. **ليلة كورنيش الجيزة (Giza Corniche Night):** a fast chase followed by 2 armed passengers.
+8. **مخزن العقرب (Scorpion Warehouse):** a warehouse on Al-Khalafawy Street in Shubra. 4 armed members, one of whom runs.
+9. **الواشي (The Informant):** an informant gives you the location of a Haram drug house: 3 armed plus 1 who surrenders.
 10. **طريق الهروب (Escape Road):** the gang's driver, the fastest chase in the game.
 11. **هجوم على القسم (Precinct Attack):** 5 armed attackers downtown.
-12. **الزعيم (The Boss):** the suburb villa. 3 guards, then Al-Zaeem himself (8 HP), who surrenders at low health. You arrest him, and the ending cutscene plays.
+12. **الزعيم (The Boss):** the villa in Haram. 3 guards, then Al-Zaeem himself (8 HP), who surrenders at low health. You arrest him, and the ending cutscene plays.
 
 ## 7b. Patrol calls
 Free patrol (and the precinct mission board) hands out random calls placed on a real avenue 60–200 m away. Pay = base + 400 × rank level + a per-suspect amount, times a risk multiplier (`src/game/logic/calls.ts`).
@@ -98,11 +98,23 @@ Free patrol (and the precinct mission board) hands out random calls placed on a 
 - **Drug-house raid (مداهمة وكر):** 2 waves (3 from sergeant) of 2–3 people come out of the house one after another, each wave a little deeper from the door and with its own crates. Wave 1 is all gunmen; later waves can include a runner or someone who gives up. At most 8 in total.
 - **VIP escort (تأمين موكب):** a graphite-black VIP sedan (Egyptian pennants, gold ⭐ marker) waits at the call spot and, once you pull up, drives the road graph (A*) to a destination 110–220 m away (hotel, court, embassy…). It cruises at ~31 km/h with you within 16 m, slows as you fall back and stops to wait past 34 m; it also brakes for the patrol car or the officer right in front of it. On the way 1 ambush (2 from sergeant) springs 18 m ahead on an avenue sidewalk: 2 gunmen as a rookie, 3 from officer, a 4th in the last ambush from captain, with crates; later ambushes can include a runner. The car stops until every attacker is down or cuffed. Gunmen shoot at the VIP car as well as at you (mostly the nearer one); its health is the gold ⭐ ring next to yours (7–12 per hit by rank, ramming it hurts too). Fail when it reaches 0. Pay is the highest of the calls (×1.2). Logic in `src/game/logic/escort.ts`, tests in `tests/escort.test.ts`.
 
-## 8. Tech constraints
+## 8. Districts
+`src/game/logic/districts.ts` holds the data. The avenue is split into four Cairo districts. Internal ids (`suburb`, `downtown`, `port`, `corniche`) are kept so saves and missions stay valid; only the visible names and looks changed.
+
+| id | Name | Look | Floors | Streets |
+|---|---|---|---|---|
+| `suburb` | الهرم (Haram) | mostly red brick with rebar on the roofs, sand ground, pyramids behind the skyline, few trees | 7–13 | شارع الهرم / الطريق الدائري / شارع فيصل |
+| `downtown` | وسط البلد (Downtown) | yellow, ochre and white plaster | 5–10 | شارع التحرير / شارع قصر النيل |
+| `port` | شبرا (Shubra) | pink, yellow and blue plaster, mixed brick, 1.5× pedestrians (not on low quality) | 6–12 | شارع شبرا / شارع الخلفاوي |
+| `corniche` | الدقي (Dokki) | white, grey and blue modernist blocks, palms on the Giza corniche | 6–10 | شارع المساحة / كورنيش الجيزة |
+
+Names show up on the HUD, the mission map, patrol calls, the blue gantry signs and the green street-name boards at every cross street.
+
+## 9. Tech constraints
 - One ~250×340 m city, built from instanced blocks, culled per block.
 - Phones default to low quality, but always use the realistic (Quaternius) character set, with fewer pedestrians on low.
 - The pedestrian and NPC logic must not allocate memory per frame. The HUD only updates at 8 Hz.
 - MakeHuman people use soft skin clearcoat/sheen and ~0.3 s locomotion cross-fades; the character creator preview runs the same idle mixer.
 
-## 9. Acceptance (verification)
+## 10. Acceptance (verification)
 In a 412×915 mobile test run on low quality, missions 1–3 must be playable start to finish: radio dialogue appears, objectives advance at the right moments, the arrest works (order, then cuff), and the chase can be caught. Screenshots are saved for each mission.

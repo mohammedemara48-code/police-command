@@ -90,7 +90,7 @@ import {
   followPath,
   nearestNode
 } from '../world/City';
-import { egyptBlock, gantry, kerbStripeMat, roofRack, taxiSign, rollWheels, type SignDest } from '../world/Egypt';
+import { egyptBlock, gantry, streetNameSign, kerbStripeMat, roofRack, taxiSign, rollWheels, type SignDest } from '../world/Egypt';
 import {
   surface,
   worldUV,
@@ -112,7 +112,8 @@ import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
 import { addStat, checkAch } from '../systems/Achievements';
 import * as THREE from 'three';
-import { models, CARS, MEN, WOMEN, LOW_BUILDINGS, TOWERS, fx } from './Models';
+import { models, CARS, MEN, WOMEN, fx } from './Models';
+import { DISTRICT_STYLES, blockLook, signNames } from '../logic/districts';
 import { audio } from '../systems/AudioManager';
 import { Q } from '../config/Quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -140,10 +141,10 @@ export interface StreetPlace {
 }
 
 export const STREET_PLACES: StreetPlace[] = [
-  { id: 'downtown', name: 'وسط البلد', z: 0, blurb: 'أبراج ونوافذ مضيئة' },
-  { id: 'port', name: 'الميناء', z: 100, blurb: 'أرصفة وحاويات' },
-  { id: 'corniche', name: 'الكورنيش', z: 190, blurb: 'واجهة مائية' },
-  { id: 'suburb', name: 'الضاحية', z: -72, blurb: 'بيوت وشوارع هادئة' }
+  { id: 'downtown', name: DISTRICT_STYLES.downtown.name, z: 0, blurb: DISTRICT_STYLES.downtown.blurb },
+  { id: 'port', name: DISTRICT_STYLES.port.name, z: 100, blurb: DISTRICT_STYLES.port.blurb },
+  { id: 'corniche', name: DISTRICT_STYLES.corniche.name, z: 190, blurb: DISTRICT_STYLES.corniche.blurb },
+  { id: 'suburb', name: DISTRICT_STYLES.suburb.name, z: -72, blurb: DISTRICT_STYLES.suburb.blurb }
 ];
 
 export interface ChaseReport {
@@ -173,20 +174,20 @@ export interface MissionDef {
 }
 
 const MISSION_POOL: MissionDef[] = [
-  { id: 'm-port-chase', placeId: 'port', kind: 'chase', title: 'مطاردة هاربين', blurb: 'سيارة سودا هاربة من الميناء' },
-  { id: 'm-down-rob', placeId: 'downtown', kind: 'robbery', title: 'سطو على محل', blurb: 'مسلحون داخل محل وسط البلد' },
-  { id: 'm-corn-drug', placeId: 'corniche', kind: 'drugs', title: 'تفتيش مخدرات', blurb: 'صفقة مشبوهة على الكورنيش' },
+  { id: 'm-port-chase', placeId: 'port', kind: 'chase', title: 'مطاردة هاربين', blurb: 'سيارة سودا هاربة من شارع شبرا' },
+  { id: 'm-down-rob', placeId: 'downtown', kind: 'robbery', title: 'سطو على محل', blurb: 'مسلحون داخل محل في شارع التحرير' },
+  { id: 'm-corn-drug', placeId: 'corniche', kind: 'drugs', title: 'تفتيش مخدرات', blurb: 'صفقة مشبوهة على كورنيش الجيزة' },
   {
     id: 'm-sub-assault',
     placeId: 'suburb',
     kind: 'assault',
     title: 'اعتداء في الشارع',
-    blurb: 'مشاجرة وعنف في الضاحية'
+    blurb: 'مشاجرة وعنف في شارع الهرم'
   },
-  { id: 'm-port-traffic', placeId: 'port', kind: 'traffic', title: 'حادث مروري', blurb: 'تصادم وإغلاق طريق بالميناء' },
+  { id: 'm-port-traffic', placeId: 'port', kind: 'traffic', title: 'حادث مروري', blurb: 'تصادم وإغلاق طريق في شارع الخلفاوي' },
   { id: 'm-down-chase', placeId: 'downtown', kind: 'chase', title: 'مطاردة وسط البلد', blurb: 'هارب يقطع الإشارات' },
-  { id: 'm-corn-rob', placeId: 'corniche', kind: 'robbery', title: 'سرقة على الكورنيش', blurb: 'سطو على كشك ليلي' },
-  { id: 'm-sub-drugs', placeId: 'suburb', kind: 'drugs', title: 'مداهمة بيت', blurb: 'بلاغ مخدرات في الضاحية' }
+  { id: 'm-corn-rob', placeId: 'corniche', kind: 'robbery', title: 'سرقة في الدقي', blurb: 'سطو على كشك ليلي' },
+  { id: 'm-sub-drugs', placeId: 'suburb', kind: 'drugs', title: 'مداهمة بيت', blurb: 'بلاغ مخدرات في الهرم' }
 ];
 
 type Ped = {
@@ -517,6 +518,7 @@ export class StreetPlay {
 
 
     this.buildStreetRows();
+    this.buildStreetNames();
     this.buildingBoxes = avenueBuildingBoxes(STATION);
     for (const place of STREET_PLACES) {
       this.buildBlock(place);
@@ -533,7 +535,8 @@ export class StreetPlay {
       for (const side of [-1, 1]) {
         const zz = z + (side > 0 ? 5 : 0);
         if (districtAt(zz) === 'corniche') palm(props, side * 5.1, zz + 2.5);
-        else if ((Math.floor(zz / 10) & 1) === 0) tree(props, side * 5.1, zz);
+        else if ((Math.floor(zz / 10) & 1) === 0 && (districtAt(zz) !== 'suburb' || (Math.floor(zz / 10) & 3) === 0))
+          tree(props, side * 5.1, zz);
       }
     }
     props.flush(this.group, Q.shadows);
@@ -656,42 +659,41 @@ export class StreetPlay {
           if (!this.stationBuilt) this.buildStation();
           continue;
         }
-        const near = STREET_PLACES.reduce((a, p) => (Math.abs(p.z - z) < Math.abs(a.z - z) ? p : a));
+        const dist = districtAt(z);
         const seed = Math.abs(Math.floor(z * 7 + side * 13));
-        const h = near.id === 'downtown' ? 9 + (seed % 12) : near.id === 'suburb' ? 4 + (seed % 3) : 5 + (seed % 7);
+        const look = blockLook(dist, seed);
         const w = 6 + (seed % 3);
-        if (h <= 10 || near.id !== 'downtown') {
-          // Egyptian apartment block: plastered or bare red brick, balconies, AC units, dishes
-          const eb = egyptBlock(w, h, 8.4, side, seed);
-          eb.position.set(side * (8.4 + w / 2), 0, z);
-          this.group.add(eb);
-          if (near.id !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
-          continue;
-        }
-        const bg = new THREE.Group();
-        bg.position.set(side * (8.4 + w / 2), 0, z);
-        bg.add(this.box(w, h, 8.4, this.mat(0x8a94a0), 0, h / 2, 0));
-        const kinds = h > 10 ? TOWERS : LOW_BUILDINGS;
-        models.dress(bg, kinds[seed % kinds.length], {
-          box: [w, h, 8.4],
-          yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2,
-          noShadow: true
-        });
-        this.group.add(bg);
-        this.addShop(side, z, shops[n++ % shops.length]);
+        // Cairo apartment block: plastered in the district's colours or bare red brick with rebar on the roof
+        const eb = egyptBlock(w, look.floors * 3, 8.4, side, seed, look);
+        eb.position.set(side * (8.4 + w / 2), 0, z);
+        this.group.add(eb);
+        if (dist !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
       }
     }
+  }
+
+  /** Green street-name boards at the cross streets with the real names of each district. */
+  private buildStreetNames() {
+    CROSS_Z.forEach((cz, i) => {
+      if (Math.abs(cz - STATION.z) < 10) return;
+      const [avenue, cross] = signNames(districtAt(cz), i);
+      for (const side of [-1, 1]) {
+        const sign = streetNameSign(avenue, cross);
+        sign.position.set(side * 6.6, 0, cz - side * (ROAD_W / 2 + 1.6));
+        this.group.add(sign);
+      }
+    });
   }
 
   /** Blue overhead direction signs (Arabic + English, distance to the next places in that direction). */
   private buildGantries() {
     const places: { ar: string; en: string; z: number }[] = [
       { ar: 'الأهرامات', en: 'Pyramids', z: -900 },
-      { ar: 'الضاحية', en: 'Suburb', z: -72 },
-      { ar: 'وسط البلد', en: 'Downtown', z: 0 },
+      { ar: DISTRICT_STYLES.suburb.name, en: DISTRICT_STYLES.suburb.en, z: -72 },
+      { ar: DISTRICT_STYLES.downtown.name, en: DISTRICT_STYLES.downtown.en, z: 0 },
       { ar: 'قسم الشرطة', en: 'Police Station', z: STATION.z },
-      { ar: 'الميناء', en: 'Port', z: 100 },
-      { ar: 'الكورنيش', en: 'Corniche', z: 190 }
+      { ar: DISTRICT_STYLES.port.name, en: DISTRICT_STYLES.port.en, z: 100 },
+      { ar: DISTRICT_STYLES.corniche.name, en: DISTRICT_STYLES.corniche.en, z: 190 }
     ];
     const km = (d: number) => Math.round(d / 10) / 10 + 0.3; // map scale: 100 m on the avenue reads as ~1 km
     const put = (z: number, dir: number) => {
@@ -2427,7 +2429,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const jackets = [0x1c2430, 0x4a4038, 0x202228, 0x16324a];
     let n = 0;
     for (const place of STREET_PLACES) {
-      for (let i = 0; i < (Q.lowDetailPeople ? 4 : 6); i++) {
+      const crowd = Q.lowDetailPeople ? 4 : Math.round(6 * DISTRICT_STYLES[districtAt(place.z)].crowd);
+      for (let i = 0; i < crowd; i++) {
         const female = i % 2 === 0;
         const col = female ? dresses[n % dresses.length] : jackets[n % jackets.length];
         const built = this.makePerson(female, col, hairs[n % hairs.length]);

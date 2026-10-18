@@ -3,21 +3,14 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Q } from '../config/Quality';
 import { surface, worldUV, segments, PROP_MATS } from './Environment';
+import { DISTRICT_NAMES, DISTRICT_STYLES, districtAt, type District } from '../logic/districts';
+
+export { DISTRICT_NAMES, districtAt, type District };
 
 export const AVENUES_X = [-120, -60, 0, 60, 120];
 export const CROSS_Z = [-96, -45, 50, 145, 236];
 export const ROAD_W = 9.2;
 export const CITY = { x0: -125, x1: 125, z0: -100, z1: 240 };
-
-export type District = 'suburb' | 'downtown' | 'port' | 'corniche';
-export const districtAt = (z: number): District =>
-  z < -45 ? 'suburb' : z < 50 ? 'downtown' : z < 145 ? 'port' : 'corniche';
-export const DISTRICT_NAMES: Record<District, string> = {
-  suburb: 'الضاحية',
-  downtown: 'وسط البلد',
-  port: 'الميناء',
-  corniche: 'الكورنيش'
-};
 
 interface Rect {
   x0: number;
@@ -61,14 +54,37 @@ function windowTex() {
   return t;
 }
 
-const PALETTE: Record<District, number[]> = {
-  suburb: [0xe8d8c0, 0xd8b890, 0xc8d0c0, 0xf0e0d0, 0xb8a080],
-  downtown: [0x8a94a0, 0x6a7888, 0xa0a8b4, 0x56606c, 0x9098a8],
-  port: [0xc0392b, 0x2e86c1, 0x27ae60, 0xd68910, 0x7f8c8d],
-  corniche: [0xf5e6c8, 0xe8c9a0, 0xffffff, 0xd4b896, 0xc0d8e0]
-};
+const BRICK = [0xa04e36, 0x9a4a32, 0xb05a3c, 0x8e4430];
 
-export function buildCity(group: THREE.Group, low: boolean) {
+/** Colour of one distant block: red brick with the district's brick share, else one of its plaster tints. */
+function blockColor(d: District, r: number, r2: number) {
+  const st = DISTRICT_STYLES[d];
+  if (r < st.brick) return BRICK[Math.floor(r2 * BRICK.length)];
+  return st.tints[Math.floor(r2 * st.tints.length)];
+}
+
+const FLOOR_H = 3;
+
+/** Three pyramids on the skyline beyond the Haram end of the avenue (three plain meshes, no textures). */
+function addPyramids(group: THREE.Group) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd8bd88, roughness: 1, flatShading: true });
+  // [x, z, base width, height]
+  for (const [x, z, base, h] of [
+    [55, -175, 92, 57],
+    [-25, -215, 80, 50],
+    [-85, -250, 44, 27]
+  ]) {
+    const g = new THREE.ConeGeometry(base / Math.SQRT2, h, 4, 1);
+    g.rotateY(Math.PI / 4);
+    g.translate(0, h / 2, 0);
+    const m = new THREE.Mesh(g, mat);
+    m.position.set(x, 0, z);
+    m.userData.city = true;
+    group.add(m);
+  }
+}
+
+export function buildCity(group: THREE.Group, _low: boolean) {
   const rnd = mulberry(7);
   // roads and sidewalks (main avenue already exists in StreetPlay; skip x=0)
   const roadGeos: THREE.BufferGeometry[] = [];
@@ -116,14 +132,22 @@ export function buildCity(group: THREE.Group, low: boolean) {
   mk(kerbGeos, surface('concrete', 0xcfcac2), 1.2);
   mk(lineGeos, PROP_MATS.paint);
 
-  // ground plane for block interiors
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(CITY.x1 - CITY.x0 + 60, CITY.z1 - CITY.z0 + 40),
-    new THREE.MeshStandardMaterial({ color: 0x4d5a48, roughness: 1 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, 0.005, (CITY.z0 + CITY.z1) / 2 - 10);
-  group.add(ground);
+  // ground plane for block interiors; the Haram end of the avenue is sandy desert ground
+  const gz0 = CITY.z0 - 30,
+    gz1 = CITY.z1 + 10,
+    sandEnd = -45;
+  const groundPart = (za: number, zb: number, color: number) => {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(CITY.x1 - CITY.x0 + 60, zb - za),
+      new THREE.MeshStandardMaterial({ color, roughness: 1 })
+    );
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(0, 0.005, (za + zb) / 2);
+    group.add(m);
+  };
+  groundPart(gz0, sandEnd, 0xb59a6a);
+  groundPart(sandEnd, gz1, 0x4d5a48);
+  addPyramids(group);
 
   // blocks: one InstancedMesh per block (a chunk), so off-screen blocks are culled as a unit
   const tex = windowTex();
@@ -134,7 +158,6 @@ export function buildCity(group: THREE.Group, low: boolean) {
     emissiveMap: tex,
     emissiveIntensity: 0.9
   });
-  const flat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
   const box = new THREE.BoxGeometry(1, 1, 1);
   box.translate(0, 0.5, 0);
   const m4 = new THREE.Matrix4();
@@ -148,8 +171,9 @@ export function buildCity(group: THREE.Group, low: boolean) {
         bz1 = CROSS_Z[j + 1] - ROAD_W / 2 - 3;
       const midZ = (bz0 + bz1) / 2;
       const d = districtAt(midZ);
-      const items: { x: number; z: number; w: number; dd: number; h: number; c: number; flat?: boolean }[] = [];
+      const items: { x: number; z: number; w: number; dd: number; h: number; c: number }[] = [];
       const step = d === 'downtown' ? 13 : d === 'suburb' ? 11 : 12;
+      const st = DISTRICT_STYLES[d];
       for (let x = bx0; x < bx1 - 4; x += step) {
         for (let z = bz0; z < bz1 - 4; z += step) {
           // keep the existing main-avenue rows untouched
@@ -158,46 +182,24 @@ export function buildCity(group: THREE.Group, low: boolean) {
           if (!edge && d !== 'downtown' && d !== 'port') continue; // courtyards in residential blocks
           const w = step - 2 - rnd() * 2,
             dd = step - 2 - rnd() * 2;
-          const pal = PALETTE[d];
-          const c = pal[Math.floor(rnd() * pal.length)];
-          if (d === 'port') {
-            // container stacks + warehouses
-            if (rnd() < 0.6) {
-              items.push({
-                x: x + w / 2,
-                z: z + dd / 2,
-                w: 2.4,
-                dd: 6,
-                h: 2.6 * (1 + Math.floor(rnd() * 3)),
-                c,
-                flat: true
-              });
-              continue;
-            }
-            items.push({ x: x + w / 2, z: z + dd / 2, w, dd, h: 6 + rnd() * 3, c: 0x8d9399 });
-          } else {
-            const h = d === 'downtown' ? 14 + rnd() * 34 : d === 'suburb' ? 4 + rnd() * 4 : 6 + rnd() * 10;
-            items.push({ x: x + w / 2, z: z + dd / 2, w, dd, h, c });
-          }
+          const c = blockColor(d, rnd(), rnd());
+          const floors = st.floorsMin + Math.floor(rnd() * (st.floorsMax - st.floorsMin + 1));
+          items.push({ x: x + w / 2, z: z + dd / 2, w, dd, h: floors * FLOOR_H, c });
         }
       }
       if (!items.length) continue;
-      for (const isFlat of [false, true]) {
-        const list = items.filter((t) => !!t.flat === isFlat);
-        if (!list.length) continue;
-        const im = new THREE.InstancedMesh(box, isFlat ? flat : bmat, list.length);
-        list.forEach((t, k) => {
-          m4.makeScale(t.w, t.h, t.dd).setPosition(t.x, 0, t.z);
-          im.setMatrixAt(k, m4);
-          im.setColorAt(k, col.setHex(t.c));
-        });
-        im.computeBoundingSphere();
-        im.castShadow = !low && isFlat;
-        im.receiveShadow = false;
-        im.userData.city = true;
-        group.add(im);
-        blocks++;
-      }
+      const im = new THREE.InstancedMesh(box, bmat, items.length);
+      items.forEach((t, k) => {
+        m4.makeScale(t.w, t.h, t.dd).setPosition(t.x, 0, t.z);
+        im.setMatrixAt(k, m4);
+        im.setColorAt(k, col.setHex(t.c));
+      });
+      im.computeBoundingSphere();
+      im.castShadow = false;
+      im.receiveShadow = false;
+      im.userData.city = true;
+      group.add(im);
+      blocks++;
     }
   }
   return blocks;
@@ -215,10 +217,10 @@ export function drawCityMap(
   ctx.fillStyle = 'rgba(6,12,20,0.85)';
   ctx.fillRect(0, 0, w, h);
   const bands: [District, number, number, string][] = [
-    ['suburb', CITY.z0, -45, '#1d2a1e'],
-    ['downtown', -45, 50, '#1e2230'],
-    ['port', 50, 145, '#2a2418'],
-    ['corniche', 145, CITY.z1, '#18283a']
+    ['suburb', CITY.z0, -45, DISTRICT_STYLES.suburb.band],
+    ['downtown', -45, 50, DISTRICT_STYLES.downtown.band],
+    ['port', 50, 145, DISTRICT_STYLES.port.band],
+    ['corniche', 145, CITY.z1, DISTRICT_STYLES.corniche.band]
   ];
   for (const [, a, b, c] of bands) {
     ctx.fillStyle = c;

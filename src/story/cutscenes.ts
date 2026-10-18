@@ -159,7 +159,7 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
       id: 'm2-intro',
       shots: [aerial(), streetLevel(), officerFace()],
       lines: [
-        { who: 'narrator', shot: 0, text: 'الكورنيش — محل دهب.', en: 'The Corniche — a gold shop.' },
+        { who: 'narrator', shot: 0, text: 'الدقي — محل دهب.', en: 'Dokki — a gold shop.' },
         {
           who: 'suspect',
           shot: 1,
@@ -197,12 +197,12 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
       id: 'm3-intro',
       shots: [aerial(), streetLevel(), carHero()],
       lines: [
-        { who: 'narrator', shot: 0, text: 'الميناء — بوابة ٣.', en: 'The port — Gate 3.' },
+        { who: 'narrator', shot: 0, text: 'شبرا — شارع شبرا.', en: 'Shubra — Shubra Street.' },
         {
           who: 'suspect',
           shot: 1,
-          text: 'العربية دي لازم تطلع من البوابة النهارده. أي حد يقف قدامك… دوس.',
-          en: 'This car leaves the gate today. Anyone gets in your way… floor it.'
+          text: 'العربية دي لازم تطلع من الشارع ده النهارده. أي حد يقف قدامك… دوس.',
+          en: 'This car leaves the street today. Anyone gets in your way… floor it.'
         },
         {
           who: 'yasser',
@@ -219,8 +219,8 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
         { who: 'suspect', shot: 0, text: 'خلاص خلاص! أنا مجرد سواق…', en: 'Okay, okay! I’m just the driver…' },
         {
           who: 'suspect',
-          text: 'الشحنة في الحاويات! والله ما ليا دعوة!',
-          en: 'The cargo is in the containers! I swear it’s not mine!'
+          text: 'الشحنة في المخزن! والله ما ليا دعوة!',
+          en: 'The cargo is in the warehouse! I swear it’s not mine!'
         },
         { who: 'yasser', shot: 1, text: 'الكلام ده تقوله في القسم.', en: 'Save it for the station.' }
       ]
@@ -231,7 +231,7 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
       id: 'm4-intro',
       shots: [sceneOrbit(), streetLevel(), officerFace()],
       lines: [
-        { who: 'narrator', shot: 0, text: 'الميناء — ساحة الحاويات.', en: 'The port — the container yard.' },
+        { who: 'narrator', shot: 0, text: 'شبرا — مخزن الخلفاوي.', en: 'Shubra — the Khalafawy warehouse.' },
         {
           who: 'suspect',
           text: 'حمّلوا الصناديق بسرعة. السلاح ده لازم يوصل للزعيم الليلة.',
@@ -334,8 +334,8 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
         {
           who: 'narrator',
           shot: 0,
-          text: 'الكورنيش — عربية سودا من غير نمر.',
-          en: 'The Corniche — a black car with no plates.'
+          text: 'كورنيش الجيزة — عربية سودا من غير نمر.',
+          en: 'The Giza Corniche — a black car with no plates.'
         },
         {
           who: 'mona',
@@ -397,7 +397,7 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
         },
         {
           who: 'informant',
-          text: '(رسالة من رقم مجهول) عايز تعرف بيت المخدرات فين؟ قابلني في الضاحية.',
+          text: '(رسالة من رقم مجهول) عايز تعرف بيت المخدرات فين؟ قابلني في الهرم.',
           en: '(text from an unknown number) Want to know where the drug house is? Meet me in the suburb.'
         }
       ]
@@ -411,8 +411,8 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
         {
           who: 'narrator',
           shot: 0,
-          text: 'الضاحية — شارع هادي… زيادة عن اللزوم.',
-          en: 'The suburb — a quiet street… too quiet.'
+          text: 'الهرم — شارع هادي… زيادة عن اللزوم.',
+          en: 'Haram — a quiet street… too quiet.'
         },
         {
           who: 'informant',
@@ -468,8 +468,8 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
         {
           who: 'suspect',
           shot: 0,
-          text: 'الزعيم… في الفيلا في الضاحية.',
-          en: 'The boss… he’s at the villa in the suburb.'
+          text: 'الزعيم… في الفيلا في الهرم.',
+          en: 'The boss… he’s at the villa in Haram.'
         },
         {
           who: 'suspect',
@@ -519,7 +519,7 @@ export const STORY_CUTSCENES: Record<number, StoryScenes> = {
       id: 'm12-intro',
       shots: [aerial(), sceneOrbit({ blend: 1 }), officerFace()],
       lines: [
-        { who: 'narrator', shot: 0, text: 'الضاحية — فيلا الزعيم.', en: 'The suburb — Al-Zaeem’s villa.' },
+        { who: 'narrator', shot: 0, text: 'الهرم — فيلا الزعيم.', en: 'Haram — Al-Zaeem’s villa.' },
         {
           who: 'boss',
           shot: 1,

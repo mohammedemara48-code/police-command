@@ -144,4 +144,4 @@ export function vipDestination(start: Pt, nodes: readonly Pt[], roll: number): P
 
 /** Who rides in the car and where to (Egyptian Arabic, for the radio and the objective). */
 export const VIP_WHO = ['السفير', 'الوزير', 'شاهد الملك في قضية العقرب', 'القاضي', 'رجل الأعمال الكبير'];
-export const VIP_DEST = ['فندق الكورنيش', 'مبنى المحافظة', 'المحكمة', 'السفارة', 'قاعة المؤتمرات'];
+export const VIP_DEST = ['فندق كورنيش الجيزة', 'مبنى المحافظة', 'المحكمة', 'السفارة', 'قاعة المؤتمرات'];
