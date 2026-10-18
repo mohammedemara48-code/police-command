@@ -128,6 +128,20 @@ Names show up on the HUD, the mission map, patrol calls, the blue gantry signs a
 
 **Map.** `logic/cairoMap.ts` holds hand-drawn, approximate geometry (longitude/latitude of well-known places, simplified) and the projection; `ui/CairoMap.ts` draws it on a canvas. The four districts sit where they really are. The playable avenue is one straight street, so each district uses a short stretch of its real street: Haram on Haram Street, Downtown between Talaat Harb and Tahrir squares, Shubra on Shubra Street, Dokki from Mesaha Square, then one bridge that stands for Tahrir and Qasr El Nil, then Gezira and the Cairo Tower. The minimap (local grid) now shows the Nile and bridge deck at its top edge.
 
+## 8c. Open city (plan and status)
+
+**Why.** The first city was one avenue and four cross streets inside a rectangle, with decorations around it. You could not drive away from it, and nothing real lay beyond. The open city replaces it with a connected street network on the real Cairo layout.
+
+**Layout.** One world metre stands for five real metres (`logic/cairo.ts`). The Nile, Gezira and Roda, the bridges (Qasr El Nil, Tahrir, University, Galaa, Imbaba, 6th of October, the Ring Road bridge in the south), Haram Street and Faisal Street to the Giza plateau, the Ring Road, Shubra Street, Ramses, Talaat Harb, Tahrir and Mesaha squares as one-way roundabouts, and the corniches are hand-drawn from approximate longitude/latitude. Between the drawn streets a rotated grid of local streets fills each built-up zone. The world is about 2.9 x 3.5 km; every drawn road runs out to its edge and ends in a visible barrier, not in a wall.
+
+**Network.** `logic/roadnet.ts` smooths the strokes, cuts them at every crossing and joins loose ends, then keeps the one connected piece. Roads are edges with a width class (arterial 12.8 m, collector 9.6 m, local 7.8 m, plus 3.2 m pavements). Everything that asks "is this a road" (driving, walking, the camera, traffic, crowds, calls) asks the network. Path finding follows the edges and respects the one-way roundabouts. Tests prove that every district can be reached from every other, that the banks are joined only by bridges, that no drawn street stops dead inside the city, and that roads reach the edge of the world.
+
+**Streaming.** The world is cut into square chunks. Only the chunks around the officer exist (radius 3 / 4 / 5 on Low / Medium / High); each is built in a frame budget and freed again when it is far. A chunk holds its ground, roads, pavements, markings, lamps, trees, shops and buildings, merged per material. Buildings are planned once for the whole world (lots along each edge, set back from every other road, never overlapping) so chunk borders match.
+
+**Gameplay on the new map.** The four mission districts keep their ids and their look (`suburb` Haram/Faisal/Giza, `downtown` Downtown/Zamalek/Manial, `port` Shubra/Imbaba, `corniche` Dokki/Mohandessin). Mission points written for the old avenue are laid onto the real main street of their district and snapped to the nearest road. Traffic follows the network and keeps to the right; pedestrians and the crowd keep their caps per preset. Fast travel stays, but nothing needs it.
+
+**Honest limits.** Streets are the drawn ones plus a generated grid, not a street-by-street survey; the 6th of October flyover is at ground level; blocks are generic; the Nile and the squares are narrower and smaller than real (scale 1:5 horizontally, real-size lanes).
+
 ## 9. Tech constraints
 - One ~250×340 m city, built from instanced blocks, culled per block.
 - Phones default to low quality, but always use the realistic (Quaternius) character set, with fewer pedestrians on low.
