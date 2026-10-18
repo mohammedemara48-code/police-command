@@ -98,7 +98,15 @@ import { CairoMap } from '../ui/CairoMap';
 import { Crowd } from './Crowd';
 import { quality } from '../config/Quality';
 import { damageWord } from '../logic/barks';
-import { boomLength, clampDistance, distanceToBlocked, wallLift, CAM_PAD_CAR, CAM_PAD_FOOT } from '../logic/camera';
+import {
+  boomLength,
+  clampDistance,
+  distanceToBlocked,
+  wallLift,
+  CAM_PAD_CAR,
+  CAM_PAD_FOOT,
+  limitPitch
+} from '../logic/camera';
 import { rearSticker } from '../world/Stickers';
 import { roofRack, taxiSign, rollWheels } from '../world/Egypt';
 
@@ -3065,7 +3073,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const pad = this.inCar ? CAM_PAD_CAR : CAM_PAD_FOOT;
     const tx = target.position.x,
       tz = target.position.z;
-    const { length: b, boxed } = boomLength((x, z) => onRoad(x, z, pad), tx, tz, yaw, back);
+    // free = the road and its pavement, or any open ground (a yard, a lawn, the station forecourt) that is not inside a building
+    const free = (x: number, z: number) => onRoad(x, z, pad) || !lots().blocked(x, z, 1.1);
+    const { length: b, boxed } = boomLength(free, tx, tz, yaw, back);
     // ease the boom length (no pops), and rise smoothly as it shortens
     this.camB = k >= 1 ? b : this.camB + (b - this.camB) * Math.min(1, k * 1.5);
     const cb = this.camB;
@@ -3074,7 +3084,15 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (boxed) h = Math.max(h, up + 6);
     // slow car facing a wall: look down on it rather than at a facade filling the screen
     if (this.inCar && Math.abs(this.speed) < 4) {
-      const f = distanceToBlocked((x, z) => onRoad(x, z, 2.4), tx, tz, Math.sin(this.yaw), Math.cos(this.yaw), 10, 2);
+      const f = distanceToBlocked(
+        (x, z) => onRoad(x, z, 2.4) || !lots().blocked(x, z, 1.1),
+        tx,
+        tz,
+        Math.sin(this.yaw),
+        Math.cos(this.yaw),
+        10,
+        2
+      );
       h += wallLift(f);
     }
     const cx = target.position.x - sin * cb,
@@ -3092,6 +3110,15 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const keep = clampDistance(this.camPos.x, this.camPos.z, tx, tz);
     this.camPos.x = keep.x;
     this.camPos.z = keep.z;
+    // ...but never right on top of it looking straight down (the lerp from a cutscene shot or a wedged spot can leave it so):
+    // keep a floor on the horizontal distance and a ceiling on the pitch unless the boom really is boxed in
+    if (!boxed) {
+      const lim = limitPitch(this.camPos, tx, tz, this.inCar ? 1.1 : 1.3, Math.min(cb, back) * 0.8, {
+        x: -sin,
+        z: -cos
+      });
+      this.camPos.set(lim.x, lim.y, lim.z);
+    }
     this.camera.position.copy(this.camPos);
     const ahead = this.inCar ? this.rig.ahead * (this.speed < 0 ? -0.5 : 1) : 0;
     this.look.set(target.position.x + sin * ahead, this.inCar ? 1.1 : 1.3, target.position.z + cos * ahead);

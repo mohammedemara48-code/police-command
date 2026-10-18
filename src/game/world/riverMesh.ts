@@ -1,7 +1,7 @@
 /** The ground and the Nile banks of the open city, poured per chunk: the ground has the river cut out, a stone quay wall drops to the water. */
 import * as THREE from 'three';
 import { inPoly, inRiver, net, RIVER } from '../logic/roadnet';
-import { PAVEMENT } from '../logic/cairo';
+import { PAVEMENT, toWorld } from '../logic/cairo';
 import { hash01 } from '../logic/districts';
 import { Q } from '../config/Quality';
 import { surface, tex } from './Environment';
@@ -17,9 +17,27 @@ export function onIsland(x: number, z: number): boolean {
 
 const DUST: [number, number, number] = [0.98, 0.93, 0.84];
 const GRASS: [number, number, number] = [0.66, 0.82, 0.52];
+/** Bare city ground between the buildings: paved yard / concrete, not sand. */
+const YARD: [number, number, number] = [0.6, 0.58, 0.54];
+/** Planted blocks share the yard material (a green tint on it), so they cost no extra draw call. */
+const LAWN: [number, number, number] = [0.46, 0.64, 0.36];
+
+/** Sand belongs to the Giza plateau; everywhere else the ground is city ground. */
+const PLATEAU = toWorld([31.1342, 29.9792]);
+const SAND_FULL = 420,
+  SAND_NONE = 650;
+/** 'sand' | 'lawn' | 'yard' for the ground at a point (a patchy edge where the plateau ends). */
+export function groundAt(x: number, z: number): 'sand' | 'lawn' | 'yard' {
+  const d = Math.hypot(x - PLATEAU.x, z - PLATEAU.z);
+  const w = Math.max(0, Math.min(1, (SAND_NONE - d) / (SAND_NONE - SAND_FULL)));
+  if (w > 0 && hash01(Math.floor(x / 12) * 733 + Math.floor(z / 12) * 31 + 5) < w) return 'sand';
+  // a few planted blocks among the paved yards (never in the dense centre)
+  if (hash01(Math.floor(x / 26) * 1291 + Math.floor(z / 26) * 17 + 9) < 0.16) return 'lawn';
+  return 'yard';
+}
 
 /** Ground of one chunk: coarse cells away from the water, fine cells along the banks. */
-export function pourGround(x0: number, z0: number, x1: number, z1: number, desert: Soup, park: Soup) {
+export function pourGround(x0: number, z0: number, x1: number, z1: number, desert: Soup, park: Soup, yard: Soup) {
   const C = 16,
     F = 2;
   for (let cx = x0; cx < x1; cx += C)
@@ -32,9 +50,10 @@ export function pourGround(x0: number, z0: number, x1: number, z1: number, deser
           mz = z + s / 2;
         const isl = onIsland(mx, mz);
         const k = 0.9 + 0.14 * hash01(Math.floor(mx / 5) * 977 + Math.floor(mz / 5));
-        const base = isl ? GRASS : DUST;
+        const kind = isl ? 'lawn' : groundAt(mx, mz);
+        const base = isl ? GRASS : kind === 'sand' ? DUST : kind === 'lawn' ? LAWN : YARD;
         const col: [number, number, number] = [base[0] * k, base[1] * k, base[2] * k];
-        (isl ? park : desert).flat(
+        (isl ? park : kind === 'sand' ? desert : yard).flat(
           0,
           [
             { x, z },
@@ -144,5 +163,6 @@ export function buildWater(): { mesh: THREE.Mesh; update(dt: number): void } {
 
 export const groundMats = () => ({
   desert: surface('desert', 0xfffffe, { vertexColors: true }),
+  yard: surface('concrete', 0xfffffc, { vertexColors: true }),
   park: surface('park', 0xfffffd, { vertexColors: true })
 });

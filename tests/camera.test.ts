@@ -5,6 +5,8 @@ import {
   boomLength,
   clampDistance,
   distanceToBlocked,
+  limitPitch,
+  MAX_PITCH_DEG,
   wallLift
 } from '../src/game/logic/camera';
 
@@ -68,5 +70,28 @@ describe('clampDistance', () => {
   });
   it('handles a camera exactly on the target', () => {
     expect(clampDistance(2, 2, 2, 2)).toEqual({ x: 2, z: 2 });
+  });
+});
+
+describe('limitPitch', () => {
+  const pitch = (c: { x: number; y: number; z: number }, tx: number, tz: number, lookY: number) =>
+    (Math.atan2(c.y - lookY, Math.hypot(c.x - tx, c.z - tz)) * 180) / Math.PI;
+  it('leaves a normal chase view alone', () => {
+    const c = limitPitch({ x: 0, y: 2.3, z: -5.2 }, 0, 0, 1.3, 4, { x: 0, z: -1 });
+    expect(c).toEqual({ x: 0, y: 2.3, z: -5.2 });
+  });
+  it('pushes a camera that sits right on top of the target out to the floor and lowers it', () => {
+    const c = limitPitch({ x: 0.2, y: 8, z: 0 }, 0, 0, 1.3, 4, { x: 0, z: -1 });
+    expect(Math.hypot(c.x, c.z)).toBeCloseTo(4, 5);
+    expect(pitch(c, 0, 0, 1.3)).toBeLessThanOrEqual(MAX_PITCH_DEG + 1e-6);
+  });
+  it('uses the fallback bearing when exactly overhead', () => {
+    const c = limitPitch({ x: 3, y: 9, z: 3 }, 3, 3, 1.3, 4, { x: 0, z: -1 });
+    expect(c.x).toBeCloseTo(3, 5);
+    expect(c.z).toBeCloseTo(-1, 5);
+  });
+  it('caps the pitch of a steep, far camera', () => {
+    const c = limitPitch({ x: 0, y: 12, z: -6 }, 0, 0, 1.3, 4, { x: 0, z: -1 });
+    expect(pitch(c, 0, 0, 1.3)).toBeLessThanOrEqual(MAX_PITCH_DEG + 1e-6);
   });
 });

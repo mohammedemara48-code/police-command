@@ -2552,7 +2552,8 @@ html.reduce-motion *::after {
 }
 .cc-stage {
   position: relative;
-  height: min(30vh, 280px);
+  height: min(34vh, 300px);
+  min-height: 200px;
   border-radius: 16px;
   background: radial-gradient(circle at 50% 70%, rgba(126, 200, 255, 0.18), rgba(10, 16, 26, 0.4));
   overflow: hidden;

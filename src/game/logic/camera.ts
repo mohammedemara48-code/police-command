@@ -7,6 +7,8 @@ export const CAM_PAD_CAR = 2.0;
 export const CAM_PAD_FOOT = 2.9;
 /** Never closer than this behind the target. */
 export const CAM_MIN_BOOM = 2.4;
+/** The chase camera never looks down steeper than this (unless wedged in with walls all round). */
+export const MAX_PITCH_DEG = 38;
 /** Farthest the camera may ever drift from its target, whatever the easing says. */
 export const CAM_MAX_DIST = 15;
 
@@ -62,4 +64,37 @@ export function clampDistance(
   if (d <= maxDist || d === 0) return { x: cx, z: cz };
   const k = maxDist / d;
   return { x: tx + dx * k, z: tz + dz * k };
+}
+
+/**
+ * Keep a camera from sitting right on top of its target looking straight down: at least `floor` metres away horizontally
+ * (along its own bearing, or `fallback` when it is exactly overhead) and no higher than the pitch limit allows.
+ */
+export function limitPitch(
+  cam: { x: number; y: number; z: number },
+  tx: number,
+  tz: number,
+  lookY: number,
+  floor: number,
+  fallback: { x: number; z: number },
+  maxDeg = MAX_PITCH_DEG
+): { x: number; y: number; z: number } {
+  let hx = cam.x - tx,
+    hz = cam.z - tz;
+  const hd = Math.hypot(hx, hz);
+  let x = cam.x,
+    z = cam.z;
+  if (hd < floor) {
+    if (hd > 1e-3) {
+      hx /= hd;
+      hz /= hd;
+    } else {
+      hx = fallback.x;
+      hz = fallback.z;
+    }
+    x = tx + hx * floor;
+    z = tz + hz * floor;
+  }
+  const reach = Math.max(hd, floor);
+  return { x, y: Math.min(cam.y, lookY + reach * Math.tan((maxDeg * Math.PI) / 180)), z };
 }
