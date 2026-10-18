@@ -108,7 +108,10 @@ import {
   limitPitch
 } from '../logic/camera';
 import { rearSticker } from '../world/Stickers';
-import { roofRack, taxiSign, rollWheels } from '../world/Egypt';
+import { roofRack, taxiSign, rollWheels, makeWheel } from '../world/Egypt';
+import { VEHICLES, VEHICLE_IDS, handlingOf, sanitizeVehicle, type VehicleId } from '../logic/vehicles';
+
+const VEHICLE_ICON: Record<VehicleId, string> = { police: '🚓', private: '🚗', microbus: '🚐', tuktuk: '🛺' };
 
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
@@ -142,6 +145,7 @@ import {
   isPatrol,
   RANKS,
   setOwnedWeapons,
+  setVehicle,
   setGarage,
   type LevelDef,
   type Line,
@@ -262,6 +266,9 @@ export class StreetPlay {
   private group = new THREE.Group();
   private player = new THREE.Group();
   private car = new THREE.Group();
+  /** the car body for each vehicle the officer can drive, built the first time it is chosen */
+  private bodies: Partial<Record<VehicleId, THREE.Group>> = {};
+  private vehicle: VehicleId = 'police';
   private suspect: THREE.Group | null = null;
   private rain: THREE.Points | null = null;
   private rainVel: Float32Array | null = null;
@@ -539,17 +546,17 @@ export class StreetPlay {
     this.yaw = this.camYaw = STATION.parking.yaw;
     this.player.rotation.y = this.yaw;
     this.group.add(this.player);
-    this.car = this.makePoliceCar(true);
+    this.car = new THREE.Group();
     this.car.position.set(STATION.parking.x, 0, STATION.parking.z);
     this.car.rotation.y = STATION.parking.yaw;
     this.velYaw = STATION.parking.yaw;
     this.group.add(this.car);
     this.driver = this.makeOfficer();
     this.driver.scale.setScalar(0.62);
-    this.driver.position.set(0.32, 0.12, -0.15);
     models.setClip(this.driver, 'drive');
     this.driver.visible = false;
     this.car.add(this.driver);
+    this.applyVehicle(progress.vehicle ?? 'police');
     this.group.add(this.eventGroup);
     this.squad = new Squad(this.group, (hostage) => {
       const g = hostage
@@ -1039,7 +1046,7 @@ export class StreetPlay {
     const add = (g: THREE.Object3D | null | undefined, hw = 1.0, hl = 2.3) => {
       if (g && g.visible) b.push({ x: g.position.x, z: g.position.z, yaw: g.rotation.y, hw, hl });
     };
-    if (!this.inCar) add(this.car, 1.05, 2.4);
+    if (!this.inCar) add(this.car, VEHICLES[this.vehicle].hw + 0.1, VEHICLES[this.vehicle].hl + 0.05);
     for (const t of this.traffic) add(t.mesh);
     add(this.suspect);
     add(this.speeder);
@@ -1176,7 +1183,7 @@ export class StreetPlay {
   private hubEl: HTMLElement | null = null;
 
   /** Station hub: missions board, garage, armory, locker room. */
-  private openHub(tab: 'main' | 'missions' | 'armory' | 'garage' = 'main') {
+  private openHub(tab: 'main' | 'missions' | 'armory' | 'garage' | 'vehicles' = 'main') {
     if (!this.hubEl && tab === 'main') this.vestTaken = false;
     if (this.hubEl) this.hubEl.remove();
     const el = document.createElement('div');
@@ -1209,6 +1216,16 @@ export class StreetPlay {
         })
         .join('');
       body = `<h2>🔫 مخزن السلاح</h2><p class="hub-sub">💵 $${money.toLocaleString()}</p><div class="hub-list">${guns}<button type="button" data-vest="1" ${this.vestTaken ? 'disabled' : ''}>🛡 سترة واقية <small>${this.vestTaken ? 'أخذت في هذه الزيارة' : 'درع كامل — مجاناً مرة كل زيارة'}</small></button><button type="button" data-ammo="1">📦 تعبئة ذخيرة <small>مخزن + احتياطي — مجاناً</small></button></div>`;
+    } else if (tab === 'vehicles') {
+      const bar = (v: number) =>
+        '█'.repeat(Math.max(1, Math.round(v * 5))) + '░'.repeat(5 - Math.max(1, Math.round(v * 5)));
+      const rows = VEHICLE_IDS.map((id) => {
+        const v = VEHICLES[id];
+        const h = v.handling;
+        const on = id === this.vehicle;
+        return `<button type="button" data-veh="${id}" ${on ? 'disabled' : ''}>${VEHICLE_ICON[id]} ${v.name}${on ? ' ✓' : ''} <small>${v.blurb}<br>سرعة ${bar(h.top)} · تسارع ${bar(h.accel)} · لفّ ${bar(h.steer / 1.4)}${v.siren ? ' · 🚨' : ''}</small></button>`;
+      }).join('');
+      body = `<h2>🚗 المركبات</h2><p class="hub-sub">اختار العربية اللي هتسوقها في الشارع</p><div class="hub-list">${rows}</div>`;
     } else if (tab === 'garage') {
       const dmg = this.damage;
       const ups = GARAGE.map((g) => {
@@ -1225,6 +1242,7 @@ export class StreetPlay {
       body = `<h2>🏢 قسم الشرطة</h2><p class="hub-sub">رتبتك: ${rank().name} · 💵 $${money.toLocaleString()} · الدورية ${100 - this.damage}%</p>
           <div class="hub-grid">
             <button type="button" data-hub="missions">📋<b>لوحة المهام</b><small>اختار مهمتك</small></button>
+            <button type="button" data-hub="vehicles">🚗<b>المركبات</b><small>${VEHICLES[this.vehicle].name}</small></button>
             <button type="button" data-hub="garage">🔧<b>الجراج</b><small>${this.damage ? 'تصليح وتحسينات' : 'تحسينات الدورية'}</small></button>
             <button type="button" data-hub="armory">🔫<b>مخزن السلاح</b><small>${WEAPONS[c.weapon].name} · ذخيرة كاملة</small></button>
             <button type="button" data-hub="locker">👮<b>غرفة الملابس</b><small>غيّر شكلك</small></button>
@@ -1239,11 +1257,22 @@ export class StreetPlay {
         audio.click();
         const a = b.dataset.hub!;
         if (a === 'close') this.closeHub();
-        else if (a === 'main' || a === 'missions' || a === 'armory' || a === 'garage') this.openHub(a);
+        else if (a === 'main' || a === 'missions' || a === 'armory' || a === 'garage' || a === 'vehicles')
+          this.openHub(a);
         else if (a === 'locker') {
           el.innerHTML = '';
           openCreator(el, { first: false, done: () => this.openHub('main') });
         }
+      })
+    );
+    el.querySelectorAll<HTMLButtonElement>('[data-veh]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const id = sanitizeVehicle(b.dataset.veh);
+        setVehicle(id);
+        this.applyVehicle(id);
+        audio.sample('confirm', 0.7);
+        this.setStatus(`🚗 ركبت: ${VEHICLES[id].name}`);
+        this.openHub('vehicles');
       })
     );
     el.querySelectorAll<HTMLButtonElement>('[data-wp]').forEach((b) =>
@@ -2148,6 +2177,111 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     return g;
   }
 
+  /** Swap the car the officer drives: shows its body, resizes the hit box and seats the driver. */
+  applyVehicle(id: VehicleId) {
+    const def = VEHICLES[id];
+    this.vehicle = id;
+    if (!this.bodies[id]) {
+      const b =
+        id === 'police' ? this.makePoliceCar(true) : id === 'tuktuk' ? this.makeTukTuk() : this.makeCivilianCar(id);
+      this.bodies[id] = b;
+      this.car.add(b);
+    }
+    for (const [k, b] of Object.entries(this.bodies)) b!.visible = k === id;
+    this.myBox.hw = def.hw;
+    this.myBox.hl = def.hl;
+    if (this.driver) this.driver.position.set(...def.seat);
+    if (!def.siren && this.siren) this.toggleSiren(false);
+    const sb = this.ui?.querySelector<HTMLElement>('[data-act="siren"]');
+    if (sb) sb.style.display = def.siren ? '' : 'none';
+    const cb = this.ui?.querySelector('[data-act="car"]');
+    if (cb && !this.inCar) cb.innerHTML = `<i>${VEHICLE_ICON[id]}</i><span>اركب</span>`;
+  }
+
+  /** The private car (ملاكي) and the microbus: model cars with their Egyptian street trimmings. */
+  private makeCivilianCar(id: 'private' | 'microbus') {
+    const g = new THREE.Group();
+    const L = VEHICLES[id].length;
+    g.add(this.box(1.7, 1.0, L - 0.3, this.mat(id === 'microbus' ? 0xeeeeee : 0x7a1f24), 0, 0.8, 0));
+    if (id === 'microbus') {
+      models.dress(g, 'car-van', { length: L, tint: 0xf4f4f0 });
+      const r = roofRack(L * 0.7, 1.55);
+      r.position.set(0, 2.17, -0.15);
+      g.add(r);
+      g.add(rearSticker(STICKERS.microbus[0]!, 1.3, -L / 2 - 0.03, 1.15));
+    } else {
+      models.dress(g, 'car-hatch', { length: L, tint: 0x7a1f24 });
+      const plate = { ink: '#10213f', fill: '#f4f0e0' };
+      g.add(rearSticker('ملاكي', 0.5, -L / 2 - 0.03, 0.58, plate));
+    }
+    return g;
+  }
+
+  /** A three-wheeled tuk-tuk (توكتوك): one front wheel, canopy, open sides, a sticker on the back. */
+  private makeTukTuk() {
+    const g = new THREE.Group();
+    const paint = this.mat(0x1f6f3a, { metalness: 0.25, roughness: 0.45 });
+    const dark = this.mat(0x151515, { roughness: 0.6 });
+    const roof = this.mat(0xe2b52c, { roughness: 0.5 });
+    const seat = this.mat(0x3a2a22, { roughness: 0.8 });
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0x9ac0d0,
+      roughness: 0.05,
+      transparent: true,
+      opacity: 0.45
+    });
+    g.add(this.box(1.15, 0.12, 1.75, dark, 0, 0.36, -0.25));
+    g.add(this.box(1.15, 0.38, 1.0, paint, 0, 0.62, -0.62));
+    g.add(this.box(0.62, 0.55, 0.85, paint, 0, 0.62, 0.62));
+    const hood = this.box(0.6, 0.12, 0.75, paint, 0, 0.93, 0.66);
+    hood.rotation.x = -0.18;
+    g.add(hood);
+    g.add(this.box(1.0, 0.45, 0.4, seat, 0, 0.9, -0.95));
+    g.add(this.box(0.55, 0.12, 0.5, seat, 0, 0.5, 0.18));
+    const ws = this.box(1.05, 0.62, 0.04, glass, 0, 1.2, 0.3);
+    ws.rotation.x = 0.28;
+    g.add(ws);
+    for (const sx of [-1, 1]) {
+      for (const [pz, ph] of [
+        [0.34, 0.9],
+        [-1.05, 0.95]
+      ] as const)
+        g.add(this.box(0.05, ph, 0.05, dark, sx * 0.55, 0.45 + ph / 2 + 0.15, pz));
+    }
+    g.add(this.box(1.3, 0.07, 1.62, roof, 0, 1.58, -0.38));
+    g.add(this.box(1.15, 0.12, 0.04, dark, 0, 1.52, 0.42));
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 10, 8),
+      this.mat(0xffffff, { emissive: 0xfff2cc, emissiveIntensity: 0.8 })
+    );
+    head.position.set(0, 0.72, 1.05);
+    g.add(head);
+    const lamp = this.box(
+      0.3,
+      0.1,
+      0.04,
+      this.mat(0xaa1010, { emissive: 0xff2010, emissiveIntensity: 0.5 }),
+      0,
+      0.6,
+      -1.12
+    );
+    g.add(lamp);
+    const wheels: THREE.Object3D[] = [];
+    for (const [x, z, r, w] of [
+      [0, 0.95, 0.27, 0.14],
+      [-0.58, -0.7, 0.29, 0.16],
+      [0.58, -0.7, 0.29, 0.16]
+    ] as const) {
+      const wh = makeWheel(r, w);
+      wh.position.set(x, r, z);
+      g.add(wh);
+      wheels.push(wh);
+    }
+    g.userData.wheels = wheels;
+    g.add(rearSticker(STICKERS.tuktuk[0]!, 0.95, -1.15, 1.02));
+    return g;
+  }
+
   private makeSuspectCar() {
     const g = new THREE.Group();
     const body = this.mat(0x1a1a1a, { metalness: 0.65, roughness: 0.25 });
@@ -2420,6 +2554,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.mountStick(ui.querySelector('.street-stick') as HTMLElement);
     holdBtn(ui.querySelector('[data-act="run"]') as HTMLElement, (v) => (this.hold.run = v));
     ui.querySelector('[data-act="siren"]')!.addEventListener('click', () => this.toggleSiren());
+    this.applyVehicle(this.vehicle);
     this.speedoEl = ui.querySelector('#street-speedo');
     holdBtn(ui.querySelector('[data-act="shoot"]') as HTMLElement, (v) => (this.firing = v));
     this.hudEl = ui.querySelector('#street-hp');
@@ -2527,6 +2662,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   private toggleSiren(on = !this.siren) {
+    if (on && !VEHICLES[this.vehicle].siren) {
+      this.setStatus('العربية دي من غير سارينة — ارجع للدورية لو عايز تفتحها.');
+      return;
+    }
     this.siren = on;
     if (!this.chasing) audio.sirenLoop(on);
     document.documentElement.classList.toggle('siren-on', on);
@@ -2556,7 +2695,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       if (this.siren) this.toggleSiren(false);
       this.setStatus('نزلت من الدورية.');
       const btn = this.ui?.querySelector('[data-act="car"]');
-      if (btn) btn.innerHTML = '<i>🚓</i><span>اركب</span>';
+      if (btn) btn.innerHTML = `<i>${VEHICLE_ICON[this.vehicle]}</i><span>اركب</span>`;
       const rb = this.ui?.querySelector('[data-act="run"]');
       if (rb) rb.innerHTML = '<i>🏃</i><span>ركض</span>';
       return;
@@ -2787,7 +2926,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       this.suspect.rotation.y
     );
     this.group.add(this.suspect);
-    audio.sirenLoop(true);
+    if (VEHICLES[this.vehicle].siren) audio.sirenLoop(true);
     audio.setTrack('music');
     this.setStatus(this.inCar ? '🚨 مطاردة! الحق العربية السودا.' : '🚨 اركب الدورية بسرعة — العربية هربت!');
   }
@@ -3176,7 +3315,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.tickLife(dt);
     this.stepRain(dt);
     this.stepLights();
-    rollWheels(this.car, this.speed * dt);
+    rollWheels(this.bodies[this.vehicle]!, this.speed * dt);
     if (this.key) {
       const a = this.inCar ? this.car.position : this.player.position;
       this.key.position.set(a.x + this.sunDir.x * 40, Math.max(8, this.sunDir.y * 40), a.z + this.sunDir.z * 40);
@@ -3196,7 +3335,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     }
     if (this.speedoEl) {
       const txt = this.inCar
-        ? `<b>${kmh(this.speed)}</b><small>كم/س</small><i style="--d:${this.damage}%"></i><span>🚓 ${100 - this.damage}%</span>`
+        ? `<b>${kmh(this.speed)}</b><small>كم/س</small><i style="--d:${this.damage}%"></i><span>${VEHICLE_ICON[this.vehicle]} ${100 - this.damage}%</span>`
         : '';
       if (txt !== this.speedoTxt) {
         this.speedoEl.innerHTML = txt;
@@ -3262,8 +3401,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
 
     if (this.inCar) {
       // arcade handling: analog stick or keys, handbrake (run button / Space) drifts
+      const H = handlingOf(this.vehicle);
       const max =
-        (this.chasing ? 20 : 16) + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 });
+        ((this.chasing ? 20 : 16) + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 })) *
+        H.top;
       this.carMax = max;
       const thr = this.travel ? throttle : this.stick.y || throttle;
       this.steerCur = this.travel ? 0 : smoothSteer(this.steerCur, -this.stick.x || turn, this.speed, dt);
@@ -3272,7 +3413,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       const cs = stepCar(
         { speed: this.speed, yaw: this.yaw, velYaw: this.velYaw },
         { throttle: thr, steer, handbrake: hb, max, damage: this.damage },
-        dt
+        dt,
+        H
       );
       if (this.travel) {
         cs.yaw = this.yaw;
@@ -3304,8 +3446,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       // slide along kerbs/buildings instead of bouncing and getting stuck
       // check the bumper too, not only the car centre, so the nose can't push into a building
       const dir = Math.sign(this.speed) || 1;
-      const nx = C0.x + cmx + Math.sin(this.yaw) * 2.2 * dir,
-        nz = C0.z + cmz + Math.cos(this.yaw) * 2.2 * dir;
+      const bump = VEHICLES[this.vehicle].hl - 0.15;
+      const nx = C0.x + cmx + Math.sin(this.yaw) * bump * dir,
+        nz = C0.z + cmz + Math.cos(this.yaw) * bump * dir;
       if (!onRoad(C0.x + cmx, C0.z + cmz, 0.4) || !onRoad(nx, nz, 2.4)) {
         // kerb/building: lose the speed going into it, keep sliding along it
         if (onRoad(C0.x + cmx, C0.z, 0.4)) {
@@ -3451,7 +3594,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   private stepTraffic(dt: number) {
     if (this.hitCool > 0) this.hitCool -= dt;
     const C = this.car.position;
-    const loud = this.inCar && (this.siren || this.chasing);
+    const loud = this.inCar && (this.siren || (this.chasing && VEHICLES[this.vehicle].siren));
     const me = this.inCar ? C : this.player.position;
     this.trafficObs[0]!.x = me.x;
     this.trafficObs[0]!.z = me.z;
@@ -3714,7 +3857,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   private stepLights() {
-    const lit = this.siren || this.chasing;
+    const lit = (this.siren || this.chasing) && VEHICLES[this.vehicle].siren;
     const pulse = (Math.sin(performance.now() / 90) + 1) * 0.5;
     this.flash.forEach((L, i) => {
       const on = lit && (i % 2 === 0 ? pulse > 0.5 : pulse <= 0.5);

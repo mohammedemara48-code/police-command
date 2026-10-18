@@ -11,6 +11,7 @@ import {
   type GarageLevels
 } from '../logic/hub';
 import type { WeaponId } from '../logic/character';
+import { DEFAULT_VEHICLE, sanitizeVehicle, type VehicleId } from '../logic/vehicles';
 export type Who = 'mona' | 'hamed' | 'yasser' | 'suspect' | 'informant' | 'boss';
 export interface Line {
   who: Who;
@@ -354,6 +355,8 @@ export interface Progress {
   money: number;
   ownedWeapons: WeaponId[];
   garage: GarageLevels;
+  /** which vehicle the officer drives */
+  vehicle?: VehicleId;
 }
 
 function load(): Progress {
@@ -367,7 +370,8 @@ function load(): Progress {
       ...raw,
       money: sanitizeMoney(raw.money),
       ownedWeapons: sanitizeOwned(raw.ownedWeapons),
-      garage: sanitizeGarage(raw.garage)
+      garage: sanitizeGarage(raw.garage),
+      vehicle: sanitizeVehicle(raw.vehicle)
     };
   } catch {
     return {
@@ -377,7 +381,8 @@ function load(): Progress {
       xp: 0,
       money: START_MONEY,
       ownedWeapons: [...DEFAULT_OWNED],
-      garage: { ...DEFAULT_GARAGE }
+      garage: { ...DEFAULT_GARAGE },
+      vehicle: DEFAULT_VEHICLE
     };
   }
 }
@@ -439,6 +444,11 @@ export function spendMoney(amount: number): boolean {
 
 export function setOwnedWeapons(list: WeaponId[]) {
   progress.ownedWeapons = sanitizeOwned(list);
+  saveProgress();
+}
+
+export function setVehicle(v: VehicleId) {
+  progress.vehicle = sanitizeVehicle(v);
   saveProgress();
 }
 

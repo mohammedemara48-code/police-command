@@ -218,7 +218,8 @@ describe('bark data', () => {
       ...all.flatMap(([, s]) => [...s.lines]),
       ...Object.values(CHATTER).flatMap((c) => [...c.lines]),
       ...DAMAGE_WORDS.map((d) => d.word),
-      ...STICKERS.microbus
+      ...STICKERS.microbus,
+      ...STICKERS.tuktuk
     ].join(' | ');
     // whole words only: «بسبوسة» (the sweet) is fine
     for (const b of banned) expect(new RegExp(`(^|[\\s|،.!؟?])${b}($|[\\s|،.!؟?])`).test(text), b).toBe(false);
@@ -265,11 +266,11 @@ describe('bark data', () => {
 });
 
 describe('patrol car marking and status words', () => {
-  it('the patrol car carries only official markings; the joke slogans are for microbuses', () => {
+  it('the patrol car carries only official markings; the joke slogans are for microbuses and tuk-tuks', () => {
     expect(PATROL_MARKINGS.rearTop).toBe('شرطة');
     expect(PATROL_MARKINGS.rear).toContain('122');
-    expect(Object.keys(STICKERS)).toEqual(['microbus']);
-    for (const s of STICKERS.microbus) {
+    expect(Object.keys(STICKERS)).toEqual(['microbus', 'tuktuk']);
+    for (const s of [...STICKERS.microbus, ...STICKERS.tuktuk]) {
       expect(s.length, s).toBeLessThanOrEqual(30);
       expect(words(s), s).toBeLessThanOrEqual(6);
     }
