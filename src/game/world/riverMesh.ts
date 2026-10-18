@@ -84,7 +84,9 @@ export function pourBanks(x0: number, z0: number, x1: number, z1: number, wall: 
         bx = b.x + nx * o,
         bz = b.z + nz * o;
       // the wall drops into the water
-      const crossing = N.onRoad(mx, mz, PAVEMENT + 2.5) || N.onRoad(a.x - nx * 3, a.z - nz * 3, PAVEMENT + 1.5);
+      const crossing =
+        [a, { x: mx, z: mz }, b].some((q) => N.onRoad(q.x, q.z, PAVEMENT + 2.5)) ||
+        N.onRoad(a.x - nx * 3, a.z - nz * 3, PAVEMENT + 1.5);
       // where a road meets the bank the wall stops below the carriageway, so no stone lip shows across the asphalt
       wall.wall(ax, az, bx, bz, WATER_Y - 1, crossing ? -0.12 : QUAY_Y, nx, nz, undefined, u0);
       if (crossing) continue;

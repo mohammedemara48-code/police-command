@@ -16,7 +16,7 @@ import { wallGeo } from './Egypt';
 import { facadeMaterial } from './Facade';
 import { Soup } from './Soup';
 import { PAVE_Y, cornersAt, edgesIn, endMargins, pourRoads } from './roadMesh';
-import { WATER_Y, buildWater, groundMats, pourBanks, pourGround } from './riverMesh';
+import { buildWater, groundMats, pourBanks, pourGround } from './riverMesh';
 import { SHOP_COLS, SHOP_ROWS, SHOPS, TreeKit, lampAt, shopAtlas } from './streetKit';
 import { palmInstances, type PalmSpot } from './Trees';
 import type { OBB } from '../logic/collide';
@@ -351,7 +351,8 @@ export class OpenWorld {
           const yaw = Math.atan2(dx, dz);
           const g = new THREE.BoxGeometry(2.4, 4.6 + 1.2, W * 2 - 1.5);
           g.rotateY(yaw + Math.PI / 2);
-          g.translate(mx, WATER_Y - 1.2 + 2.9, mz);
+          // the top stays under the deck: a pier that reached above the asphalt showed as a stone bar across the bridge
+          g.translate(mx, -0.3 - 2.9, mz);
           chunk.geos.push(g);
           const mesh = new THREE.Mesh(g, m.stone);
           chunk.group.add(mesh);

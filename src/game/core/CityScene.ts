@@ -127,6 +127,8 @@ export class CityScene {
     this.buildCity();
     this.spawnFleetCars();
     this.setTimeOfDay(8);
+    // test hook for automated screenshots (only with ?autotest)
+    if (location.search.includes('autotest')) (window as unknown as { __city: unknown }).__city = this;
 
     window.addEventListener('resize', () => this.onResize());
   }
