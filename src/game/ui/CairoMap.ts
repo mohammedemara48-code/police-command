@@ -12,7 +12,7 @@ import {
   PARKS,
   PLACES,
   PLATEAU,
-  PLAY_AREAS,
+  playAreas,
   URBAN,
   areaCentre,
   clampView,
@@ -26,10 +26,11 @@ import {
   gameToMap,
   type Km,
   type Line,
-  type PlayArea,
   type View
 } from '../logic/cairoMap';
 import type { District } from '../logic/districts';
+import { net } from '../logic/roadnet';
+import { toLonLat } from '../logic/cairo';
 
 const C = {
   land: '#1b2430',
@@ -44,7 +45,6 @@ const C = {
   ring: '#b0875a',
   bridge: '#cfd9e6',
   corniche: '#6f93b8',
-  play: '#ffd23d',
   text: '#e8f1ff',
   halo: 'rgba(8,14,24,0.9)'
 };
@@ -99,7 +99,10 @@ export class CairoMap {
     plateau: km(PLATEAU.pts),
     parks: PARKS.map((s) => km(s.pts)),
     urban: km(URBAN),
-    lines: LINES.map((l) => ({ l, p: km(l.pts) }))
+    lines: LINES.map((l) => ({ l, p: km(l.pts) })),
+    infill: net()
+      .edges.filter((e) => e.infill && !e.ring)
+      .map((e) => e.pts.map((p) => project(toLonLat(p.x, p.z))))
   };
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -147,7 +150,7 @@ export class CairoMap {
 
   /** Centre on a playable district at a street-level zoom. */
   focus(id: string, zoom = 6) {
-    const c = areaCentre(id as PlayArea['id']);
+    const c = areaCentre(id as District);
     this.view = clampView({ cx: c.x, cy: c.y, scale: this.fit.scale * zoom }, this.w, this.h);
     this.draw();
   }
@@ -209,8 +212,7 @@ export class CairoMap {
   }
   private tap(sx: number, sy: number) {
     let best: { id: string; d: number } | null = null;
-    for (const a of PLAY_AREAS) {
-      if (a.id === 'bridge' || a.id === 'island') continue;
+    for (const a of playAreas()) {
       const s = toScreen(this.view, this.w, this.h, areaCentre(a.id));
       const d = Math.hypot(s.x - sx, s.y - sy);
       if (d < 26 && (!best || d < best.d)) best = { id: a.id, d };
@@ -361,25 +363,17 @@ export class CairoMap {
         ctx.setLineDash([]);
       }
 
-    // the playable avenue: a short stretch of the real street in each district
-    for (const a of PLAY_AREAS) {
-      const p = project(a.a),
-        q = project(a.b);
+    // the generated side streets of the network (the drawn ones are the lines above): every road you can drive
+    if (z >= 2.4) {
+      ctx.strokeStyle = C.minor;
+      ctx.lineWidth = px(1.1);
       ctx.beginPath();
-      this.path([p, q]);
-      ctx.strokeStyle = 'rgba(8,14,24,0.9)';
-      ctx.lineWidth = px(6);
-      ctx.stroke();
-      ctx.beginPath();
-      this.path([p, q]);
-      ctx.strokeStyle = C.play;
-      ctx.lineWidth = px(3.4);
+      for (const p of this.geo.infill) this.path(p);
       ctx.stroke();
     }
 
     // district colour blobs under their pins
-    for (const a of PLAY_AREAS) {
-      if (a.id === 'bridge' || a.id === 'island') continue;
+    for (const a of playAreas()) {
       const s = toScreen(this.view, this.w, this.h, areaCentre(a.id));
       const r = Math.max(22, 0.7 * this.view.scale * 1.1);
       const grad = ctx.createRadialGradient(s.x, s.y, 2, s.x, s.y, r);
@@ -432,8 +426,7 @@ export class CairoMap {
 
     // district pins
     const st = this.state;
-    for (const a of PLAY_AREAS) {
-      if (a.id === 'bridge' || a.id === 'island') continue;
+    for (const a of playAreas()) {
       const s = toScreen(this.view, this.w, this.h, areaCentre(a.id));
       const mission = a.id === st.missionId,
         picked = a.id === st.picked;
@@ -473,7 +466,7 @@ export class CairoMap {
       ctx.stroke();
     }
     const me = toScreen(this.view, this.w, this.h, gameToMap(st.player.x, st.player.z));
-    const ang = -mapHeading(st.player.z, st.player.yaw);
+    const ang = -mapHeading(st.player.yaw);
     ctx.save();
     ctx.translate(me.x, me.y);
     ctx.rotate(ang);

@@ -5,7 +5,7 @@ import {
   NILE_EAST,
   NILE_WEST,
   PLACES,
-  PLAY_AREAS,
+  playAreas,
   areaCentre,
   clampView,
   fitView,
@@ -17,6 +17,8 @@ import {
   zoomAt
 } from '../src/game/logic/cairoMap';
 import { DISTRICT_STYLES } from '../src/game/logic/districts';
+import { STREETS, toWorld } from '../src/game/logic/cairo';
+import { net } from '../src/game/logic/roadnet';
 
 const inBounds = (p: { x: number; y: number }) =>
   p.x >= BOUNDS.w && p.x <= BOUNDS.e && p.y >= BOUNDS.s && p.y <= BOUNDS.n;
@@ -55,10 +57,17 @@ describe('cairo map data', () => {
     expect(c('downtown').x).toBeGreaterThan(eBank!);
   });
 
-  it('has an area for every playable district and covers the avenue without gaps', () => {
-    for (const id of Object.keys(DISTRICT_STYLES)) expect(PLAY_AREAS.some((a) => a.id === id)).toBe(true);
-    for (let i = 1; i < PLAY_AREAS.length; i++) expect(PLAY_AREAS[i]!.z0).toBe(PLAY_AREAS[i - 1]!.z1);
-    expect(PLAY_AREAS[0]!.z0).toBeLessThanOrEqual(-100);
+  it('has an area for every playable district, each sitting on a real street of the network', () => {
+    for (const id of Object.keys(DISTRICT_STYLES)) expect(playAreas().some((a) => a.id === id)).toBe(true);
+    for (const a of playAreas()) {
+      const w = toWorld(a.at);
+      expect(net().onRoad(w.x, w.z, 1)).toBe(true);
+    }
+  });
+
+  it('draws every hand-drawn game street, so the map and the world cannot disagree', () => {
+    expect(LINES.length).toBe(STREETS.length);
+    expect(LINES.filter((l) => l.kind === 'bridge').length).toBeGreaterThanOrEqual(6);
   });
 
   it('keeps every shape and label inside the map box', () => {
@@ -94,30 +103,28 @@ describe('cairo map data', () => {
 });
 
 describe('game to map', () => {
-  it('moves continuously inside a district and ends on the next district start', () => {
-    for (const a of PLAY_AREAS) {
-      const p = gameToMap(0, a.z0);
-      const q = gameToMap(0, a.z1 - 0.001);
-      const start = project(a.a),
-        end = project(a.b);
-      expect(Math.hypot(p.x - start.x, p.y - start.y)).toBeLessThan(0.01);
-      expect(Math.hypot(q.x - end.x, q.y - end.y)).toBeLessThan(0.01);
-    }
+  it('puts the world origin on Tahrir Square and keeps north up', () => {
+    const o = gameToMap(0, 0);
+    expect(Math.hypot(o.x, o.y)).toBeLessThan(1e-9);
+    expect(gameToMap(0, -100).y).toBeGreaterThan(0);
+    expect(gameToMap(100, 0).x).toBeGreaterThan(0);
   });
 
-  it('clamps outside the playable range and keeps it on the map', () => {
-    expect(inBounds(gameToMap(0, -500))).toBe(true);
-    expect(inBounds(gameToMap(0, 5000))).toBe(true);
-    for (let z = -100; z <= 920; z += 20) expect(inBounds(gameToMap(40, z))).toBe(true);
+  it('is a scaled copy of the world: 1 world metre is 5 real metres', () => {
+    const p = gameToMap(100, 0);
+    expect(p.x * 1000).toBeCloseTo(500, -1);
   });
 
-  it('points the arrow along the street and turns it left with positive yaw', () => {
-    const base = mapHeading(0, 0);
-    expect(mapHeading(0, Math.PI / 2) - base).toBeCloseTo(Math.PI / 2);
-    expect(mapHeading(0, Math.PI) - base).toBeCloseTo(Math.PI);
-    const a = project(PLAY_AREAS[1]!.a),
-      b = project(PLAY_AREAS[1]!.b);
-    expect(base).toBeCloseTo(Math.atan2(b.y - a.y, b.x - a.x));
+  it('keeps every point of the playable world on the map', () => {
+    for (const n of net().nodes) expect(inBounds(gameToMap(n.x, n.z))).toBe(true);
+  });
+
+  it('points the arrow where the officer faces and turns it left with positive yaw', () => {
+    // yaw 0 faces south (+z), which is down on the map
+    expect(mapHeading(0)).toBeCloseTo(-Math.PI / 2);
+    // turning left from facing south means facing east: counter-clockwise on the map is +pi/2
+    expect(mapHeading(Math.PI / 2)).toBeCloseTo(0);
+    expect(mapHeading(Math.PI)).toBeCloseTo(Math.PI / 2);
   });
 });
 
