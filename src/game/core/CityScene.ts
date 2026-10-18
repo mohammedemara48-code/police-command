@@ -9,7 +9,7 @@ import { loadEnvironment } from '../world/Environment';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DISTRICTS, ZoneType, type ActionHeat, type CityPOI, type Incident } from './types';
 import type { StreetPlay } from './StreetPlay';
-import { Q } from '../config/Quality';
+import { Q, quality } from '../config/Quality';
 import { models, fx, REAL_PEOPLE, PEOPLE, LOW_BUILDINGS, TOWERS } from './Models';
 
 type CarMesh = THREE.Group & { userData: { unitId?: string; flashing?: boolean; lights?: THREE.PointLight[] } };
@@ -1021,7 +1021,9 @@ export class CityScene {
     this.skyU.horizon.value.copy(dusty).lerp(new THREE.Color(0xffffff), 0.15 * day);
     if (this.scene.fog && this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.color.copy(dusty);
-      this.scene.fog.density = 0.0022 + this.nightFactor * 0.0038;
+      // on the street the fog hides the edge of the streamed chunks, so the lower presets (which stream less) fog sooner
+      const base = this.street?.active ? { low: 0.0034, medium: 0.0028, high: 0.0024 }[quality] : 0.0022;
+      this.scene.fog.density = base + this.nightFactor * 0.0038;
     }
 
     this.hemi.color.copy(sample.hemiSky);

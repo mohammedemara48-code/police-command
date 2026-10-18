@@ -49,7 +49,11 @@ export function buildMonuments(parent: THREE.Object3D) {
   const b = new Batch();
   const stone = surface('stone', 0xd9cfba);
   const lion = lionGeometry();
-  const bronze = new THREE.MeshStandardMaterial({ color: 0x4a3b2c, roughness: 0.42, metalness: 0.65 });
+  const bronze = new THREE.MeshStandardMaterial({
+    color: Q.hdri ? 0x4a3b2c : 0x7a6244,
+    roughness: 0.5,
+    metalness: Q.hdri ? 0.65 : 0.12
+  });
   const inst = new THREE.Group();
   for (const l of lions()) {
     // pedestal first, in the lion's frame (it faces +z)

@@ -138,7 +138,12 @@ export class Batch {
 
 // ---------- props ----------
 const M = {
-  metal: new THREE.MeshStandardMaterial({ color: 0x2b3036, roughness: 0.4, metalness: 0.7 }),
+  // without an environment map (Low) a mirror-like metal renders black, so it gets a plain painted-steel look there
+  metal: new THREE.MeshStandardMaterial({
+    color: Q.hdri ? 0x2b3036 : 0x4b535b,
+    roughness: 0.45,
+    metalness: Q.hdri ? 0.7 : 0.15
+  }),
   wood: new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.75 }),
   bin: new THREE.MeshStandardMaterial({ color: 0x2f5f3e, roughness: 0.55, metalness: 0.3 }),
   lampHead: new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc56a, emissiveIntensity: 2.4 }),

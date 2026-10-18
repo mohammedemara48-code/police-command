@@ -26,6 +26,9 @@ function reach(start: number, skip?: (e: (typeof N.edges)[number]) => boolean, r
   return seen;
 }
 
+const inBox = (p: { x: number; z: number }) =>
+  p.x >= WORLD_BOX.x0 && p.x <= WORLD_BOX.x1 && p.z >= WORLD_BOX.z0 && p.z <= WORLD_BOX.z1;
+
 describe('open city road network', () => {
   it('is one connected network: every drawn street is part of it', () => {
     expect(N.dropped.filter((e) => !e.infill)).toEqual([]);
@@ -116,6 +119,21 @@ describe('open city road network', () => {
       // the middle of the square is a garden, not road
       expect(N.onRoad(c.x, c.z, 0)).toBe(false);
     }
+  });
+
+  it('ends every drawn street at the edge of the world (where a barrier closes it) or at the pyramids, nowhere else', () => {
+    const pyramids = toWorld([31.1376, 29.9756]);
+    const loose = N.nodes.filter((n) => {
+      if (n.edges.length !== 1 || N.edges[n.edges[0]!]!.infill) return false;
+      if (Math.hypot(n.x - pyramids.x, n.z - pyramids.z) < 60) return false;
+      const d = Math.min(n.x - WORLD_BOX.x0, WORLD_BOX.x1 - n.x, n.z - WORLD_BOX.z0, WORLD_BOX.z1 - n.z);
+      return d > 40;
+    });
+    expect(loose.map((n) => `${Math.round(n.x)},${Math.round(n.z)}`)).toEqual([]);
+  });
+
+  it('keeps every drawn street inside the world box', () => {
+    for (const e of N.edges) for (const p of e.pts) expect(inBox(p)).toBe(true);
   });
 
   it('leaves no drawn street stopping dead in the middle of the city', () => {

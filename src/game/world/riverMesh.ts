@@ -84,8 +84,10 @@ export function pourBanks(x0: number, z0: number, x1: number, z1: number, wall: 
         bx = b.x + nx * o,
         bz = b.z + nz * o;
       // the wall drops into the water
-      wall.wall(ax, az, bx, bz, WATER_Y - 1, QUAY_Y, nx, nz, undefined, u0);
-      if (N.onRoad(mx, mz, PAVEMENT + 2.5) || N.onRoad(a.x - nx * 3, a.z - nz * 3, PAVEMENT + 1.5)) continue;
+      const crossing = N.onRoad(mx, mz, PAVEMENT + 2.5) || N.onRoad(a.x - nx * 3, a.z - nz * 3, PAVEMENT + 1.5);
+      // where a road meets the bank the wall stops below the carriageway, so no stone lip shows across the asphalt
+      wall.wall(ax, az, bx, bz, WATER_Y - 1, crossing ? -0.12 : QUAY_Y, nx, nz, undefined, u0);
+      if (crossing) continue;
       // quay cap and a low parapet on the water side
       cap.flat(QUAY_Y, [
         { x: a.x - nx * o, z: a.z - nz * o },
@@ -117,8 +119,8 @@ export function buildWater(): { mesh: THREE.Mesh; update(dt: number): void } {
   const mesh = new THREE.Mesh(
     geo,
     new THREE.MeshStandardMaterial({
-      color: 0x68724a,
-      emissive: 0x1b2012,
+      color: 0x4d7f83,
+      emissive: 0x10282c,
       roughness: 0.16,
       metalness: 0.05,
       normalMap: n2,
