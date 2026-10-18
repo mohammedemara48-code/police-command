@@ -222,7 +222,7 @@ export const STREETS: readonly Street[] = [
         [31.2172, 30.0215],
         [31.2085, 30.0131]
       ],
-      -0.0014
+      -0.0007
     )
   ),
   s('gameat-dowal', 'شارع جامعة الدول العربية', 'arterial', [
@@ -252,7 +252,7 @@ export const STREETS: readonly Street[] = [
         [31.2165, 30.0725],
         [31.2145, 30.0885]
       ],
-      -0.0014
+      -0.0007
     )
   ),
   s('galaa', 'كوبري الجلاء', 'arterial', [
@@ -315,7 +315,7 @@ export const STREETS: readonly Street[] = [
         [31.2338, 30.0075],
         [31.2352, 29.9955]
       ],
-      0.0014
+      0.0007
     )
   ),
   s(
@@ -332,7 +332,7 @@ export const STREETS: readonly Street[] = [
         [31.2335, 30.105],
         [31.2405, 30.125]
       ],
-      0.0014
+      0.0007
     )
   ),
   s('talaat-harb', 'شارع طلعت حرب', 'arterial', [

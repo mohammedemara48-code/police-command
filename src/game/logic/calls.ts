@@ -117,9 +117,3 @@ export function callLimit(kind: CallKind, count: number) {
   if (kind === 'vip') return 210 + n * 20;
   return 150 + n * 15;
 }
-
-/** A patrol loop is announced where the officer stands: the avenue nearest to them and their own position along it. */
-export function patrolAnchor(px: number, pz: number, avenues: readonly number[]) {
-  const x = avenues.reduce((best, a) => (Math.abs(a - px) < Math.abs(best - px) ? a : best), avenues[0] ?? 0);
-  return { x, z: pz };
-}

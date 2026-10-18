@@ -91,7 +91,9 @@ function merge(a: Snap, b: Partial<Snap>): Snap {
     for (const [k, v] of Object.entries(L.stars || {}))
       out.levels.stars[+k] = Math.max(a.levels.stars[+k] ?? 0, v as number);
     const owns = new Set([...(a.levels.ownedWeapons || ['pistol']), ...((L.ownedWeapons as string[]) || [])]);
-    out.levels.ownedWeapons = ['pistol', 'revolver', 'smg'].filter((id) => owns.has(id)) as typeof out.levels.ownedWeapons;
+    out.levels.ownedWeapons = ['pistol', 'revolver', 'smg'].filter((id) =>
+      owns.has(id)
+    ) as typeof out.levels.ownedWeapons;
     const ag = a.levels.garage || { engine: 0, armor: 0, brakes: 0 };
     const bg = (L.garage as typeof ag) || { engine: 0, armor: 0, brakes: 0 };
     out.levels.garage = {

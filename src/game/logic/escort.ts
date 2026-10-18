@@ -131,15 +131,15 @@ export const vipShotDamage = (rankLevel: number) => 6 + lv(rankLevel);
 export const vipCrashDamage = (closing: number) => (closing > 3 ? Math.min(20, Math.round((closing - 3) * 2)) : 0);
 
 /**
- * VIP destination: an avenue point next to an intersection 110–220 m (by road) from the start, pulled 14 m
- * into the block so the car never parks in a crossing. `roll` picks among the candidates.
+ * VIP destination: one of the given junctions 110–260 m from the start (as the crow flies); the farthest few when none
+ * is that far. The caller pulls the point into the block so the car never parks in a crossing. `roll` picks among them.
  */
 export function vipDestination(start: Pt, nodes: readonly Pt[], roll: number): Pt {
-  const man = (n: Pt) => Math.abs(n.x - start.x) + Math.abs(n.z - start.z);
-  let c = nodes.filter((n) => man(n) >= 110 && man(n) <= 220);
-  if (!c.length) c = [...nodes].sort((a, b) => man(b) - man(a)).slice(0, 3);
+  const dist = (n: Pt) => Math.hypot(n.x - start.x, n.z - start.z);
+  let c = nodes.filter((n) => dist(n) >= 110 && dist(n) <= 260);
+  if (!c.length) c = [...nodes].sort((a, b) => dist(b) - dist(a)).slice(0, 3);
   const n = c[Math.min(c.length - 1, Math.floor(Math.max(0, Math.min(0.999, roll)) * c.length))]!;
-  return { x: n.x, z: n.z + (n.z > 70 ? -14 : 14) };
+  return { x: n.x, z: n.z };
 }
 
 /** Who rides in the car and where to (Egyptian Arabic, for the radio and the objective). */

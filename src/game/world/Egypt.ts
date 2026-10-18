@@ -127,7 +127,8 @@ export function egyptBlock(
         b.box(D.rail, 0.9, 0.9, 0.05, fx + out * 0.45, y + 0.5, z - 1.18);
         b.box(D.rail, 0.9, 0.9, 0.05, fx + out * 0.45, y + 0.5, z + 1.18);
       }
-      if (!khedival && (r === 6 || r === 8 || (brick && r < 2))) b.box(D.ac, 0.45, 0.42, 0.8, fx + out * 0.24, y + 1.6, z + 1.0);
+      if (!khedival && (r === 6 || r === 8 || (brick && r < 2)))
+        b.box(D.ac, 0.45, 0.42, 0.8, fx + out * 0.24, y + 1.6, z + 1.0);
     }
   }
   if (khedival) {

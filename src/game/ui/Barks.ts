@@ -96,7 +96,9 @@ export class Barks {
 
   /** Is the chatter of this kind off cooldown? */
   readyChat(id: ChatterId): boolean {
-    return !!this.strip && storyLang() !== 'en' && canBark(this.state, `chat:${id}`, this.now(), { cooldown: 25, gap: 0 });
+    return (
+      !!this.strip && storyLang() !== 'en' && canBark(this.state, `chat:${id}`, this.now(), { cooldown: 25, gap: 0 })
+    );
   }
 
   /** Speak a situation through `speaker` if it is off cooldown. No speaker on screen, no bark. */
@@ -173,7 +175,8 @@ export class Barks {
       const bx = Math.min(w - bw / 2 - 6, Math.max(bw / 2 + 6, ((this.v.x + 1) / 2) * w));
       let by = Math.max(bh + 8, ((1 - this.v.y) / 2) * h);
       // two people talking next to each other: stack the bubbles instead of covering one
-      for (const o of placed) if (Math.abs(o.x - bx) < (o.w + bw) / 2 && Math.abs(o.y - by) < (o.h + bh) / 2 + 4) by = o.y - bh - 8;
+      for (const o of placed)
+        if (Math.abs(o.x - bx) < (o.w + bw) / 2 && Math.abs(o.y - by) < (o.h + bh) / 2 + 4) by = o.y - bh - 8;
       placed.push({ x: bx, y: by, w: bw, h: bh });
       b.el.style.transform = `translate(${bx}px, ${by}px) translate(-50%, -100%)`;
       b.el.style.opacity = '';

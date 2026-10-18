@@ -109,9 +109,17 @@ export class Batch {
     g.translate(x, y, z);
     this.add(g, mat, uv);
   }
+  /** Hand over everything collected so far (per material) and start empty again. */
+  drain() {
+    const out = new Map(this.m);
+    this.m = new Map();
+    return out;
+  }
   flush(group: THREE.Object3D, shadows = false) {
     for (const [mat, geos] of this.m) {
-      const keep = (mat as THREE.MeshStandardMaterial).vertexColors ? ['position', 'normal', 'uv', 'color'] : ['position', 'normal', 'uv'];
+      const keep = (mat as THREE.MeshStandardMaterial).vertexColors
+        ? ['position', 'normal', 'uv', 'color']
+        : ['position', 'normal', 'uv'];
       for (const g of geos) for (const k of Object.keys(g.attributes)) if (!keep.includes(k)) g.deleteAttribute(k);
       const size = this.uvSize.get(mat);
       if (size) geos.forEach((g) => worldUV(g, size));

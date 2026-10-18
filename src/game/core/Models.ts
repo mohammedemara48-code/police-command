@@ -4,12 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import {
-  humanMatRole,
-  shouldBrightenRecolor,
-  LOCO_CROSSFADE,
-  LOCO_SPEED_EMA
-} from '../logic/humanMaterials';
+import { humanMatRole, shouldBrightenRecolor, LOCO_CROSSFADE, LOCO_SPEED_EMA } from '../logic/humanMaterials';
 
 /**
  * Low-poly CC0 models (Kenney Car Kit, Mini Characters, City Kit Commercial).
@@ -44,7 +39,17 @@ export type ModelKind =
 
 /** Realistic MakeHuman (CC0) people, rigged + animated with the Universal Animation Library (CC0). */
 export type HumanKind =
-  'cop_m' | 'cop_f' | 'civ_m1' | 'civ_m2' | 'civ_m3' | 'civ_f1' | 'civ_f2' | 'car-sedan2' | 'car-hatch' | 'car-van' | 'car-police';
+  | 'cop_m'
+  | 'cop_f'
+  | 'civ_m1'
+  | 'civ_m2'
+  | 'civ_m3'
+  | 'civ_f1'
+  | 'civ_f2'
+  | 'car-sedan2'
+  | 'car-hatch'
+  | 'car-van'
+  | 'car-police';
 const GLB = new Set<string>([
   'cop_m',
   'cop_f',

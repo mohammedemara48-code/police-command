@@ -159,7 +159,13 @@ export class Squad {
     this.reloadT = 0;
   }
 
-  private make(spec: { b: Behaviour; boss?: boolean }, x: number, z: number, hostage = false, anchored = false): Suspect {
+  private make(
+    spec: { b: Behaviour; boss?: boolean },
+    x: number,
+    z: number,
+    hostage = false,
+    anchored = false
+  ): Suspect {
     const g = this.makePerson(hostage);
     if (spec.boss) g.scale.setScalar(1.12);
     g.position.set(x, 0, z);
@@ -195,7 +201,6 @@ export class Squad {
       path: []
     };
   }
-
 
   /** Cover crates as oriented boxes for on-foot collision (mutates `out`). */
   appendCrateBoxes(out: OBB[]) {
@@ -588,8 +593,7 @@ export class Squad {
           const w = this.ward;
           const wd = w ? Math.hypot(w.x - p.x, w.z - p.z) : Infinity;
           // face whichever is nearer: the officer or the VIP car he's after
-          if (ai.mode !== 'move')
-            s.g.rotation.y = w && wd < d ? Math.atan2(w.x - p.x, w.z - p.z) : Math.atan2(dx, dz);
+          if (ai.mode !== 'move') s.g.rotation.y = w && wd < d ? Math.atan2(w.x - p.x, w.z - p.z) : Math.atan2(dx, dz);
           fs.sx = p.x;
           fs.sz = p.z;
           s.hidden = isHidden(ai, this.covers, fs);
@@ -605,10 +609,7 @@ export class Squad {
             const hit = Math.random() < VIP_HIT * aim;
             tA.set(p.x, 1.35 + p.y, p.z);
             const miss = hit ? 0 : 2.5;
-            this.tracer(
-              tA,
-              tB.set(w.x + (Math.random() - 0.5) * miss, 0.9, w.z + (Math.random() - 0.5) * miss)
-            );
+            this.tracer(tA, tB.set(w.x + (Math.random() - 0.5) * miss, 0.9, w.z + (Math.random() - 0.5) * miss));
             audio.sample('gunshot', 0.35, 1.1);
             this.onGunfire?.(p.x, p.z);
             if (hit) this.wardDmg += this.wardShot;

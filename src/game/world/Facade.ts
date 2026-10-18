@@ -37,7 +37,13 @@ function rng(seed: number) {
 }
 
 /** Paint a wall photo over the whole canvas, shifted with wrap-around so every variant looks different but still tiles. */
-function photo(g: CanvasRenderingContext2D, S: number, wall: Wall, r: () => number, rect?: [number, number, number, number]) {
+function photo(
+  g: CanvasRenderingContext2D,
+  S: number,
+  wall: Wall,
+  r: () => number,
+  rect?: [number, number, number, number]
+) {
   const im = imgs[wall];
   const [x, y, w, h] = rect ?? [0, 0, S, S];
   g.save();
@@ -55,7 +61,8 @@ function photo(g: CanvasRenderingContext2D, S: number, wall: Wall, r: () => numb
     g.scale(flip ? -1 : 1, 1);
     const ts = wall === 'brick' ? S / 1.6 : S;
     for (let ix = -1; ix <= Math.ceil(S / ts); ix++)
-      for (let iy = -1; iy <= Math.ceil(S / ts); iy++) g.drawImage(im, ((ox % ts) + ts) % ts + ix * ts - ts, ((oy % ts) + ts) % ts + iy * ts - ts, ts, ts);
+      for (let iy = -1; iy <= Math.ceil(S / ts); iy++)
+        g.drawImage(im, (((ox % ts) + ts) % ts) + ix * ts - ts, (((oy % ts) + ts) % ts) + iy * ts - ts, ts, ts);
   }
   g.restore();
 }
@@ -75,7 +82,15 @@ function blotches(g: CanvasRenderingContext2D, S: number, r: () => number, n: nu
 }
 
 /** Soft vertical rain streaks running down from (x, y). */
-function streaks(g: CanvasRenderingContext2D, x: number, y: number, w: number, len: number, r: () => number, a: number) {
+function streaks(
+  g: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  len: number,
+  r: () => number,
+  a: number
+) {
   const n = Math.max(2, Math.round(w / 3));
   for (let i = 0; i < n; i++) {
     const sx = x + (i + r()) * (w / n);

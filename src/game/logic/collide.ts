@@ -64,30 +64,6 @@ export function resolve(px: number, pz: number, r: number, boxes: OBB[]) {
   return { x, z, hit };
 }
 
-/** Cross-street gaps on the main avenue — kept here so tests stay free of three.js. */
-const CROSS = [-96, -45, 50, 145, 236];
-const nearGap = (z: number, m = 8) => CROSS.some((c) => Math.abs(c - z) < m);
-
-/**
- * Solid footprints of the avenue apartment fronts and the precinct (matches StreetPlay.buildStreetRows).
- * Boxes are axis-aligned; hw is half-depth into the block, hl is half-length along the street.
- */
-export function avenueBuildingBoxes(station: { x: number; z: number } = { x: 12.4, z: 3 }): OBB[] {
-  const out: OBB[] = [];
-  for (const side of [-1, 1] as const) {
-    for (let z = -96; z <= 232; z += 9) {
-      if (nearGap(z, 8)) continue;
-      if (side > 0 && Math.abs(z - station.z) < 5) continue;
-      const seed = Math.abs(Math.floor(z * 7 + side * 13));
-      const w = 6 + (seed % 3);
-      out.push({ x: side * (8.4 + w / 2), z, yaw: 0, hw: w / 2, hl: 4.2 });
-    }
-  }
-  // precinct: BoxGeometry(8.4, …, 8) at STATION.x/z
-  out.push({ x: station.x, z: station.z, yaw: 0, hw: 4.2, hl: 4 });
-  return out;
-}
-
 /**
  * Push out of solids, then keep the result on the walkable pad when possible.
  * Always prefers leaving a solid over staying inside it (the old onFoot gate left the officer stuck in cars).

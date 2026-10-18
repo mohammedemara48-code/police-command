@@ -5,7 +5,6 @@ import {
   driftOf,
   kmh,
   hitDamage,
-  pullOver,
   smoothSteer,
   camRig,
   topSpeed,
@@ -42,7 +41,7 @@ import {
   type GarageId
 } from '../logic/hub';
 import { ARMOR_MAX } from '../logic/combat';
-import { resolveFoot, avenueBuildingBoxes, type OBB } from '../logic/collide';
+import { resolveFoot, type OBB } from '../logic/collide';
 import { stepPull, speederSpeed, passCheckpoint, PULL_T, TICKET_R } from '../logic/missions';
 import {
   duiWeave,
@@ -76,25 +75,11 @@ import type { Pose } from '../logic/cutscene';
 import { storyCutscene } from '../../story/cutscenes';
 import { SPEAKERS } from '../../story/speakers';
 import { modelFor, recolorFor, WEAPONS, type WeaponId } from '../logic/character';
-import {
-  buildCity,
-  onRoad,
-  onFoot,
-  nearCross,
-  drawCityMap,
-  CROSS_Z,
-  ROAD_W,
-  districtAt,
-  findPath,
-  farNode,
-  followPath,
-  nearestNode
-} from '../world/City';
-import { palm, tree, flushPalms } from '../world/Trees';
-import { buildNile, type Sea } from '../world/Nile';
+import { onRoad, onFoot, findPath, farNode, followPath } from '../world/City';
+import { drawMiniMap } from '../ui/miniMap';
 import { setHaze } from '../world/Haze';
-import { LION_SPOTS } from '../logic/nile';
-import { setPyramidHaze, updatePyramids } from '../world/Pyramids';
+import { buildMonuments } from '../world/monuments';
+import { buildPyramids, setPyramidHaze, updatePyramids } from '../world/Pyramids';
 import { Barks } from '../ui/Barks';
 import {
   BARKS,
@@ -112,41 +97,33 @@ import type { Speaker } from '../ui/Barks';
 import { CairoMap } from '../ui/CairoMap';
 import { Crowd } from './Crowd';
 import { quality } from '../config/Quality';
-import type { ShopSpot } from '../logic/crowd';
 import { damageWord } from '../logic/barks';
-import {
-  boomLength,
-  clampDistance,
-  distanceToBlocked,
-  wallLift,
-  CAM_PAD_CAR,
-  CAM_PAD_FOOT
-} from '../logic/camera';
+import { boomLength, clampDistance, distanceToBlocked, wallLift, CAM_PAD_CAR, CAM_PAD_FOOT } from '../logic/camera';
 import { rearSticker } from '../world/Stickers';
-import { egyptBlock, gantry, streetNameSign, kerbStripeMat, roofRack, taxiSign, rollWheels, type SignDest } from '../world/Egypt';
-import {
-  surface,
-  worldUV,
-  segments,
-  Batch,
-  PROP_MATS,
-  lamp,
-  bin,
-  bench,
-  roadSign,
-  buildPromenade,
-  corniche,
-  CORNICHE
-} from '../world/Environment';
+import { roofRack, taxiSign, rollWheels } from '../world/Egypt';
+
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
+import { NetTraffic, type Veh } from '../logic/netTraffic';
+import { OpenWorld } from '../world/OpenWorld';
+import { lots } from '../logic/lots';
+import { inRiver, net } from '../logic/roadnet';
+import { TOWER_AT } from '../logic/monuments';
+import {
+  aheadOnRoad,
+  frameAt,
+  places,
+  placeById,
+  placeAt,
+  legacyToWorld,
+  openLevel,
+  type Place
+} from '../logic/places';
 import { addStat, checkAch } from '../systems/Achievements';
 import * as THREE from 'three';
 import { models, CARS, MEN, WOMEN, fx } from './Models';
-import { DISTRICT_STYLES, blockLook, signNames } from '../logic/districts';
 import { audio } from '../systems/AudioManager';
 import { Q } from '../config/Quality';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { tutorialHint, TUT_KEY, TUT_STEPS, type TutAct } from '../logic/tutorial';
 import {
   LEVELS,
@@ -163,19 +140,9 @@ import {
   type Behaviour
 } from '../missions/Levels';
 
-export interface StreetPlace {
-  id: string;
-  name: string;
-  z: number;
-  blurb: string;
-}
-
-export const STREET_PLACES: StreetPlace[] = [
-  { id: 'downtown', name: DISTRICT_STYLES.downtown.name, z: 0, blurb: DISTRICT_STYLES.downtown.blurb },
-  { id: 'port', name: DISTRICT_STYLES.port.name, z: 100, blurb: DISTRICT_STYLES.port.blurb },
-  { id: 'corniche', name: DISTRICT_STYLES.corniche.name, z: 190, blurb: DISTRICT_STYLES.corniche.blurb },
-  { id: 'suburb', name: DISTRICT_STYLES.suburb.name, z: -72, blurb: DISTRICT_STYLES.suburb.blurb }
-];
+/** The four mission districts, each on its main street of the real map (logic/places.ts). */
+export type StreetPlace = Place;
+export const streetPlaces = (): StreetPlace[] => places();
 
 export interface ChaseReport {
   success: boolean;
@@ -203,10 +170,30 @@ export interface MissionDef {
   blurb: string;
 }
 
+const TRAFFIC_CARS = 15;
+
 const MISSION_POOL: MissionDef[] = [
-  { id: 'm-port-chase', placeId: 'port', kind: 'chase', title: 'مطاردة هاربين', blurb: 'سيارة سودا هاربة من شارع شبرا' },
-  { id: 'm-down-rob', placeId: 'downtown', kind: 'robbery', title: 'سطو على محل', blurb: 'مسلحون داخل محل في شارع التحرير' },
-  { id: 'm-corn-drug', placeId: 'corniche', kind: 'drugs', title: 'تفتيش مخدرات', blurb: 'صفقة مشبوهة على كورنيش الجيزة' },
+  {
+    id: 'm-port-chase',
+    placeId: 'port',
+    kind: 'chase',
+    title: 'مطاردة هاربين',
+    blurb: 'سيارة سودا هاربة من شارع شبرا'
+  },
+  {
+    id: 'm-down-rob',
+    placeId: 'downtown',
+    kind: 'robbery',
+    title: 'سطو على محل',
+    blurb: 'مسلحون داخل محل في شارع التحرير'
+  },
+  {
+    id: 'm-corn-drug',
+    placeId: 'corniche',
+    kind: 'drugs',
+    title: 'تفتيش مخدرات',
+    blurb: 'صفقة مشبوهة على كورنيش الجيزة'
+  },
   {
     id: 'm-sub-assault',
     placeId: 'suburb',
@@ -214,21 +201,20 @@ const MISSION_POOL: MissionDef[] = [
     title: 'اعتداء في الشارع',
     blurb: 'مشاجرة وعنف في شارع الهرم'
   },
-  { id: 'm-port-traffic', placeId: 'port', kind: 'traffic', title: 'حادث مروري', blurb: 'تصادم وإغلاق طريق في شارع الخلفاوي' },
+  {
+    id: 'm-port-traffic',
+    placeId: 'port',
+    kind: 'traffic',
+    title: 'حادث مروري',
+    blurb: 'تصادم وإغلاق طريق في شارع الخلفاوي'
+  },
   { id: 'm-down-chase', placeId: 'downtown', kind: 'chase', title: 'مطاردة وسط البلد', blurb: 'هارب يقطع الإشارات' },
   { id: 'm-corn-rob', placeId: 'corniche', kind: 'robbery', title: 'سرقة في الدقي', blurb: 'سطو على كشك ليلي' },
   { id: 'm-sub-drugs', placeId: 'suburb', kind: 'drugs', title: 'مداهمة بيت', blurb: 'بلاغ مخدرات في الهرم' }
 ];
 
-type Traffic = {
-  waitT?: number;
-  mesh: THREE.Group;
-  speed: number;
-  laneX: number;
-  /** pull-over offset toward the kerb (siren) and knock-back after a hit */
-  side?: number;
-  bumpT?: number;
-};
+/** A car of the ambient traffic: its mesh and its place on the street network (logic/netTraffic.ts). */
+type Traffic = { mesh: THREE.Group; v: Veh };
 
 type Hold = { f: boolean; b: boolean; l: boolean; r: boolean; run: boolean };
 
@@ -251,7 +237,13 @@ function policeDecal() {
   x.fillText('شرطة   POLICE', 256, 36);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  decalMat = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -2 });
+  decalMat = new THREE.MeshStandardMaterial({
+    map: t,
+    transparent: true,
+    roughness: 0.4,
+    polygonOffset: true,
+    polygonOffsetFactor: -2
+  });
   return decalMat;
 }
 
@@ -266,6 +258,10 @@ export class StreetPlay {
   private rain: THREE.Points | null = null;
   private rainVel: Float32Array | null = null;
   private traffic: Traffic[] = [];
+  private ntraffic!: NetTraffic;
+  private world!: OpenWorld;
+  /** monuments, barrier arms and the precinct: boxes people and cars bounce off, besides the building lots */
+  private solidExtra: OBB[] = [];
   private flash: THREE.PointLight[] = [];
   private inCar = false;
   private squad!: Squad;
@@ -279,7 +275,6 @@ export class StreetPlay {
   private chaseArrest = false;
   private chaseLimit = 45;
   private chaseSpeed = 1;
-  private chaseDir = 1;
   private radioQ: Line[] = [];
   private radioDone: (() => void) | null = null;
   private radioT = 0;
@@ -303,9 +298,6 @@ export class StreetPlay {
   private recoil = 0;
   private panicAt = new THREE.Vector3();
   private panicT = 0;
-  private lights: { z: number; mats: THREE.MeshBasicMaterial[] }[] = [];
-  private lightT = 0;
-  private avenueGreen = true;
   private tmpV = new THREE.Vector3();
   private chasePath: { x: number; z: number }[] = [];
   private route: { x: number; z: number }[] = [];
@@ -355,7 +347,6 @@ export class StreetPlay {
   private sirenWas = false;
   private chaseTalkT = 0;
   private crowd: Crowd | null = null;
-  private shopSpots: ShopSpot[] = [];
   /** hour of the day (0-24), set by the city scene */
   hour: (() => number) | null = null;
   /** smoothed steering wheel, -1..1 */
@@ -394,7 +385,16 @@ export class StreetPlay {
   private speedoTxt = '';
   private camFov = 48;
   private eventGroup = new THREE.Group();
-  private travel: { z: number; fast: boolean } | null = null;
+  private travel: { path: { x: number; z: number }[]; x: number; z: number } | null = null;
+  private travelPt = {
+    x: 0,
+    z: 0,
+    set(x: number, z: number) {
+      this.x = x;
+      this.z = z;
+      return this;
+    }
+  };
   private hold: Hold = { f: false, b: false, l: false, r: false, run: false };
   /** analog joystick (x right, y forward, 0..1) for camera-relative on-foot movement */
   private stick = { x: 0, y: 0 };
@@ -517,92 +517,24 @@ export class StreetPlay {
   }
 
   private buildWorld() {
-    // main avenue: PBR asphalt, paved sidewalks broken at the cross streets, concrete kerbs and painted lines
-    const roadMat = surface('asphalt', Q.hdri ? 0x9a9a9a : 0xb8b8b8);
-    roadMat.userData.uvSize = 5;
-    const road = new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.08, 340), roadMat);
-    road.position.set(0, 0.04, 60);
-    road.receiveShadow = true;
-    this.group.add(road);
-
-    const walkMat = surface('paving', 0xd8d2c8);
-    walkMat.userData.uvSize = 2;
-    const kerbMat = kerbStripeMat();
-    for (const side of [-1, 1]) {
-      for (const [a, b] of segments(-110, 230, CROSS_Z, ROAD_W / 2)) {
-        const sw = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.14, b - a), walkMat);
-        sw.position.set(side * 6.4, 0.07, (a + b) / 2);
-        this.group.add(sw);
-        this.group.add(this.box(0.22, 0.2, b - a, kerbMat, side * 4.62, 0.1, (a + b) / 2));
-        this.group.add(this.box(0.12, 0.012, b - a - 2, PROP_MATS.paint, side * 4.15, 0.086, (a + b) / 2));
-      }
-    }
-
-    for (const [a, b] of segments(-110, 230, CROSS_Z, ROAD_W / 2 + 1))
-      for (const x of [-0.13, 0.13]) this.group.add(this.box(0.1, 0.012, b - a, PROP_MATS.paint, x, 0.086, (a + b) / 2));
-    for (let z = -90; z < 230; z += 8) {
-      if (nearCross(z, 7)) continue;
-      for (const x of [-2.3, 2.3]) this.group.add(this.box(0.13, 0.012, 3, PROP_MATS.paint, x, 0.086, z));
-    }
-    this.buildGantries();
-
-
-    this.buildStreetRows();
-    this.buildStreetNames();
-    this.buildingBoxes = avenueBuildingBoxes(STATION);
-    for (const [lx, lz] of LION_SPOTS) this.buildingBoxes.push({ x: lx, z: lz, yaw: 0, hw: 1.8, hl: 2.1 });
-    for (const place of STREET_PLACES) {
-      this.buildBlock(place);
-      this.addCrosswalk(place.z + 12);
-    }
-    const props = new Batch();
-    for (let z = -90; z < 230; z += 20) {
-      this.addLamp(-5.0, z, props, 1);
-      this.addLamp(5.0, z + 10, props, -1);
-    }
-    for (let z = -80; z < 220; z += 40) this.addProps(z, props);
-    for (let z = -100; z < 232; z += 10) {
-      if (nearCross(z, 7) || Math.abs(z - STATION.z) < 8) continue;
-      for (const side of [-1, 1]) {
-        const zz = z + (side > 0 ? 5 : 0);
-        const dd = districtAt(zz);
-        const slot = Math.floor(zz / 10);
-        if (dd === 'corniche') {
-          if (slot % 3 === 0) tree(props, side * 5.1, zz);
-          else palm(props, side * 5.1, zz + 2.5);
-        } else if (dd === 'port') tree(props, side * 5.1, zz); // Shubra Street is the old tree-lined avenue
-        else if (dd === 'downtown' ? (slot & 1) === 0 : (slot & 3) === 0) tree(props, side * 5.1, zz);
-      }
-    }
-    props.flush(this.group, Q.shadows);
-    buildPromenade(this.group);
-    const nile = buildNile(this.group, new THREE.Vector3(-0.4, 0.35, 1));
-    this.sea = nile;
-    for (const h of corniche(this.group)) {
-      const halo = new THREE.Object3D() as THREE.PointLight;
-      (halo as unknown as { intensity: number }).intensity = 2.5;
-      this.halos.push(halo);
-      halo.position.copy(h);
-      this.group.add(halo);
-      fx.glow(halo, 0xffc56a, 1.8);
-    }
-    for (const h of nile.halos) {
-      const halo = new THREE.Object3D() as THREE.PointLight;
-      (halo as unknown as { intensity: number }).intensity = 2.5;
-      this.halos.push(halo);
-      halo.position.copy(h);
-      this.group.add(halo);
-      fx.glow(halo, 0xffc56a, 1.4);
-    }
-    flushPalms(this.group);
-
+    // the open city: streamed chunks of real streets around the officer (world/OpenWorld.ts)
+    this.world = new OpenWorld(this.group);
+    this.buildStation();
+    this.solidExtra.push(...this.world.solids);
+    buildMonuments(this.group);
+    this.buildLampGlow();
+    buildPyramids(this.group);
     this.buildLights();
     this.buildBeacon();
     this.player = this.makeOfficer();
-    this.player.position.set(0.9, 0, 0);
+    this.player.position.set(STATION.door.x, 0, STATION.door.z);
+    this.yaw = this.camYaw = STATION.parking.yaw;
+    this.player.rotation.y = this.yaw;
     this.group.add(this.player);
     this.car = this.makePoliceCar(true);
-    this.car.position.set(-2.6, 0, 11);
+    this.car.position.set(STATION.parking.x, 0, STATION.parking.z);
+    this.car.rotation.y = STATION.parking.yaw;
+    this.velYaw = STATION.parking.yaw;
     this.group.add(this.car);
     this.driver = this.makeOfficer();
     this.driver.scale.setScalar(0.62);
@@ -611,10 +543,6 @@ export class StreetPlay {
     this.driver.visible = false;
     this.car.add(this.driver);
     this.group.add(this.eventGroup);
-    this.mergeStatic();
-    buildCity(this.group, Q.lowDetailPeople);
-    flushPalms(this.group);
-    this.spawnCrossTraffic();
     this.squad = new Squad(this.group, (hostage) => {
       const g = hostage
         ? this.makePerson(true, 0xe7d7c1, 0x3a2416).g
@@ -638,133 +566,9 @@ export class StreetPlay {
       else if (e === 'cuff') this.bark('cuffing');
     };
     this.buildGun();
-    this.buildTrafficLights();
     this.spawnCrowd();
     this.spawnTraffic();
     this.buildRain();
-  }
-
-  /** Merge all static street meshes (road, lines, lamps, props, shop fronts) into one mesh per material: ~400 draw calls -> ~30. */
-  private mergeStatic() {
-    this.group.updateMatrixWorld(true);
-    const inv = new THREE.Matrix4().copy(this.group.matrixWorld).invert();
-    const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
-    const remove: THREE.Object3D[] = [];
-    const take = (m: THREE.Mesh) => {
-      const g = m.geometry.clone();
-      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
-      const mat = m.material as THREE.Material;
-      const keep = (mat as THREE.MeshStandardMaterial).vertexColors
-        ? ['position', 'normal', 'uv', 'color']
-        : ['position', 'normal', 'uv'];
-      for (const k of Object.keys(g.attributes)) if (!keep.includes(k)) g.deleteAttribute(k);
-      if (!g.index) return null;
-      if (!byMat.has(mat)) byMat.set(mat, []);
-      byMat.get(mat)!.push(g);
-      return true;
-    };
-    for (const c of [...this.group.children]) {
-      const m = c as THREE.Mesh;
-      if (m.isMesh && !c.userData.dynamic && !Array.isArray(m.material) && m.geometry.index) {
-        if (take(m)) remove.push(c);
-      } else if (c.userData.static) {
-        c.traverse((o) => {
-          const mm = o as THREE.Mesh;
-          if (mm.isMesh && mm.geometry.index) take(mm);
-        });
-        remove.push(c);
-      }
-    }
-    for (const c of remove) c.removeFromParent();
-    for (const [mat, geos] of byMat) {
-      const merged = mergeGeometries(geos, false);
-      geos.forEach((g) => g.dispose());
-      if (!merged) continue;
-      if (mat.userData.uvSize) worldUV(merged, mat.userData.uvSize as number);
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.receiveShadow = true;
-      mesh.castShadow = false;
-      this.group.add(mesh);
-    }
-  }
-
-  private buildBlock(place: StreetPlace) {
-    const sign = this.makeSign(place.name);
-    sign.position.set(-8, 0, place.z);
-    this.group.add(sign);
-  }
-
-  /** Continuous rows of buildings with ground-floor shops along the whole street. */
-  private buildStreetRows() {
-    const shops: Array<[string, string]> = [
-      ['صيدلية', '#2ecc71'],
-      ['مخبز', '#f39c12'],
-      ['كافيه', '#a0522d'],
-      ['سوبر ماركت', '#e74c3c'],
-      ['مطعم', '#e67e22'],
-      ['ملابس', '#9b59b6'],
-      ['موبايلات', '#3498db'],
-      ['حلويات', '#ff6fa8'],
-      ['بنك', '#16a085'],
-      ['مكتبة', '#c0a050']
-    ];
-    let n = 0;
-    for (const side of [-1, 1]) {
-      for (let z = -96; z <= 232; z += 9) {
-        if (nearCross(z, 8)) continue;
-        if (side > 0 && Math.abs(z - STATION.z) < 5) {
-          if (!this.stationBuilt) this.buildStation();
-          continue;
-        }
-        const dist = districtAt(z);
-        const seed = Math.abs(Math.floor(z * 7 + side * 13));
-        const look = blockLook(dist, seed);
-        const w = 6 + (seed % 3);
-        // Cairo apartment block: plastered in the district's colours or bare red brick with rebar on the roof
-        const eb = egyptBlock(w, look.floors * 3, 8.4, side, seed, look);
-        eb.position.set(side * (8.4 + w / 2), 0, z);
-        this.group.add(eb);
-        if (dist !== 'suburb' || seed % 2 === 0) this.addShop(side, z, shops[n++ % shops.length]);
-      }
-    }
-  }
-
-  /** Green street-name boards at the cross streets with the real names of each district. */
-  private buildStreetNames() {
-    CROSS_Z.forEach((cz, i) => {
-      if (Math.abs(cz - STATION.z) < 10) return;
-      const [avenue, cross] = signNames(districtAt(cz), i);
-      for (const side of [-1, 1]) {
-        const sign = streetNameSign(avenue, cross);
-        sign.position.set(side * 6.6, 0, cz - side * (ROAD_W / 2 + 1.6));
-        this.group.add(sign);
-      }
-    });
-  }
-
-  /** Blue overhead direction signs (Arabic + English, distance to the next places in that direction). */
-  private buildGantries() {
-    const places: { ar: string; en: string; z: number }[] = [
-      { ar: 'الأهرامات', en: 'Pyramids', z: -900 },
-      { ar: DISTRICT_STYLES.suburb.name, en: DISTRICT_STYLES.suburb.en, z: -72 },
-      { ar: DISTRICT_STYLES.downtown.name, en: DISTRICT_STYLES.downtown.en, z: 0 },
-      { ar: 'قسم الشرطة', en: 'Police Station', z: STATION.z },
-      { ar: DISTRICT_STYLES.port.name, en: DISTRICT_STYLES.port.en, z: 100 },
-      { ar: DISTRICT_STYLES.corniche.name, en: DISTRICT_STYLES.corniche.en, z: 190 }
-    ];
-    const km = (d: number) => Math.round(d / 10) / 10 + 0.3; // map scale: 100 m on the avenue reads as ~1 km
-    const put = (z: number, dir: number) => {
-      const ahead = places
-        .filter((p) => (p.z - z) * dir > 25)
-        .sort((a, b) => Math.abs(a.z - z) - Math.abs(b.z - z));
-      if (!ahead.length) return;
-      const dests: SignDest[] = ahead.slice(0, 2).map((p) => ({ ar: p.ar, en: p.en, km: km(Math.abs(p.z - z)) }));
-      const g = gantry(z, dir, dests);
-      g.userData.static = true;
-      this.group.add(g);
-    };
-    for (const z of [-55, 35, 125]) put(z, 1);
-    for (const z of [-25, 75, 175]) put(z, -1);
   }
 
   // ---- traffic stop (siren pull-over)
@@ -788,10 +592,9 @@ export class StreetPlay {
   private beginPullover(dui = false, gap = 30) {
     this.endPullover();
     const g = this.makeSuspectCar();
-    const dir = this.car.position.z < 120 ? 1 : -1;
-    const ax = Math.round(this.car.position.x / 60) * 60;
-    g.position.set(ax + 1.6 * -dir, 0, this.car.position.z + dir * gap);
-    g.rotation.y = dir > 0 ? 0 : Math.PI;
+    const at = aheadOnRoad(this.car.position.x, this.car.position.z, this.car.rotation.y, gap);
+    g.position.set(at.x, 0, at.z);
+    g.rotation.y = at.yaw;
     const far = farNode(g.position.x, g.position.z);
     this.spPath = trimBehind(
       findPath(g.position.x, g.position.z, far.x, far.z),
@@ -827,7 +630,12 @@ export class StreetPlay {
     this.msTarget.copy(g.position);
     this.msHasTarget = true;
     if (!this.pullStopped) {
-      const v = speederSpeed(18 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }), this.spTurn, dist) * (this.inCar ? 1 : 0.3);
+      const v =
+        speederSpeed(
+          18 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }),
+          this.spTurn,
+          dist
+        ) * (this.inCar ? 1 : 0.3);
       let head = followPath(g.position, this.spPath, v * dt);
       if (head === null) {
         const f = farNode(g.position.x, g.position.z);
@@ -1109,19 +917,31 @@ export class StreetPlay {
       this.ambLive = false;
       audio.sample('success', 0.5);
       this.setStatus('✔ الكمين اتأمن. كمّل مع الموكب.');
-    } else if (!this.ambLive && this.ambIdx < st.ambush.length && this.vipS / this.vipTotal >= st.ambush[this.ambIdx]!.at) {
+    } else if (
+      !this.ambLive &&
+      this.ambIdx < st.ambush.length &&
+      this.vipS / this.vipTotal >= st.ambush[this.ambIdx]!.at
+    ) {
       const amb = st.ambush[this.ambIdx]!;
       const spot = ambushSpot(this.vipRoute, this.vipS);
-      // attackers on both sidewalks of the avenue, staggered, each with a crate between him and the convoy
-      const specs = amb.roles.map((b, k) => ({ b, dx: (k % 2 ? 1 : -1) * (6.1 + (k >> 1) * 0.5), dz: (k >> 1) * 3.2 * Math.sign(spot.z - this.vipPt.z || 1) }));
+      // attackers on both pavements of the street, staggered, each with a crate between him and the convoy
+      const fr = frameAt(spot.x, spot.z);
+      const specs = amb.roles.map((b, k) => {
+        const lat = (k % 2 ? 1 : -1) * (6.1 + (k >> 1) * 0.5),
+          along = (k >> 1) * 3.2;
+        let dx = fr.nx * lat + fr.fx * along,
+          dz = fr.nz * lat + fr.fz * along;
+        if (!onFoot(spot.x + dx, spot.z + dz)) {
+          dx *= 0.45;
+          dz *= 0.45;
+        }
+        return { b, dx, dz };
+      });
       this.squad.spawn(spot.x, spot.z, specs, { cover: true, approachZ: this.vipPt.z });
       this.ambIdx++;
       this.ambLive = true;
       audio.setTrack('music');
-      this.radio(
-        [{ who: 'mona', text: `كمين قدام الموكب! ${specs.length} من رجالة العقرب — احمي العربية.` }],
-        null
-      );
+      this.radio([{ who: 'mona', text: `كمين قدام الموكب! ${specs.length} من رجالة العقرب — احمي العربية.` }], null);
       this.setStatus('💥 كمين! الموكب وقف. حيّد المهاجمين قبل ما يصيبوا العربية.');
     }
     // movement along the road graph
@@ -1201,18 +1021,18 @@ export class StreetPlay {
   }
 
   private boxes: OBB[] = [];
-  private buildingBoxes: OBB[] = [];
   /** cars, cover crates and avenue fronts the officer cannot walk through */
   private solidBoxes() {
     const b = this.boxes;
     b.length = 0;
-    for (const o of this.buildingBoxes) b.push(o);
+    const at = this.player.position;
+    for (const l of lots().inBox(at.x - 8, at.z - 8, at.x + 8, at.z + 8)) if (!l.ghost) b.push(l);
+    for (const o of this.solidExtra) if (Math.abs(o.x - at.x) < 30 && Math.abs(o.z - at.z) < 30) b.push(o);
     const add = (g: THREE.Object3D | null | undefined, hw = 1.0, hl = 2.3) => {
       if (g && g.visible) b.push({ x: g.position.x, z: g.position.z, yaw: g.rotation.y, hw, hl });
     };
     if (!this.inCar) add(this.car, 1.05, 2.4);
     for (const t of this.traffic) add(t.mesh);
-    for (const t of this.cross) add(t.mesh);
     add(this.suspect);
     add(this.speeder);
     this.squad.appendCrateBoxes(b);
@@ -1270,7 +1090,6 @@ export class StreetPlay {
     };
     test(this.car);
     for (const t of this.traffic) test(t.mesh);
-    for (const t of this.cross) test(t.mesh);
     test(this.suspect);
     test(this.speeder);
     for (const g of [...this.hiddenOcc])
@@ -1286,13 +1105,12 @@ export class StreetPlay {
     for (const g of now) if (!this.faded.has(g)) this.setFade(g, true);
   }
 
-  private stationBuilt = false;
   private canHub = false;
   /** The police station (hub): blue-white facade, lit sign, beacon lights and a glowing door ring. */
   private buildStation() {
-    this.stationBuilt = true;
     const g = new THREE.Group();
     g.position.set(STATION.x, 0, STATION.z);
+    g.rotation.y = STATION.yaw;
     const w = 8,
       h = 8,
       d = 8.4;
@@ -1378,11 +1196,7 @@ export class StreetPlay {
           const have = owned.includes(k);
           const eq = c.weapon === k;
           const price = WEAPON_PRICE[k];
-          const label = !have
-            ? `اشترِ · $${price.toLocaleString()}`
-            : eq
-              ? 'مجهّز'
-              : 'تجهيز (مجاناً)';
+          const label = !have ? `اشترِ · $${price.toLocaleString()}` : eq ? 'مجهّز' : 'تجهيز (مجاناً)';
           return `<button type="button" data-wp="${k}" class="${eq ? 'on' : ''}" ${!have && money < price ? 'data-broke="1"' : ''}>${WEAPONS[k].name} <small>${WEAPONS[k].desc} · ${label}</small></button>`;
         })
         .join('');
@@ -1491,7 +1305,8 @@ export class StreetPlay {
         if (!this.damage) return;
         this.damage = 0;
         this.car.position.set(STATION.parking.x, 0, STATION.parking.z);
-        this.car.rotation.y = 0;
+        this.car.rotation.y = STATION.parking.yaw;
+        this.yaw = this.velYaw = STATION.parking.yaw;
         this.speed = 0;
         this.squad.resetPlayer();
         audio.sample('confirm', 0.7);
@@ -1531,212 +1346,9 @@ export class StreetPlay {
       })
     );
   }
-    private closeHub() {
+  private closeHub() {
     this.hubEl?.remove();
     this.hubEl = null;
-  }
-
-  private shopMats = new Map<string, THREE.Material>();
-  private goods = new Map<number, THREE.Material>();
-  /** lit display goods: slightly emissive so they read as lit from inside at night */
-  private goodsMat(c: number) {
-    let m = this.goods.get(c);
-    if (!m) {
-      m = this.mat(c, { roughness: 0.55, metalness: 0.05, emissive: c, emissiveIntensity: 0.28 });
-      this.goods.set(c, m);
-    }
-    return m;
-  }
-  private _shopGlass: THREE.Material | null = null;
-  private shopGlass() {
-    return (this._shopGlass ??= new THREE.MeshStandardMaterial({
-      color: 0xa9c4d0,
-      roughness: 0.04,
-      metalness: 0.9,
-      transparent: true,
-      opacity: 0.16,
-      envMapIntensity: 2,
-      depthWrite: false
-    }));
-  }
-  private _shopIn: THREE.Material[] = [];
-  /** Display window with shelves, mannequins or fruit crates behind real glass, depending on the shop. */
-  private addDisplay(g: THREE.Group, name: string) {
-    const [back, ceil, frame, shelf] = this._shopIn.length
-      ? this._shopIn
-      : (this._shopIn = [
-          this.mat(0xf3e6cc, { emissive: 0xffe2b0, emissiveIntensity: 0.55, roughness: 0.8 }),
-          this.mat(0xffffff, { emissive: 0xfff4dc, emissiveIntensity: 2.2 }),
-          this.mat(0x23272d, { metalness: 0.7, roughness: 0.35 }),
-          this.mat(0xb08a62, { roughness: 0.6, emissive: 0x402a10, emissiveIntensity: 0.3 })
-        ]);
-    const D = 0.9; // depth of the display box in front of the facade
-    g.add(this.box(5.8, 2.5, 0.05, back, 0, 1.3, 0.02));
-    g.add(this.box(5.8, 0.05, D, ceil, 0, 2.5, D / 2));
-    g.add(this.box(5.8, 0.4, D, frame, 0, 0.2, D / 2));
-    for (const fx0 of [-2.95, 2.95]) g.add(this.box(0.12, 2.6, D + 0.05, frame, fx0, 1.3, D / 2));
-    g.add(this.box(0.08, 2.1, 0.06, frame, -0.9, 1.45, D));
-    g.add(this.box(6, 0.14, D + 0.1, frame, 0, 2.6, D / 2));
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 2.1), this.shopGlass());
-    glass.position.set(0, 1.45, D);
-    g.add(glass);
-    const rnd = (k: number) => Math.abs(Math.sin(k * 91.7 + name.length * 13.3)) % 1;
-    const palette = [0xd84a3a, 0x3a8ad8, 0xf0c040, 0x45b06a, 0xf2f2f2, 0x9b59b6, 0xe67e22];
-    if (name === 'ملابس') {
-      for (let i = 0; i < 3; i++) {
-        const x = -2 + i * 1.7;
-        g.add(this.box(0.05, 0.9, 0.05, frame, x, 0.85, 0.45));
-        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.55, 3, 8), this.goodsMat(palette[i * 2]));
-        body.position.set(x, 1.55, 0.45);
-        g.add(body);
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), this.goodsMat(0xe8e2da));
-        head.position.set(x, 2.05, 0.45);
-        g.add(head);
-      }
-    } else if (name === 'سوبر ماركت' || name === 'حلويات' || name === 'مخبز') {
-      const fruit =
-        name === 'سوبر ماركت'
-          ? [0xf08a1a, 0xd8262a, 0x8cc63e, 0xf2d33a]
-          : name === 'حلويات'
-            ? [0xff8fb8, 0xc9873e, 0xfff0d0, 0x7a3a1a]
-            : [0xd9a35a, 0xb8793a, 0xf0d9a0, 0xc9873e];
-      const ball = new THREE.SphereGeometry(0.09, 6, 4);
-      for (let row = 0; row < 2; row++)
-        for (let c = 0; c < 4; c++) {
-          const x = -2.1 + c * 1.4,
-            y = 0.55 + row * 0.75,
-            z = 0.35 + row * 0.15;
-          g.add(this.box(1.2, 0.22, 0.5, shelf, x, y, z));
-          for (let k = 0; k < 10; k++) {
-            const m = new THREE.Mesh(ball, this.goodsMat(fruit[(c + row) % fruit.length]));
-            m.position.set(
-              x - 0.48 + (k % 5) * 0.24,
-              y + 0.18 + Math.floor(k / 5) * 0.1,
-              z - 0.1 + Math.floor(k / 5) * 0.12
-            );
-            g.add(m);
-          }
-        }
-    } else {
-      for (let row = 0; row < 3; row++) {
-        const y = 0.6 + row * 0.6;
-        g.add(this.box(5.4, 0.05, 0.4, shelf, 0, y, 0.25));
-        for (let k = 0; k < 9; k++) {
-          const h = 0.18 + rnd(row * 9 + k) * 0.25;
-          g.add(
-            this.box(
-              0.3,
-              h,
-              0.24,
-              this.goodsMat(palette[(row * 3 + k) % palette.length]),
-              -2.4 + k * 0.6,
-              y + h / 2 + 0.03,
-              0.25
-            )
-          );
-        }
-      }
-    }
-  }
-  private addShop(side: number, z: number, [name, rawColor]: [string, string]) {
-    // street-level shop colours are sun-faded paint, not plastic
-    const hsl = { h: 0, s: 0, l: 0 };
-    new THREE.Color(rawColor).getHSL(hsl);
-    const color = '#' + new THREE.Color().setHSL(hsl.h, hsl.s * 0.62, hsl.l * 0.86).getHexString();
-    const fx0 = side * 8.25;
-    const rot = side > 0 ? -Math.PI / 2 : Math.PI / 2;
-    const g = new THREE.Group();
-    g.position.set(fx0, 0, z);
-    g.rotation.y = rot;
-    g.userData.static = true;
-    this.shopSpots.push({ x: fx0, z, side, name });
-    this.addDisplay(g, name);
-    // awning
-    let aw = this.shopMats.get(color);
-    if (!aw) {
-      aw = this.mat(new THREE.Color(color).getHex(), { roughness: 0.6 });
-      this.shopMats.set(color, aw);
-    }
-    const awning = new THREE.Mesh(new THREE.BoxGeometry(6, 0.12, 1.4), aw);
-    awning.position.set(0, 2.85, 1.35);
-    awning.rotation.x = 0.25;
-    g.add(awning);
-    // sign
-    const c = document.createElement('canvas');
-    c.width = 256;
-    c.height = 64;
-    const x = c.getContext('2d')!;
-    x.fillStyle = color;
-    x.fillRect(0, 0, 256, 64);
-    x.fillStyle = '#fff';
-    x.font = 'bold 40px Cairo, Arial';
-    x.textAlign = 'center';
-    x.textBaseline = 'middle';
-    x.direction = 'rtl';
-    x.fillText(name, 128, 34);
-    const sign = new THREE.Mesh(
-      new THREE.PlaneGeometry(4.2, 1.05),
-      new THREE.MeshStandardMaterial({
-        map: new THREE.CanvasTexture(c),
-        emissive: 0xffffff,
-        emissiveMap: null,
-        emissiveIntensity: 0.25
-      })
-    );
-    (sign.material as THREE.MeshStandardMaterial).emissiveMap = (sign.material as THREE.MeshStandardMaterial).map;
-    sign.position.set(0, 3.6, 0.1);
-    g.add(sign);
-    this.group.add(g);
-  }
-
-  private makeSign(text: string) {
-    const g = new THREE.Group();
-    const pole = this.mat(0x5a6470, { metalness: 0.6, roughness: 0.4 });
-    g.add(this.box(0.14, 3.2, 0.14, pole, 0, 1.6, 0));
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 160;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#102033';
-    ctx.fillRect(0, 0, 512, 160);
-    ctx.strokeStyle = '#7ec8ff';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(8, 8, 496, 144);
-    ctx.fillStyle = '#f4f7ff';
-    ctx.font = 'bold 72px Cairo, Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.direction = 'rtl';
-    ctx.fillText(text, 256, 80);
-    const tex = new THREE.CanvasTexture(canvas);
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.05), new THREE.MeshBasicMaterial({ map: tex }));
-    board.position.set(0, 3.15, 0);
-    board.rotation.y = Math.PI / 2;
-    g.add(board);
-    return g;
-  }
-
-  private addCrosswalk(z: number) {
-    const m = this.mat(0x8f8c84, { roughness: 0.9, emissive: 0x222222, emissiveIntensity: 0.08 });
-    for (let i = -3; i <= 3; i++) {
-      this.group.add(this.box(0.45, 0.02, 7.6, m, i * 0.7, 0.11, z));
-    }
-  }
-
-  private addLamp(x: number, z: number, b: Batch, dir: number) {
-    const [hp] = lamp(b, x, z, dir);
-    const hx = hp.x;
-    // No per-lamp PointLight (dozens of them break/slow mobile GPUs): glow halo + warm light pool on the ground.
-    const halo = new THREE.Object3D() as THREE.PointLight;
-    (halo as unknown as { intensity: number }).intensity = 2.5;
-    this.halos.push(halo);
-    halo.position.copy(hp);
-    this.group.add(halo);
-    fx.glow(halo, 0xffc56a, 1.8);
-    const pool = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20), this.poolMat());
-    pool.rotation.x = -Math.PI / 2;
-    pool.position.set(hx, 0.15, z);
-    this.group.add(pool);
   }
 
   private _pool: THREE.MeshBasicMaterial | null = null;
@@ -2254,41 +1866,6 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.player.userData.forceClip = this.inCar ? null : this.firing ? 'gun' : aiming ? 'aim' : null;
   }
 
-  // ---- traffic lights at the three avenue intersections
-  private buildTrafficLights() {
-    const pole = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.6 });
-    const ave = new THREE.MeshBasicMaterial({ color: 0x33ff66 });
-    const cross = new THREE.MeshBasicMaterial({ color: 0xff3030 });
-    for (const z of CROSS_Z.slice(1, 4)) {
-      for (const sx of [-1, 1]) {
-        const g = new THREE.Group();
-        const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, 4.2, 0.16), pole);
-        p.position.y = 2.1;
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.9, 0.35), pole);
-        head.position.y = 4.2;
-        const la = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), ave);
-        la.position.set(0, 4.2, 0.2 * -sx);
-        const lc = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), cross);
-        lc.position.set(0.24 * sx, 4.2, 0);
-        g.add(p, head, la, lc);
-        g.position.set(sx * 5.4, 0, z - sx * 5.6);
-        g.userData.dynamic = true;
-        this.group.add(g);
-      }
-      this.lights.push({ z, mats: [ave, cross] });
-    }
-  }
-  private tickLights(dt: number) {
-    this.lightT += dt;
-    const green = this.lightT % 16 < 10;
-    if (green === this.avenueGreen) return;
-    this.avenueGreen = green;
-    for (const l of this.lights) {
-      l.mats[0].color.setHex(green ? 0x33ff66 : 0xff3030);
-      l.mats[1].color.setHex(green ? 0xff3030 : 0x33ff66);
-    }
-  }
-
   private objEl: HTMLElement | null = null;
   private dirEl: HTMLElement | null = null;
   private objHtml = '';
@@ -2343,10 +1920,49 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     setHaze(haze, day);
     // street lamps only glow once the light drops
     const lampOn = THREE.MathUtils.smoothstep(1 - day, 0.25, 0.7);
+    this.lampOn = lampOn;
     for (const h of this.halos) (h as unknown as { intensity: number }).intensity = 2.5 * lampOn;
     this.poolMat().opacity = lampOn;
   }
   private halos: THREE.Object3D[] = [];
+  private pools: THREE.Mesh[] = [];
+  private glowT = 0;
+  private lampBuf: THREE.Vector3[] = [];
+  /** Night glow without a light per lamp: a few halo sprites and warm ground pools reused for the lamps nearest the officer. */
+  private buildLampGlow() {
+    const n = quality === 'low' ? 10 : 18;
+    const pool = new THREE.CircleGeometry(3.2, 20);
+    for (let i = 0; i < n; i++) {
+      const halo = new THREE.Object3D() as THREE.PointLight;
+      (halo as unknown as { intensity: number }).intensity = 0;
+      halo.position.set(0, -50, 0);
+      this.halos.push(halo);
+      this.group.add(halo);
+      fx.glow(halo, 0xffc56a, 1.8);
+      const m = new THREE.Mesh(pool, this.poolMat());
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(0, -50, 0);
+      m.userData.dynamic = true;
+      this.pools.push(m);
+      this.group.add(m);
+    }
+  }
+  private lampOn = 0;
+  private refreshLampGlow(x: number, z: number) {
+    const lamps = this.world.lampsNear(x, z, 60, this.lampBuf);
+    lamps.sort((a, b) => (a.x - x) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + (b.z - z) ** 2));
+    this.halos.forEach((h, i) => {
+      const l = lamps[i];
+      if (l) {
+        h.position.copy(l);
+        this.pools[i]!.position.set(l.x, 0.17, l.z);
+      } else {
+        h.position.set(0, -50, 0);
+        this.pools[i]!.position.set(0, -50, 0);
+      }
+      (h as unknown as { intensity: number }).intensity = 2.5 * this.lampOn;
+    });
+  }
 
   private buildLights() {
     this.hemi = new THREE.HemisphereLight(0xcfe0ff, 0x8a7a62, 0.6);
@@ -2365,21 +1981,6 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     key.shadow.bias = -0.0004;
     this.group.add(key, key.target);
     this.key = key;
-  }
-
-  private addProps(z: number, b: Batch) {
-    bin(b, 7.0, z + 4);
-    bench(b, 7.2, z - 10, -Math.PI / 2);
-    bench(b, -7.2, z + 12, Math.PI / 2);
-    roadSign(b, -5.0, z + 16, 0, (z / 40) % 2 === 0);
-    const cone = new THREE.Mesh(
-      new THREE.ConeGeometry(0.22, 0.55, 8),
-      this.mat(0xff7a1a, { emissive: 0xff5500, emissiveIntensity: 0.25 })
-    );
-    cone.position.set(3.6, 0.28, z - 3);
-    this.group.add(cone);
-    const hydrant = this.mat(0xc42828, { roughness: 0.45 });
-    this.group.add(this.box(0.28, 0.7, 0.28, hydrant, -7.2, 0.4, z + 14));
   }
 
   private makeOfficer() {
@@ -2465,11 +2066,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     return { g, legL, legR, armL, armR };
   }
 
-  private sea: Sea | null = null;
-
   /** The street crowd (pavements, kerbs, doors, ahwa, vendors, Nile promenade), sized by the quality preset. */
   private spawnCrowd() {
-    this.crowd = new Crowd(this.group, quality, this.shopSpots, CORNICHE.z0, (c, o) => this.mat(c, o));
+    this.crowd = new Crowd(this.group, quality, { shopsNear: (x, z, r) => this.world.shopsNear(x, z, r) }, (c, o) =>
+      this.mat(c, o)
+    );
   }
 
   private makePoliceCar(lights: boolean) {
@@ -2551,29 +2152,12 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     return g;
   }
 
-  private cross: { mesh: THREE.Group; speed: number; bumpT?: number }[] = [];
-  private spawnCrossTraffic() {
-    const tints = [0xa52a2a, 0x2a4a8a, 0x8a9098, 0x1b1c1e, 0xb08a3a, 0x2e5a3a];
-    CROSS_Z.slice(1, 4).forEach((z, i) => {
-      for (let k = 0; k < 2; k++) {
-        const mesh = new THREE.Group();
-        const dir = k ? 1 : -1;
-        mesh.position.set(-100 + i * 70 + k * 40, 0, z + dir * 1.7);
-        mesh.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
-        models.dress(mesh, CARS[(i * 2 + k) % CARS.length]!, {
-          length: 4.5,
-          tint: tints[(i * 2 + k) % tints.length]
-        });
-        this.group.add(mesh);
-        this.cross.push({ mesh, speed: dir * (5 + i) });
-      }
-    });
-  }
-
+  /** The traffic cap: 15 cars on every preset (the street network decides where they drive). */
   private spawnTraffic() {
     const colors = [0x2a2e33, 0x4a4038, 0x1a3348, 0x33302c, 0x20242a];
-    for (let i = 0; i < 9; i++) {
-      const laneX = (i % 2 === 0 ? -1 : 1) * (i % 4 < 2 ? 1.15 : 3.3);
+    this.ntraffic = new NetTraffic(TRAFFIC_CARS, STATION.x, STATION.z);
+    for (let i = 0; i < TRAFFIC_CARS; i++) {
+      const veh = this.ntraffic.cars[i]!;
       const special = i % 3 === 1 ? 'microbus' : i % 3 === 2 && i % 2 === 0 ? 'taxi' : null;
       if (special) {
         // white microbus with a roof rack, or a white Cairo taxi with the chequered roof sign
@@ -2592,25 +2176,25 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
           t.position.set(0, 1.42, -0.25);
           g.add(t);
         }
-        g.position.set(laneX, 0, -60 + i * 30);
-        g.rotation.y = i % 2 === 0 ? 0 : Math.PI;
+        g.position.set(veh.x, 0, veh.z);
+        g.rotation.y = veh.yaw;
         this.group.add(g);
-        this.traffic.push({ mesh: g, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
+        this.traffic.push({ mesh: g, v: veh });
         continue;
       }
       const mesh = new THREE.Group();
       const c = this.mat(colors[i % colors.length], { metalness: 0.45, roughness: 0.35 });
       mesh.add(this.box(1.5, 0.4, 3.4, c, 0, 0.48, 0));
       mesh.add(this.box(1.3, 0.32, 1.5, this.mat(0x0e1824, { roughness: 0.15 }), 0, 0.85, -0.1));
-      mesh.position.set(laneX, 0, -60 + i * 30);
-      mesh.rotation.y = i % 2 === 0 ? 0 : Math.PI;
+      mesh.position.set(veh.x, 0, veh.z);
+      mesh.rotation.y = veh.yaw;
       const tints = [0x8c1c1c, 0x1f3f7a, 0x9aa0a8, 0x1b1c1e, 0x6b5a45, 0x2e5a3a, 0x5a1e2e];
       models.dress(mesh, CARS[i % CARS.length]!, {
         length: 4.5,
         tint: tints[i % tints.length]
       });
       this.group.add(mesh);
-      this.traffic.push({ mesh, speed: (i % 2 === 0 ? 1 : -1) * (4 + (i % 3)), laneX });
+      this.traffic.push({ mesh, v: veh });
     }
   }
 
@@ -2641,7 +2225,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const patrol = isPatrol(id);
     const keep = patrol && this.mounted && this.level && isPatrol(this.level.id);
     this.stopCutscene();
-    this.level = levelById(id);
+    this.level = openLevel(levelById(id));
     if (!patrol) progress.current = this.level.id;
     this.missionId = this.level.placeId;
     this.chasing = false;
@@ -2661,16 +2245,22 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       this.suspect = null;
     }
     this.closeResultSilently();
-    const place = STREET_PLACES.find((p) => p.id === this.level.placeId)!;
-    const startZ = place.z - 48 < -95 ? place.z + 48 : place.z - 48;
-    if (keep) {
+    const place = placeById(this.level.placeId);
+    // patrol calls start where the officer stands; story missions start on their district's street, 48 m short of the spot
+    if (keep || this.level.world) {
       this.setStatus(this.level.brief);
       this.briefing();
       return;
     }
-    this.car.position.set(-2.6, 0, startZ + 11);
-    this.car.rotation.y = startZ < place.z ? 0 : Math.PI;
-    this.player.position.set(0.9, 0, startZ);
+    const back = place.legacyZ - 48 < -95 ? 48 : -48;
+    const sz = place.legacyZ + back;
+    const cp = legacyToWorld(place.id, -2.6, sz + 11),
+      pp = legacyToWorld(place.id, 0.9, sz);
+    this.car.position.set(cp.x, 0, cp.z);
+    this.car.rotation.y = back < 0 ? place.yaw : place.yaw + Math.PI;
+    this.player.position.set(pp.x, 0, pp.z);
+    this.world.prime(pp.x, pp.z);
+    this.yaw = this.car.rotation.y;
     if (this.inCar) this.toggleCar();
     this.setStatus(`روح ${place.name} — ${this.level.brief}`);
     this.briefing();
@@ -2733,7 +2323,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     window.addEventListener('pointercancel', this.boundAimUp);
     window.addEventListener('keyup', this.boundKeyUp);
     // courtyard ammo crate by the station parking
-    this.squad.seedStationAmmo(STATION.parking.x + 2.4, STATION.parking.z - 1.2);
+    this.squad.seedStationAmmo(
+      STATION.door.x + Math.sin(STATION.parking.yaw) * 2.4,
+      STATION.door.z + Math.cos(STATION.parking.yaw) * 2.4
+    );
     this.snapCamera(1);
   }
 
@@ -2987,13 +2580,17 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   /** A person on screen who may say this: pedestrians, vendors, drivers in traffic. Null when nobody fits. */
-  private speakerFor(who: readonly VoiceId[], focus: THREE.Vector3, only?: (s: { shop: string | null }) => boolean): Speaker | null {
+  private speakerFor(
+    who: readonly VoiceId[],
+    focus: THREE.Vector3,
+    only?: (s: { shop: string | null }) => boolean
+  ): Speaker | null {
     const me = this.inCar ? this.car.position : this.player.position;
     let best = this.crowd?.speakerFor(who, this.camera, me, 34, focus, only) ?? null;
     let bd = Infinity;
     if (best) bd = Math.hypot(best.obj.position.x - focus.x, best.obj.position.z - focus.z);
     if (!only && who.some((w) => DRIVERS.includes(w))) {
-      for (const t of [...this.traffic, ...this.cross]) {
+      for (const t of this.traffic) {
         const kind = t.mesh.userData.vehicle as string | undefined;
         const role: VoiceId = kind === 'microbus' ? 'microbus' : kind === 'taxi' ? 'taxi' : 'driver';
         if (!who.includes(role)) continue;
@@ -3007,7 +2604,12 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   /** Someone on the street reacts. `focus` is where it happens (defaults to the officer). */
-  private bark(id: BarkId, priority = false, focus?: THREE.Vector3, only?: (s: { shop: string | null }) => boolean): boolean {
+  private bark(
+    id: BarkId,
+    priority = false,
+    focus?: THREE.Vector3,
+    only?: (s: { shop: string | null }) => boolean
+  ): boolean {
     if (this.quiet(priority) || !this.barks.ready(id, priority)) return false;
     const at = focus ?? (this.inCar ? this.car.position : this.player.position);
     const sp = this.speakerFor(BARKS[id].who, at, only);
@@ -3064,10 +2666,17 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
 
   private badlyParked(): boolean {
     const c = this.car.position;
-    const nearJunction = CROSS_Z.some((z) => Math.abs(c.z - z) < 6 && Math.abs(c.x) < 7);
-    const across = Math.abs(Math.sin(this.yaw)) > 0.55;
-    const onKerb = Math.abs(c.x) > 3.9 && Math.abs(c.x) < 8;
-    return c.z > -100 && c.z < 240 && (nearJunction || across || onKerb);
+    const N = net();
+    const n = N.nearest(c.x, c.z, 30);
+    if (!n || n.e.ring) return false;
+    const e = n.e;
+    const across = Math.abs(Math.sin(this.yaw - N.at(e, n.s).yaw)) > 0.55;
+    const nearJunction = [e.a, e.b].some((id) => {
+      const nd = N.nodes[id]!;
+      return nd.edges.length >= 3 && Math.hypot(nd.x - c.x, nd.z - c.z) < e.half + 6;
+    });
+    const onKerb = n.d > e.half - 1;
+    return nearJunction || across || onKerb;
   }
 
   /** What the street talks about when nothing is happening: the hour, the river, the bridge, the tower, rank, neighbours. */
@@ -3075,14 +2684,16 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const me = this.inCar ? this.car.position : this.player.position;
     const hr = this.hour?.() ?? 12;
     const picks: (() => boolean)[] = [];
-    const time: BarkId = hr < 5 || hr >= 19 ? 'timeNight' : hr < 11 ? 'timeMorning' : hr < 16 ? 'timeNoon' : 'timeSunset';
+    const time: BarkId =
+      hr < 5 || hr >= 19 ? 'timeNight' : hr < 11 ? 'timeMorning' : hr < 16 ? 'timeNoon' : 'timeSunset';
     picks.push(() => this.bark(time));
     const idx = RANKS.indexOf(rank());
     if (idx <= 1) picks.push(() => this.bark('rankLow'));
     else if (idx >= RANKS.length - 2) picks.push(() => this.bark('rankHigh'));
-    if (me.z > 214 && me.z < 252) picks.push(() => this.bark('nileView'));
-    if (me.z >= 252 && me.z < 372) picks.push(() => this.bark('bridgeCrossing'));
-    if (me.z >= 372) picks.push(() => this.bark('towerView'));
+    const road = net().nearest(me.x, me.z, 30);
+    if (road?.e.bridge) picks.push(() => this.bark('bridgeCrossing'));
+    else if (inRiver(me.x, me.z, 60)) picks.push(() => this.bark('nileView'));
+    if (Math.hypot(me.x - TOWER_AT.x, me.z - TOWER_AT.z) < 260) picks.push(() => this.bark('towerView'));
     picks.push(() => this.chatter());
     picks.push(() => this.chatter());
     picks.sort(() => Math.random() - 0.5);
@@ -3107,43 +2718,37 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   private currentPlace() {
-    let best = STREET_PLACES[0];
-    let bestD = Infinity;
-    const z = this.inCar ? this.car.position.z : this.player.position.z;
-    for (const p of STREET_PLACES) {
-      const d = Math.abs(p.z - z);
-      if (d < bestD) {
-        bestD = d;
-        best = p;
-      }
-    }
-    return best;
+    const at = this.inCar ? this.car.position : this.player.position;
+    return placeAt(at.x, at.z);
   }
 
-  /** Fast travel or drive toward a world point on the avenue. */
-  goToWorld(_x: number, z: number, fast: boolean) {
-    const place = STREET_PLACES.reduce((a, b) => (Math.abs(b.z - z) < Math.abs(a.z - z) ? b : a));
+  /** Fast travel or drive toward a point on the map: to the mission district nearest to it. */
+  goToWorld(x: number, z: number, fast: boolean) {
+    const place = places().reduce((a, b) => (Math.hypot(b.x - x, b.z - z) < Math.hypot(a.x - x, a.z - z) ? b : a));
     this.travelTo(place.id, fast);
   }
 
   travelTo(id: string, fast: boolean) {
-    const place = STREET_PLACES.find((p) => p.id === id);
+    const place = places().find((p) => p.id === id);
     if (!place || !this.active) return;
     this.closeMap();
     if (fast || !this.inCar) {
-      const z = place.z + 2;
-      this.car.position.set(-2.6, 0, z + 11);
-      this.player.position.set(this.inCar ? -1.4 : 0.9, 0, z);
-      this.yaw = 0;
-      this.car.rotation.y = 0;
+      const f = { x: Math.sin(place.yaw), z: Math.cos(place.yaw) };
+      this.world.prime(place.x, place.z);
+      this.car.position.set(place.x + f.x * 11, 0, place.z + f.z * 11);
+      this.player.position.set(place.x, 0, place.z);
+      this.yaw = place.yaw;
+      this.car.rotation.y = place.yaw;
+      this.velYaw = place.yaw;
+      this.speed = 0;
       this.travel = null;
       this.placeId = place.id;
       this.setStatus(`وصلت إلى ${place.name}.`);
       return;
     }
-    this.travel = { z: place.z, fast: false };
+    const c = this.car.position;
+    this.travel = { path: findPath(c.x, c.z, place.x, place.z), x: place.x, z: place.z };
     this.placeId = place.id;
-    this.yaw = this.car.position.z < place.z ? 0 : Math.PI;
     this.setStatus(`بتسوق نحو ${place.name}…`);
   }
 
@@ -3163,10 +2768,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.travel = null;
     if (this.suspect) this.group.remove(this.suspect);
     this.suspect = this.makeSuspectCar();
-    this.chaseDir = this.car.position.z < 120 ? 1 : -1;
-    const ax = Math.round(this.car.position.x / 60) * 60;
-    this.suspect.position.set(ax - 1.6, 0, this.car.position.z + this.chaseDir * START_GAP);
-    this.suspect.rotation.y = this.chaseDir > 0 ? 0 : Math.PI;
+    const at = aheadOnRoad(this.car.position.x, this.car.position.z, this.car.rotation.y, START_GAP);
+    this.suspect.position.set(at.x, 0, at.z);
+    this.suspect.rotation.y = at.yaw;
     const far = farNode(this.suspect.position.x, this.suspect.position.z);
     this.chasePath = trimBehind(
       findPath(this.suspect.position.x, this.suspect.position.z, far.x, far.z),
@@ -3201,7 +2805,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (success) audio.success();
     else audio.fail();
     const lv = this.level;
-    const place = STREET_PLACES.find((p) => p.id === lv.placeId) || STREET_PLACES[0];
+    const place = placeById(lv.placeId);
     const before = rank().name;
     const stars = completeLevel(lv.id, success, this.msTime);
     if (success) addStat('missions');
@@ -3256,16 +2860,16 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (sq && sq.t === 'suspects') return { x: sq.x, z: sq.z };
     const go = steps.find((x) => x.t === 'goto');
     if (go && go.t === 'goto') return { x: go.x, z: go.z };
-    const place = STREET_PLACES.find((p) => p.id === this.level.placeId) || STREET_PLACES[0];
-    return { x: 0, z: place.z };
+    const place = placeById(this.level.placeId);
+    return { x: place.x, z: place.z };
   }
 
   private cutFrames(): CutsceneFrames {
     const spot = this.sceneSpot();
     const hero = this.inCar ? this.car.position : this.player.position;
     return {
-      // along the avenue (never diagonal through blocks), facing away from the officer
-      scene: { x: spot.x, z: spot.z, yaw: spot.z >= hero.z ? 0 : Math.PI },
+      // facing away from the officer
+      scene: { x: spot.x, z: spot.z, yaw: Math.atan2(spot.x - hero.x, spot.z - hero.z) },
       hero: { x: hero.x, z: hero.z, yaw: this.inCar ? this.car.rotation.y : this.yaw },
       car: { x: this.car.position.x, z: this.car.position.z, yaw: this.car.rotation.y }
     };
@@ -3309,7 +2913,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (!this.inCar) {
       // face the officer down the avenue towards the call for the close-up
       const spot = this.sceneSpot();
-      this.yaw = this.camYaw = spot.z >= this.player.position.z ? 0 : Math.PI;
+      this.yaw = this.camYaw = Math.atan2(spot.x - this.player.position.x, spot.z - this.player.position.z);
       this.player.rotation.y = this.yaw;
     }
     this.playCutscene(def, start);
@@ -3349,7 +2953,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const here = this.currentPlace();
     const el = document.createElement('div');
     el.id = 'street-map';
-    const chips = STREET_PLACES.slice()
+    const chips = places()
+      .slice()
       .sort((p, q) => p.z - q.z)
       .map((p) => {
         const mission = p.id === this.missionId;
@@ -3498,21 +3103,30 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const P = this.player.position,
       C = this.car.position;
     if (!Number.isFinite(P.x + P.z + C.x + C.z + this.yaw + this.speed)) {
-      // never leave the player stranded in an invalid spot (blank screen): snap back to the avenue
+      // never leave the player stranded in an invalid spot (blank screen): snap back to a street
       this.speed = 0;
       this.yaw = 0;
-      C.set(-1.4, 0, Number.isFinite(C.z) ? THREE.MathUtils.clamp(C.z, -95, 235) : 0);
-      P.set(0.9, 0, C.z);
+      const r = Number.isFinite(C.x + C.z) ? net().nearest(C.x, C.z, 3000) : null;
+      C.set(r ? r.x : STATION.parking.x, 0, r ? r.z : STATION.parking.z);
+      P.set(C.x + 2, 0, C.z);
     }
     const input = this.wants();
     this.stepActor(dt, input);
-    this.crowd?.update(dt, this.inCar ? this.car.position : this.player.position, this.camera, this.avenueGreen, {
+    this.crowd?.update(dt, this.inCar ? this.car.position : this.player.position, this.camera, this.world.time, {
       x: this.panicAt.x,
       z: this.panicAt.z,
       t: this.panicT
     });
-    this.sea?.update(dt);
-    updatePyramids((this.inCar ? this.car.position : this.player.position).z);
+    {
+      const at = this.inCar ? this.car.position : this.player.position;
+      this.world.update(at.x, at.z, dt);
+      updatePyramids(at.x, at.z);
+      this.glowT -= dt;
+      if (this.glowT <= 0) {
+        this.glowT = 0.5;
+        this.refreshLampGlow(at.x, at.z);
+      }
+    }
     this.stepTraffic(dt);
     this.stepChase(dt);
     this.stepTutorial(dt);
@@ -3530,7 +3144,6 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.tickRadio(dt);
     this.tickGun(dt);
     this.tickReticle();
-    this.tickLights(dt);
     if (this.panicT > 0) this.panicT -= dt;
     this.tickLife(dt);
     this.stepRain(dt);
@@ -3605,23 +3218,24 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     let throttle = (input.f ? 1 : 0) - (input.b ? 1 : 0);
 
     if (this.travel && this.inCar) {
-      const dz = this.travel.z - this.car.position.z;
-      this.yaw = dz >= 0 ? 0 : Math.PI;
-      if (Math.abs(dz) < 3) {
-        const place = STREET_PLACES.find((p) => p.id === this.placeId);
+      const T = this.travel;
+      const C = this.car.position;
+      const head = followPath(this.travelPt.set(C.x, C.z), T.path, 0);
+      if (Math.hypot(T.x - C.x, T.z - C.z) < 12 || head === null) {
         this.travel = null;
-        if (place) {
-          this.setStatus(`وصلت إلى ${place.name}.`);
-        }
+        const place = placeById(this.placeId);
+        this.setStatus(`وصلت إلى ${place.name}.`);
       } else {
-        throttle = Math.sign(dz);
+        this.yaw = approachAngle(this.yaw, head, dt * 3);
+        throttle = 1;
         turn = 0;
       }
     }
 
     if (this.inCar) {
       // arcade handling: analog stick or keys, handbrake (run button / Space) drifts
-      const max = (this.chasing ? 20 : 16) + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 });
+      const max =
+        (this.chasing ? 20 : 16) + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 });
       this.carMax = max;
       const thr = this.travel ? throttle : this.stick.y || throttle;
       this.steerCur = this.travel ? 0 : smoothSteer(this.steerCur, -this.stick.x || turn, this.speed, dt);
@@ -3706,10 +3320,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         // nose against a wall: swing the car round to lie along the road (the freer side) so it can drive off again
         if (this.nudgeGoal === null) {
           const free = (x: number, z: number) => onRoad(x, z, 2.4);
-          const base = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2);
-          const l = distanceToBlocked(free, cp.x, cp.z, Math.sin(base + Math.PI / 2), Math.cos(base + Math.PI / 2), 14, 2);
-          const r = distanceToBlocked(free, cp.x, cp.z, Math.sin(base - Math.PI / 2), Math.cos(base - Math.PI / 2), 14, 2);
-          this.nudgeGoal = base + (l >= r ? Math.PI / 2 : -Math.PI / 2);
+          const rn = net().nearest(cp.x, cp.z, 40);
+          const ry = rn ? net().at(rn.e, rn.s).yaw : this.yaw;
+          const l = distanceToBlocked(free, cp.x, cp.z, Math.sin(ry), Math.cos(ry), 14, 2);
+          const r = distanceToBlocked(free, cp.x, cp.z, Math.sin(ry + Math.PI), Math.cos(ry + Math.PI), 14, 2);
+          this.nudgeGoal = this.yaw + wrapAngle((l >= r ? ry : ry + Math.PI) - this.yaw);
         }
         const off = wrapAngle(this.nudgeGoal - this.yaw);
         if (Math.abs(off) > 0.2) {
@@ -3731,8 +3346,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         this.setStatus('العربية اتزنقت، رجعناها للشارع.');
       }
       if (this.offRoadT > 1.5) {
-        const n = nearestNode(this.car.position.x, this.car.position.z);
-        this.car.position.set(n.x, 0, n.z);
+        const n = net().nearest(this.car.position.x, this.car.position.z, 500);
+        if (n) this.car.position.set(n.x, 0, n.z);
         this.speed = 0;
         this.offRoadT = 0;
       }
@@ -3801,100 +3416,53 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     }
   }
 
+  private trafficObs: { x: number; z: number }[] = [
+    { x: 0, z: 0 },
+    { x: 0, z: 0 }
+  ];
   private stepTraffic(dt: number) {
     if (this.hitCool > 0) this.hitCool -= dt;
-    const red = !this.avenueGreen;
     const C = this.car.position;
     const loud = this.inCar && (this.siren || this.chasing);
-    for (const t of this.cross) {
-      const x = t.mesh.position.x;
-      // cross traffic waits while the avenue is green
-      const ahead = t.speed > 0 ? -8 - x : x - 8;
-      let stop = this.avenueGreen && ahead > 0 && ahead < 6;
-      // siren close by: give way
-      if (loud && Math.abs(C.x - x) < 20 && Math.abs(C.z - t.mesh.position.z) < 20) stop = true;
-      if (this.inCar) {
-        const share = 0.6;
-        const closing = this.carVsCar(t.mesh, stop ? 0 : t.speed, 0, share);
-        if (closing >= 0) {
-          t.mesh.position.x -= this.contact.nx * this.contact.depth * (1 - share);
-          if (closing > 1) t.bumpT = 1.5;
-        }
-      }
-      if (t.bumpT && t.bumpT > 0) {
-        t.bumpT -= dt;
-        stop = true;
-      }
-      if (!stop) {
-        t.mesh.position.x += t.speed * dt;
-        rollWheels(t.mesh, Math.abs(t.speed) * dt);
-      }
-      if (t.mesh.position.x > 122) t.mesh.position.x = -122;
-      if (t.mesh.position.x < -122) t.mesh.position.x = 122;
-    }
+    const me = this.inCar ? C : this.player.position;
+    this.trafficObs[0]!.x = me.x;
+    this.trafficObs[0]!.z = me.z;
+    this.trafficObs[1]!.x = C.x;
+    this.trafficObs[1]!.z = C.z;
+    this.ntraffic.step(dt, this.world.time, me, {
+      siren: loud,
+      range: 40 + sirenRangeBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }),
+      obstacles: this.trafficObs
+    });
     for (const t of this.traffic) {
-      const z = t.mesh.position.z;
-      let stop = false;
-      if (red)
-        for (const l of this.lights) {
-          const ahead = t.speed > 0 ? l.z - 6 - z : z - (l.z + 6);
-          if (ahead > 0 && ahead < 7) {
-            stop = true;
-            break;
-          }
-        }
-      // don't drive through the officer or the patrol car
-      const me = this.inCar ? this.car.position : this.player.position;
-      const dz = (me.z - z) * Math.sign(t.speed);
-      // only brake for someone actually in front (not alongside), so cars never park beside the officer
-      if (Math.abs(me.x - t.mesh.position.x) < 1.4 && dz > 2.6 && dz < 7.5) {
-        stop = true;
-        // don't queue behind the officer / patrol car (that parks a car right in the chase camera): change lane
-        t.waitT = (t.waitT ?? 0) + dt;
-        if (t.waitT > 0.8) {
-          t.waitT = 0;
-          const sgn = Math.sign(t.laneX);
-          t.laneX = sgn * (Math.abs(t.laneX) < 2 ? 3.3 : 1.15);
-        }
-      }
+      const v = t.v;
+      const m = t.mesh;
       // siren: cars nearby ease to the kerb and stop to let you through
-      const near = Math.hypot(C.x - t.mesh.position.x, C.z - z);
-      const want = this.inCar
-        ? pullOver(this.siren || this.chasing, near - sirenRangeBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }))
-        : 0;
-      t.side = (t.side ?? 0) + (want - (t.side ?? 0)) * Math.min(1, dt * 2);
-      if (want > 0 && near < 22) {
-        stop = true;
-        if (near < 14) this.bark('trafficYields', false, t.mesh.position);
-      }
-      const kerb = t.laneX > 0 ? 1 : -1;
-      const wantX = t.laneX + kerb * (t.side ?? 0);
-      t.mesh.position.x += (wantX - t.mesh.position.x) * Math.min(1, dt * 2.5);
+      if (loud && v.side > 0.5 && v.v < 0.3 && Math.hypot(C.x - v.x, C.z - v.z) < 14)
+        this.bark('trafficYields', false, m.position);
       // collisions with the patrol car: both cars get shoved, the patrol car takes damage
       if (this.inCar) {
+        m.position.set(v.x, 0, v.z);
+        m.rotation.y = v.yaw;
         const share = 0.6;
-        const closing = this.carVsCar(t.mesh, 0, stop ? 0 : t.speed, share);
+        const sx = Math.sin(v.yaw) * v.v,
+          sz = Math.cos(v.yaw) * v.v;
+        const closing = this.carVsCar(m, sx, sz, share);
         if (closing >= 0) {
-          t.mesh.position.z -= this.contact.nz * this.contact.depth * (1 - share);
-          if (closing > 1) t.bumpT = 1.5;
+          v.px -= this.contact.nx * this.contact.depth * (1 - share);
+          v.pz -= this.contact.nz * this.contact.depth * (1 - share);
+          if (closing > 1) v.bumpT = 1.5;
+        }
+        if (!v.bumpT && Math.abs(this.speed) > 8 && Math.hypot(v.x - C.x, v.z - C.z) < 3.8) {
+          // passing close without touching
+          const gap = Math.hypot(v.x - C.x, v.z - C.z);
+          if (gap > 1.9 && gap < 2.9) this.bark('nearMissCar', false, m.position);
         }
       }
-      if (this.inCar && !t.bumpT && Math.abs(this.speed) > 8 && Math.abs(t.mesh.position.z - C.z) < 3.4) {
-        // passing close without touching
-        const gap = Math.abs(t.mesh.position.x - C.x);
-        if (gap > 1.9 && gap < 2.9) this.bark('nearMissCar', false, t.mesh.position);
-      }
-      if (t.bumpT && t.bumpT > 0) {
-        t.bumpT -= dt;
-        stop = true;
-        t.mesh.rotation.z = Math.sin(t.bumpT * 20) * 0.03 * t.bumpT;
-      }
-      if (!stop) {
-        t.mesh.position.z += t.speed * dt;
-        rollWheels(t.mesh, Math.abs(t.speed) * dt);
-      }
-      if (t.mesh.position.z > 366) t.mesh.position.z = -110;
-      if (t.mesh.position.z < -110) t.mesh.position.z = 366;
+      m.position.set(v.x + 0, 0, v.z + 0);
+      m.rotation.y = v.yaw;
+      m.rotation.z = v.bumpT > 0 ? Math.sin(v.bumpT * 20) * 0.03 * v.bumpT : 0;
+      if (v.v > 0.05) rollWheels(m, v.v * dt);
     }
   }
 
@@ -3969,7 +3537,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const flee = fleeSpeed({
       t: this.chaseClock,
       k: this.chaseSpeed,
-      playerMax: topSpeed(18 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }), this.damage),
+      playerMax: topSpeed(
+        18 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }),
+        this.damage
+      ),
       dist,
       turn: this.chaseTurn
     });
@@ -4129,8 +3700,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const ctx = c.getContext('2d');
     if (!ctx) return;
     const pos = this.inCar ? this.car.position : this.player.position;
-    const dots: { x: number; z: number; c: string; r: number }[] = STREET_PLACES.map((p) => ({
-      x: 0,
+    const dots: { x: number; z: number; c: string; r: number }[] = places().map((p) => ({
+      x: p.x,
       z: p.z,
       c: p.id === this.missionId ? '#ff4d6d' : '#3aa0ff',
       r: p.id === this.missionId ? 5 : 3
@@ -4148,7 +3719,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     }
 
     dots.push({ x: pos.x, z: pos.z, c: '#ffffff', r: 4 });
-    const m = drawCityMap(ctx, c.width, c.height, dots);
+    const m = drawMiniMap(ctx, c.width, c.height, pos.x, pos.z, dots);
     if (this.route.length > 1) {
       ctx.strokeStyle = '#ffd23d';
       ctx.lineWidth = 2.5;

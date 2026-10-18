@@ -355,7 +355,7 @@ describe('new mission types', () => {
   });
 });
 
-import { pushOut, resolve, resolveFoot, avenueBuildingBoxes } from '../src/game/logic/collide';
+import { pushOut, resolve, resolveFoot } from '../src/game/logic/collide';
 describe('on-foot collision vs cars', () => {
   const car = { x: 0, z: 0, yaw: 0, hw: 1, hl: 2.2 };
   it('pushes out of the side and leaves free space alone', () => {
@@ -388,16 +388,6 @@ describe('on-foot collision vs cars', () => {
     const out = resolveFoot(7.2, 0, 0.42, [car], walk);
     expect(out.hit).toBe(true);
     expect(Math.hypot(out.x - car.x, out.z - car.z)).toBeGreaterThan(1.0);
-  });
-  it('avenue fronts sit past the sidewalk so the officer cannot walk into them', () => {
-    const boxes = avenueBuildingBoxes({ x: 12.4, z: 3 });
-    expect(boxes.length).toBeGreaterThan(40);
-    // z=-15 is on the east row (station gap is around z=3)
-    const east = boxes.find((b) => b.x > 0 && Math.abs(b.z + 15) < 0.1);
-    expect(east).toBeTruthy();
-    const hit = pushOut(8.0, east!.z, 0.42, east!);
-    expect(hit.hit).toBe(true);
-    expect(hit.x).toBeLessThan(8.0);
   });
   it('resolveFoot slides along a building front', () => {
     const wall = { x: 11.4, z: 20, yaw: 0, hw: 3, hl: 4.2 };

@@ -52,7 +52,7 @@ export interface REdge {
 export const dist = (a: V2, b: V2) => Math.hypot(a.x - b.x, a.z - b.z);
 
 // ---- geometry helpers
-function inPoly(p: V2, poly: V2[]): boolean {
+export function inPoly(p: V2, poly: V2[]): boolean {
   let c = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const a = poly[i]!,
@@ -470,7 +470,7 @@ export function buildNet(): NetBuild {
     for (let q = 0; q + 1 < cs.length; q++) {
       const c0 = cs[q]!,
         c1 = cs[q + 1]!;
-      const line: V2[] = [{ x: c0.x, z: c0.z }];
+      let line: V2[] = [{ x: c0.x, z: c0.z }];
       for (let i = Math.floor(c0.k) + 1; i <= Math.ceil(c1.k) - 1; i++) if (i > c0.k && i < c1.k) line.push(pts[i]!);
       line.push({ x: c1.x, z: c1.z });
       const na = nodeAt(c0.x, c0.z),
@@ -478,11 +478,17 @@ export function buildNet(): NetBuild {
       if (na === nb) continue;
       line[0] = { x: na.x, z: na.z };
       line[line.length - 1] = { x: nb.x, z: nb.z };
+      // no stacked points: they would give zero-length segments
+      const tidy: V2[] = [line[0]!];
+      for (let i = 1; i < line.length - 1; i++)
+        if (dist(line[i]!, tidy[tidy.length - 1]!) >= 0.8 && dist(line[i]!, line[line.length - 1]!) >= 0.8)
+          tidy.push(line[i]!);
+      tidy.push(line[line.length - 1]!);
+      line = tidy;
       const cum = [0];
       for (let i = 1; i < line.length; i++) cum.push(cum[i - 1]! + dist(line[i - 1]!, line[i]!));
       const len = cum[cum.length - 1]!;
       if (len < 3) continue;
-      const mid = line[Math.floor(line.length / 2)]!;
       const e: REdge = {
         id: edges.length,
         a: na.id,
@@ -696,7 +702,11 @@ export class RoadNet {
     while (open.size) {
       let cur = -1,
         cf = Infinity;
-      for (const n of open) if (fs[n]! < cf) ((cf = fs[n]!), (cur = n));
+      for (const n of open)
+        if (fs[n]! < cf) {
+          cf = fs[n]!;
+          cur = n;
+        }
       if (cf >= bestTotal) break;
       open.delete(cur);
       const ec = endCost(cur);
@@ -760,13 +770,19 @@ export class RoadNet {
     if (p) {
       for (const n of [this.nodes[p.e.a]!, this.nodes[p.e.b]!]) {
         const d = Math.hypot(n.x - x, n.z - z);
-        if (d < bd) ((bd = d), (best = n));
+        if (d < bd) {
+          bd = d;
+          best = n;
+        }
       }
       return best;
     }
     for (const n of this.nodes) {
       const d = Math.hypot(n.x - x, n.z - z);
-      if (d < bd) ((bd = d), (best = n));
+      if (d < bd) {
+        bd = d;
+        best = n;
+      }
     }
     return best;
   }
@@ -789,7 +805,10 @@ export class RoadNet {
     let bd = Infinity;
     for (const a of ANCHOR_W) {
       const d = Math.hypot(a.x - x, a.z - z);
-      if (d < bd) ((bd = d), (best = a));
+      if (d < bd) {
+        bd = d;
+        best = a;
+      }
     }
     return { area: best.area, district: best.district };
   }

@@ -18,10 +18,11 @@ import {
 } from '../src/game/logic/escort';
 import { callReward, callLimit } from '../src/game/logic/calls';
 
-// the city's intersection grid (world/City.ts touches the DOM on import, so it's mirrored here)
-const AVENUES_X = [-120, -60, 0, 60, 120];
-const CROSS_Z = [-96, -45, 50, 145, 236];
-const NODES = AVENUES_X.flatMap((x) => CROSS_Z.map((z) => ({ x, z })));
+// junctions spread around the origin, every direction and distance
+const NODES = Array.from({ length: 24 }, (_, i) => ({
+  x: Math.cos(i) * (60 + i * 12),
+  z: Math.sin(i) * (60 + i * 12)
+}));
 
 const go = { escort: 8, ambush: false, toGo: 200, turn: 0 };
 
@@ -149,17 +150,25 @@ describe('VIP fire and damage', () => {
 });
 
 describe('VIP escort call', () => {
-  it('picks a destination 110–220 m away by road, inside a block', () => {
+  it('picks a junction 110–260 m away (or the farthest few), whatever the street pattern', () => {
     for (const roll of [0, 0.3, 0.6, 0.99]) {
       const d = vipDestination({ x: 0, z: 0 }, NODES, roll);
-      const n = Math.abs(d.x) + Math.abs(d.z);
-      expect(n).toBeGreaterThanOrEqual(110 - 14);
-      expect(n).toBeLessThanOrEqual(220 + 14);
-      expect(AVENUES_X).toContain(d.x);
-      expect(d.z).toBeGreaterThan(-96);
-      expect(d.z).toBeLessThan(236);
-      expect(CROSS_Z.every((z) => Math.abs(z - d.z) >= 14)).toBe(true);
+      const n = Math.hypot(d.x, d.z);
+      expect(n).toBeGreaterThanOrEqual(110);
+      expect(n).toBeLessThanOrEqual(260);
+      expect(NODES.some((p) => p.x === d.x && p.z === d.z)).toBe(true);
     }
+    // nothing in range: it falls back on the far ones
+    const far = vipDestination(
+      { x: 0, z: 0 },
+      [
+        { x: 20, z: 0 },
+        { x: 40, z: 0 },
+        { x: 5, z: 5 }
+      ],
+      0.5
+    );
+    expect(Math.hypot(far.x, far.z)).toBeGreaterThan(10);
   });
 
   it('pays more than a raid of the same size and allows time for the drive', () => {

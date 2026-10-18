@@ -1,14 +1,16 @@
 /**
- * The Giza pyramids, seen from the Haram end of the avenue.
+ * The Giza pyramids at the end of Al-Haram Street, at their real map positions (Khufu, Khafre, Menkaure).
  * Real proportions (Khufu 230 m base / 139 m tall, Khafre 215 / 136 with its limestone cap, Menkaure 103 / 62) built as
- * stepped courses (the casing is gone, as it is today) in a sandstone photo texture, and drawn at ~0.6 scale and ~400 m
- * out so the whole group fits the view. Scene fog would swallow them, so they carry their own haze.
+ * stepped courses (the casing is gone, as it is today) in a sandstone photo texture. The map is squeezed five times, so the
+ * pyramids are drawn at about a third of their true size to stay in step with it. Scene fog would swallow them, so they carry their own haze.
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { surface, worldUV } from './Environment';
+import { toWorld, type LonLat } from '../logic/cairo';
 
-const SCALE = 0.6;
+const SCALE = 0.34;
+const KHUFU: LonLat = [31.1342, 29.9792];
 
 /** Courses of varying height: each is a vertical-walled box whose corners sit on the true slope. */
 function stepped(base: number, top: number, h: number, courses: number, seed: number, dark = 0) {
@@ -76,13 +78,19 @@ export function buildPyramids(parent: THREE.Group) {
   const lime = pyramidMat(0xf0e8d4);
   group = new THREE.Group();
   group.userData.city = true;
-  // [x, z, base, flat top, height, cap fraction of the height (0 = none), granite courses]
-  const defs: [number, number, number, number, number, number, number][] = [
-    [40, -540, 230.3, 10, 138.5, 0, 0], // Khufu: the casing and apex are gone, the top is a small platform
-    [-135, -670, 215.3, 0, 136.4, 0.28, 0], // Khafre keeps the limestone casing at its top
-    [-240, -800, 103.4, 6, 62, 0, 7] // Menkaure: darker granite at the foot
+  const k = toWorld(KHUFU);
+  const rel = (at: LonLat) => {
+    const w = toWorld(at);
+    return [w.x - k.x, w.z - k.z] as const;
+  };
+  // [offset from Khufu, base, flat top, height, cap fraction of the height (0 = none), granite courses]
+  const defs: [readonly [number, number], number, number, number, number, number][] = [
+    [[0, 0], 230.3, 10, 138.5, 0, 0], // Khufu: the casing and apex are gone, the top is a small platform
+    [rel([31.1308, 29.9758]), 215.3, 0, 136.4, 0.28, 0], // Khafre keeps the limestone casing at its top
+    [rel([31.1287, 29.9725]), 103.4, 6, 62, 0, 7] // Menkaure: darker granite at the foot
   ];
-  defs.forEach(([x, z, base, top, h, capFrac, granite], i) => {
+  group.position.set(k.x, 0, k.z);
+  defs.forEach(([[x, z], base, top, h, capFrac, granite], i) => {
     const g = new THREE.Group();
     g.position.set(x, 0, z);
     g.scale.setScalar(SCALE);
@@ -109,10 +117,11 @@ export function buildPyramids(parent: THREE.Group) {
   gx.fillStyle = grad;
   gx.fillRect(0, 0, 4, 64);
   const gt = new THREE.CanvasTexture(gc);
-  for (const [z, w, h, o] of [
-    [-300, 1000, 70, 0.7],
-    [-420, 1100, 110, 0.75],
-    [-520, 1200, 150, 0.6]
+  // the plateau melts into the haze towards the city: curtains east of the pyramids, facing the road
+  for (const [x, w, h, o] of [
+    [90, 420, 40, 0.5],
+    [190, 520, 62, 0.55],
+    [300, 620, 90, 0.45]
   ] as const) {
     const m = new THREE.MeshBasicMaterial({
       map: gt,
@@ -125,7 +134,8 @@ export function buildPyramids(parent: THREE.Group) {
     m.userData.o = o;
     dust.push(m);
     const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
-    p.position.set(0, h / 2 - 2, z);
+    p.position.set(x, h / 2 - 2, 0);
+    p.rotation.y = Math.PI / 2;
     p.renderOrder = 2;
     group.add(p);
   }
@@ -133,10 +143,10 @@ export function buildPyramids(parent: THREE.Group) {
   parent.add(group);
 }
 
-/** The pyramids exist only in the Haram district: hidden everywhere else. */
-export function updatePyramids(playerZ: number) {
+/** The pyramids are drawn while the officer is within a kilometre and a half of them. */
+export function updatePyramids(x: number, z: number) {
   if (!group) return;
-  group.visible = playerZ < -45;
+  group.visible = Math.hypot(x - group.position.x, z - group.position.z) < 1500;
   if (!group.visible) return;
   const mix = 0.4;
   for (const { m, base } of mats) {

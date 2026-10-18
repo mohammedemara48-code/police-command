@@ -46,6 +46,8 @@ export interface LevelDef {
   /** finish under these seconds for 3 / 2 stars */
   stars: [number, number];
   steps: Step[];
+  /** true when the points are already on the open city (patrol calls); story levels are laid onto it by logic/places.ts */
+  world?: boolean;
   // legacy fields still read by older code paths
   speed: number;
   kind?: 'gang';

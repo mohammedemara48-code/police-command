@@ -1,11 +1,15 @@
 /**
- * Street crowd plan (pure, unit-tested): who stands or walks where, per quality preset.
- * Pavement walkers, groups that chat, shopkeepers at their doors, ahwa tables, vendors, people waiting at the kerb
- * to cross, walkers on the cross streets and the Nile promenade. The runtime (core/Crowd.ts) only turns specs into people.
+ * Street crowd plan (pure, unit-tested): who is in the city, per quality preset, and where they can be put.
+ * Pavement walkers, groups that chat, shopkeepers at their doors, ahwa tables, vendors, people waiting at a zebra to cross
+ * and walkers along the Nile corniche. The city is far larger than the crowd, so people are placed on the pavements around the
+ * officer and picked up again when they fall behind (core/Crowd.ts turns this into skinned people); the counts are the same caps as before.
  */
 import type { VoiceId, ChatterId } from '../config/barks';
 import { CHATTER } from '../config/barks';
-import { districtAt, hash01, type District } from './districts';
+import { hash01, type District } from './districts';
+import { inRiver, net, type REdge } from './roadnet';
+import { lots } from './lots';
+import { zebras, type Zebra } from '../world/roadMesh';
 
 export type CrowdQuality = 'low' | 'medium' | 'high';
 export type CrowdKind = 'walk' | 'group' | 'shop' | 'ahwa' | 'vendor' | 'cross' | 'side' | 'promenade';
@@ -33,16 +37,13 @@ export function crowdTotal(q: CrowdQuality): number {
 /** Pedestrian density by district (Shubra and Downtown busiest). */
 export const DISTRICT_DENSITY: Record<District, number> = { port: 1.5, downtown: 1.4, corniche: 0.9, suburb: 0.8 };
 
-const CROSS = [-96, -45, 50, 145, 236];
-const HALF = 4.6;
-/** Cross streets with traffic lights (people cross the avenue there when the avenue is red). */
-export const LIGHT_CROSS = CROSS.slice(1, 4);
-
 export interface ShopSpot {
   x: number;
   z: number;
   side: number;
   name: string;
+  /** facing of the shop front (three.js rotation.y), pointing into the building */
+  yaw?: number;
 }
 
 export interface CrowdSpec {
@@ -50,35 +51,16 @@ export interface CrowdSpec {
   kind: CrowdKind;
   role: VoiceId;
   female: boolean;
-  x: number;
-  z: number;
-  /** facing (radians, 0 = +z) when standing */
-  yaw: number;
   scale: number;
   speed: number;
-  axis: 'x' | 'z';
-  /** walk range along the axis */
-  lo: number;
-  hi: number;
-  dir: number;
+  /** chatting group, and the set (table or cart) people of one table share */
   group: number;
+  set: number;
   chat: ChatterId | null;
   /** shop sign for shopkeepers */
   shop: string | null;
   /** shirt colour */
   top: number;
-}
-
-export interface PropSpec {
-  kind: 'table' | 'cart';
-  x: number;
-  z: number;
-  yaw: number;
-}
-
-export interface CrowdPlan {
-  people: CrowdSpec[];
-  props: PropSpec[];
 }
 
 const TOPS = [
@@ -90,42 +72,22 @@ function rng(seed: number) {
   return () => hash01(n++);
 }
 
-/** Pavement stretches of the main avenue between the cross streets. */
-export function avenueSegments(): { a: number; b: number; d: District; w: number }[] {
-  const pts = [-112, ...CROSS.flatMap((c) => [c - HALF - 0.8, c + HALF + 0.8]), 232];
-  const out: { a: number; b: number; d: District; w: number }[] = [];
-  for (let i = 0; i < pts.length; i += 2) {
-    const a = pts[i]!,
-      b = pts[i + 1]!;
-    if (b - a < 6) continue;
-    const d = districtAt((a + b) / 2);
-    out.push({ a, b, d, w: (b - a) * DISTRICT_DENSITY[d] });
-  }
-  return out;
-}
-
-export function planCrowd(q: CrowdQuality, shops: ShopSpot[], promenadeZ: number, seed = 31): CrowdPlan {
+/** Who is in the city: kinds, roles, looks. Positions come from the placement helpers below, around the officer. */
+export function planCrowd(q: CrowdQuality, seed = 31): CrowdSpec[] {
   const r = rng(seed);
   const n = CROWD_COUNTS[q];
   const people: CrowdSpec[] = [];
-  const props: PropSpec[] = [];
-  const segs = avenueSegments();
-  const segTotal = segs.reduce((s, g) => s + g.w, 0);
   let id = 0;
   let group = 0;
-
-  const make = (p: Partial<CrowdSpec> & Pick<CrowdSpec, 'kind' | 'role' | 'x' | 'z'>): CrowdSpec => {
+  let set = 0;
+  const make = (p: Partial<CrowdSpec> & Pick<CrowdSpec, 'kind' | 'role'>): CrowdSpec => {
     const spec: CrowdSpec = {
       id: id++,
       female: p.role === 'woman' || (p.role === 'kid' && r() < 0.5),
-      yaw: 0,
       scale: 1,
       speed: 0,
-      axis: 'z',
-      lo: 0,
-      hi: 0,
-      dir: 1,
       group: -1,
+      set: -1,
       chat: null,
       shop: null,
       top: TOPS[Math.floor(r() * TOPS.length)]!,
@@ -134,7 +96,6 @@ export function planCrowd(q: CrowdQuality, shops: ShopSpot[], promenadeZ: number
     people.push(spec);
     return spec;
   };
-  /** which walker this is, by chance */
   const walkerRole = (): { role: VoiceId; scale: number; speed: number } => {
     const k = r();
     if (k < 0.1) return { role: 'kid', scale: 0.66 + r() * 0.1, speed: 1.1 + r() * 0.5 };
@@ -143,52 +104,21 @@ export function planCrowd(q: CrowdQuality, shops: ShopSpot[], promenadeZ: number
     if (k < 0.62) return { role: 'woman', scale: 0.96 + r() * 0.06, speed: 0.8 + r() * 0.45 };
     return { role: 'pedestrian', scale: 0.97 + r() * 0.08, speed: 0.8 + r() * 0.5 };
   };
-  const pickSeg = () => {
-    let t = r() * segTotal;
-    for (const s of segs) {
-      t -= s.w;
-      if (t <= 0) return s;
-    }
-    return segs[segs.length - 1]!;
-  };
-
-  // walkers on the main avenue pavements
-  for (let i = 0; i < n.walk; i++) {
-    const s = pickSeg();
-    const side = r() < 0.5 ? -1 : 1;
-    const w = walkerRole();
-    make({
-      kind: 'walk',
-      ...w,
-      x: side * (5.3 + r() * 2),
-      z: s.a + 1 + r() * (s.b - s.a - 2),
-      axis: 'z',
-      lo: s.a,
-      hi: s.b,
-      dir: r() < 0.5 ? -1 : 1
-    });
-  }
+  for (const kind of ['walk', 'side', 'promenade', 'cross'] as const)
+    for (let i = 0; i < n[kind]; i++) make({ kind, ...walkerRole() });
 
   // chatting groups: 2 or 3 people standing close, facing each other
   const chatIds = Object.keys(CHATTER) as ChatterId[];
   let left = n.group;
   while (left > 0) {
-    const s = pickSeg();
-    const side = r() < 0.5 ? -1 : 1;
     const chat = chatIds[Math.floor(r() * chatIds.length)]!;
     const size = left >= 3 && r() < 0.35 ? 3 : 2;
-    const gz = s.a + 2 + r() * Math.max(0.5, s.b - s.a - 4);
-    const gx = side * (5.6 + r() * 1.4);
     const roles = CHATTER[chat].who;
     for (let k = 0; k < size; k++) {
       const role = roles[k % 2]!;
-      const dz = (k - (size - 1) / 2) * 0.95;
       make({
         kind: 'group',
         role,
-        x: gx + (k % 2 ? 0.25 : -0.25),
-        z: gz + dz,
-        yaw: k % 2 ? -Math.PI / 2 - (side > 0 ? 0 : Math.PI) : Math.PI / 2 - (side > 0 ? 0 : Math.PI),
         scale: role === 'kid' ? 0.7 : role === 'elder' ? 0.95 : 0.97 + r() * 0.07,
         group,
         chat
@@ -197,114 +127,151 @@ export function planCrowd(q: CrowdQuality, shops: ShopSpot[], promenadeZ: number
     group++;
     left -= size;
   }
-
-  // shopkeepers at their doors
-  const doors = shops
-    .map((s) => ({ s, k: r() }))
-    .sort((a, b) => a.k - b.k)
-    .slice(0, n.shop);
-  for (const { s } of doors)
-    make({
-      kind: 'shop',
-      role: 'shopkeeper',
-      female: false,
-      x: s.side * 7.4,
-      z: s.z + (r() - 0.5) * 2,
-      yaw: s.side > 0 ? -Math.PI / 2 : Math.PI / 2,
-      scale: 1,
-      shop: s.name
-    });
-
-  // ahwa: tables against the facade, customers around them
-  const ahwaZ = [-72, -10, 28, 78, 122, 168, -30, 102];
+  for (let i = 0; i < n.shop; i++) make({ kind: 'shop', role: 'shopkeeper', female: false });
+  // ahwa tables with up to three customers each
   let ahwaLeft = n.ahwa;
-  for (let c = 0; ahwaLeft > 0 && c < ahwaZ.length; c++) {
-    const side = c % 2 ? 1 : -1;
-    const z = ahwaZ[c]! + (r() - 0.5) * 4;
-    const x = side * 7.1;
-    props.push({ kind: 'table', x, z, yaw: 0 });
+  while (ahwaLeft > 0) {
     const size = Math.min(ahwaLeft, 3);
-    for (let k = 0; k < size; k++) {
-      const a = (k / size) * Math.PI * 2 + 0.6;
-      make({
-        kind: 'ahwa',
-        role: 'ahwa',
-        female: false,
-        x: x + Math.cos(a) * 0.95,
-        z: z + Math.sin(a) * 0.95,
-        yaw: Math.atan2(-Math.cos(a), -Math.sin(a)),
-        scale: 0.98 + r() * 0.06
-      });
-    }
+    for (let k = 0; k < size; k++) make({ kind: 'ahwa', role: 'ahwa', female: false, scale: 0.98 + r() * 0.06, set });
+    set++;
     ahwaLeft -= size;
   }
+  for (let v = 0; v < n.vendor; v++) make({ kind: 'vendor', role: 'vendor', female: false, set: set++ });
+  return people;
+}
 
-  // vendors with a cart at the kerb
-  const vendorZ = [20, 85, -20, 112, -75, 160];
-  for (let v = 0; v < n.vendor; v++) {
-    const side = v % 2 ? 1 : -1;
-    const z = vendorZ[v % vendorZ.length]! + (r() - 0.5) * 6;
-    props.push({ kind: 'cart', x: side * 5.35, z, yaw: Math.PI / 2 });
-    make({
-      kind: 'vendor',
-      role: 'vendor',
-      female: false,
-      x: side * 6.2,
-      z: z + 0.4,
-      yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2,
-      scale: 1
-    });
-  }
+// ---------------------------------------------------------------- placement on the street network
 
-  // people waiting at the kerb to cross the avenue, and crossing when it is red
-  for (let c = 0; c < n.cross; c++) {
-    const cz = LIGHT_CROSS[c % LIGHT_CROSS.length]!;
-    const s = c % 2 ? 1 : -1;
-    const w = walkerRole();
-    const startSide = c % 3 === 0 ? 1 : -1;
-    make({
-      kind: 'cross',
-      ...w,
-      x: startSide * 5.35,
-      z: cz + s * (HALF + 1.3) + (r() - 0.5) * 0.8,
-      axis: 'x',
-      lo: -5.35,
-      hi: 5.35,
-      dir: -startSide
-    });
-  }
+/** A place on a pavement: edge, distance along it, which way the person walks and on which side of it. */
+export interface Lane {
+  e: number;
+  s: number;
+  /** +1 walks from node a towards b */
+  dir: 1 | -1;
+  /** +1 the pavement on the right of the walking direction, -1 on the left */
+  rel: 1 | -1;
+  /** distance from the kerb edge across the pavement (0..PAVEMENT) */
+  off: number;
+}
 
-  // walkers on the cross streets near the avenue
-  for (let i = 0; i < n.side; i++) {
-    const cz = CROSS[1 + (i % 3)]!;
-    const side = i % 2 ? 1 : -1;
-    const w = walkerRole();
-    const xs = r() < 0.5 ? -1 : 1;
-    make({
-      kind: 'side',
-      ...w,
-      x: xs * (12 + r() * 24),
-      z: cz + side * (HALF + 1.3),
-      axis: 'x',
-      lo: xs > 0 ? 9 : -42,
-      hi: xs > 0 ? 42 : -9,
-      dir: r() < 0.5 ? -1 : 1
-    });
-  }
+export interface Pose {
+  x: number;
+  z: number;
+  /** walking heading (three.js rotation.y) */
+  yaw: number;
+}
 
-  // along the Nile promenade
-  for (let i = 0; i < n.promenade; i++) {
-    const w = walkerRole();
-    make({
-      kind: 'promenade',
-      ...w,
-      x: -110 + r() * 220,
-      z: promenadeZ + 2.5 + (i % 4) * 1.6,
-      axis: 'x',
-      lo: -118,
-      hi: 118,
-      dir: i % 3 === 0 ? -1 : 1
-    });
+export function lanePose(l: Lane): Pose {
+  const N = net();
+  const e = N.edges[l.e]!;
+  const p = N.at(e, l.s);
+  const h = l.dir > 0 ? p.yaw : p.yaw + Math.PI;
+  const d = l.rel * (e.half + l.off);
+  return { x: p.x + Math.cos(h) * d, z: p.z - Math.sin(h) * d, yaw: h };
+}
+
+/** Walkable pavement ground: not in a building, the river or the carriageway. */
+function fitForPeople(x: number, z: number) {
+  return !inRiver(x, z, 0.6) && !lots().blocked(x, z, 0.4) && !net().onRoad(x, z, 0.1);
+}
+
+export interface PickOpts {
+  rMin: number;
+  rMax: number;
+  /** camera heading: places ahead of the officer are preferred */
+  ahead?: { x: number; z: number };
+  /** only streets whose id starts with this (the corniche promenade) */
+  sid?: string;
+  /** offset across the pavement (default random in 0.8..2.4) */
+  off?: number;
+  /** keep the district density: busy districts accept more picks */
+  dense?: boolean;
+}
+
+/** A random spot on a pavement between rMin and rMax of the officer, or null when none was found. */
+export function pickLane(me: { x: number; z: number }, rnd: () => number, o: PickOpts): Lane | null {
+  const N = net();
+  const near: REdge[] = [];
+  for (const e of N.edges) {
+    if (e.ring || e.len < 16) continue;
+    if (o.sid && !e.sid.startsWith(o.sid)) continue;
+    const m = e.pts[Math.floor(e.pts.length / 2)]!;
+    if (Math.hypot(m.x - me.x, m.z - me.z) < o.rMax + e.len * 0.5) near.push(e);
   }
-  return { people, props };
+  if (!near.length) return null;
+  for (let t = 0; t < 40; t++) {
+    const e = near[Math.floor(rnd() * near.length)]!;
+    const lane: Lane = {
+      e: e.id,
+      s: 3 + rnd() * (e.len - 6),
+      dir: rnd() < 0.5 ? 1 : -1,
+      rel: rnd() < 0.5 ? 1 : -1,
+      off: o.off ?? 0.8 + rnd() * 1.6
+    };
+    if (e.oneway) lane.dir = 1;
+    const p = lanePose(lane);
+    const d = Math.hypot(p.x - me.x, p.z - me.z);
+    if (d < o.rMin || d > o.rMax || !fitForPeople(p.x, p.z)) continue;
+    if (o.ahead && (p.x - me.x) * o.ahead.x + (p.z - me.z) * o.ahead.z < 0 && rnd() < 0.75) continue;
+    if (o.dense && rnd() > DISTRICT_DENSITY[N.area(p.x, p.z).district] / 1.5) continue;
+    return lane;
+  }
+  return null;
+}
+
+/** The lane a walker takes when it reaches the end of its edge: through the junction on a random street. */
+export function nextLane(l: Lane, rnd: () => number, sid?: string): Lane {
+  const N = net();
+  const e = N.edges[l.e]!;
+  const nid = l.dir > 0 ? e.b : e.a;
+  const n = N.nodes[nid]!;
+  const here = l.dir > 0 ? N.at(e, e.len).yaw : N.at(e, 0).yaw + Math.PI;
+  let opts = n.edges.filter((id) => id !== e.id && !N.edges[id]!.ring && N.edges[id]!.len > 12);
+  if (sid) {
+    const same = opts.filter((id) => N.edges[id]!.sid.startsWith(sid));
+    if (same.length) opts = same;
+  }
+  if (!opts.length) return { ...l, dir: -l.dir as 1 | -1, rel: -l.rel as 1 | -1 };
+  // prefer going straight on
+  const scored = opts.map((id) => {
+    const o = N.edges[id]!;
+    const dir = o.a === nid ? 1 : -1;
+    const h = dir > 0 ? N.at(o, 0).yaw : N.at(o, o.len).yaw + Math.PI;
+    return { o, dir: dir as 1 | -1, dot: Math.cos(h - here) };
+  });
+  const straight = scored.filter((s) => s.dot > 0.5);
+  const pool = straight.length && rnd() < 0.7 ? straight : scored;
+  const c = pool[Math.floor(rnd() * pool.length)]!;
+  return { e: c.o.id, dir: c.dir, s: c.dir > 0 ? 0.5 : c.o.len - 0.5, rel: l.rel, off: l.off };
+}
+
+// ---- zebra crossings
+export interface Crossing extends Zebra {
+  /** the walker's pavement offset on either side of the stripes, across the street */
+  reach: number;
+}
+let zebraList: Crossing[] | null = null;
+/** Crossings at signalled junctions (people cross when the cars on that arm have a red light). */
+export function crossings(sig: ReadonlySet<number>): Crossing[] {
+  return (zebraList ??= zebras()
+    .filter((z) => sig.has(z.node))
+    .map((z) => ({ ...z, reach: z.half + 0.9 })));
+}
+
+export function pickCrossing(
+  me: { x: number; z: number },
+  rnd: () => number,
+  list: readonly Crossing[],
+  rMin: number,
+  rMax: number
+): Crossing | null {
+  const c = list.filter((z) => {
+    const d = Math.hypot(z.x - me.x, z.z - me.z);
+    return (
+      d >= rMin &&
+      d <= rMax &&
+      fitForPeople(z.x + Math.cos(z.yaw) * (z.half + 1.2), z.z - Math.sin(z.yaw) * (z.half + 1.2))
+    );
+  });
+  return c.length ? c[Math.floor(rnd() * c.length)]! : null;
 }

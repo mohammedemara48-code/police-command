@@ -36,7 +36,12 @@ const mats = () => {
     roughness: 0.78,
     metalness: 0
   });
-  barkMat ??= new THREE.MeshStandardMaterial({ map: tex('bark.webp'), color: 0xb8aa98, roughness: 0.95, vertexColors: false });
+  barkMat ??= new THREE.MeshStandardMaterial({
+    map: tex('bark.webp'),
+    color: 0xb8aa98,
+    roughness: 0.95,
+    vertexColors: false
+  });
   return { leaf: leafMat, bark: barkMat };
 };
 
@@ -112,7 +117,11 @@ function card(
   const ref: V3 = Math.abs(d[1]) > 0.9 ? v(1, 0, 0) : v(0, 1, 0);
   let lat = norm(cross(d, ref));
   const up2 = cross(lat, d);
-  lat = norm([lat[0] * Math.cos(roll) + up2[0] * Math.sin(roll), lat[1] * Math.cos(roll) + up2[1] * Math.sin(roll), lat[2] * Math.cos(roll) + up2[2] * Math.sin(roll)]);
+  lat = norm([
+    lat[0] * Math.cos(roll) + up2[0] * Math.sin(roll),
+    lat[1] * Math.cos(roll) + up2[1] * Math.sin(roll),
+    lat[2] * Math.cos(roll) + up2[2] * Math.sin(roll)
+  ]);
   const base = out.pos.length / 3;
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
@@ -156,7 +165,13 @@ export function tree(b: Batch, x: number, z: number, rnd: () => number = Math.ra
   b.add(tube(trunk, tr, radial, 1.4), bark);
   const top = trunk[nTr]!;
   const centre: V3 = [top[0], top[1] + H * 0.2, top[2]];
-  const cards = { pos: [] as number[], nor: [] as number[], uv: [] as number[], col: [] as number[], idx: [] as number[] };
+  const cards = {
+    pos: [] as number[],
+    nor: [] as number[],
+    uv: [] as number[],
+    col: [] as number[],
+    idx: [] as number[]
+  };
   const limbs = quality === 'low' ? 3 : 5;
   const nCards = quality === 'low' ? 46 : quality === 'medium' ? 110 : 170;
   const crownR = 2.1 + H * 0.12;
@@ -170,7 +185,18 @@ export function tree(b: Batch, x: number, z: number, rnd: () => number = Math.ra
       const pAng = rnd() * Math.PI * 2;
       const origin: V3 = [o[0] + Math.cos(pAng) * pRad, o[1] + (rnd() - 0.4) * crownH, o[2] + Math.sin(pAng) * pRad];
       const d = norm(v(out[0] + (rnd() - 0.5) * 0.5, out[1], out[2] + (rnd() - 0.5) * 0.5));
-      card(cards, origin, d, rnd() * Math.PI, 1.0 + rnd() * 0.7, 0.12 + rnd() * 0.22, FRONDS[Math.floor(rnd() * 3)]!, centre, 0.85 + rnd() * 0.3, 3);
+      card(
+        cards,
+        origin,
+        d,
+        rnd() * Math.PI,
+        1.0 + rnd() * 0.7,
+        0.12 + rnd() * 0.22,
+        FRONDS[Math.floor(rnd() * 3)]!,
+        centre,
+        0.85 + rnd() * 0.3,
+        3
+      );
     }
   };
   // limbs from the top of the trunk, each carrying a cluster of leaf cards
@@ -209,10 +235,27 @@ function palmLow(b: Batch, x: number, z: number, h: number) {
   for (let i = 0; i <= 4; i++) pts.push(v(x + lean * (i / 4) ** 2, (i / 4) * h, z));
   b.add(tube(pts, [0.22, 0.2, 0.17, 0.15, 0.13], 5, 1.2), bark);
   const top = pts[4]!;
-  const out = { pos: [] as number[], nor: [] as number[], uv: [] as number[], col: [] as number[], idx: [] as number[] };
+  const out = {
+    pos: [] as number[],
+    nor: [] as number[],
+    uv: [] as number[],
+    col: [] as number[],
+    idx: [] as number[]
+  };
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2 + Math.random() * 0.3;
-    card(out, top, norm(v(Math.cos(a), 0.45, Math.sin(a))), 0, 2.2, 0.35, FRONDS[0]!, [top[0], top[1] - 0.5, top[2]], 0.9, 3);
+    card(
+      out,
+      top,
+      norm(v(Math.cos(a), 0.45, Math.sin(a))),
+      0,
+      2.2,
+      0.35,
+      FRONDS[0]!,
+      [top[0], top[1] - 0.5, top[2]],
+      0.9,
+      3
+    );
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(out.pos, 3));
@@ -254,7 +297,7 @@ export function flushPalms(group: THREE.Group) {
         const im = new THREE.InstancedMesh(mesh.geometry, mat, spots.length);
         spots.forEach((s, i) => {
           const k = s.h / 12;
-          e.set(0, ((s.x * 13.7 + s.z * 7.1) % 6.28), 0);
+          e.set(0, (s.x * 13.7 + s.z * 7.1) % 6.28, 0);
           q.setFromEuler(e);
           m4.compose(pos.set(s.x, 0, s.z), q, sc.set(k, k, k)).multiply(mesh.matrixWorld);
           im.setMatrixAt(i, m4);
@@ -269,3 +312,64 @@ export function flushPalms(group: THREE.Group) {
       /* palms are decoration: the street works without them */
     });
 }
+
+let palmModel: Promise<{ mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial }[]> | null = null;
+/** The parts of the date-palm model (loaded once, shared by every streamed chunk). */
+function palmParts() {
+  palmModel ??= new GLTFLoader()
+    .setMeshoptDecoder(MeshoptDecoder)
+    .loadAsync(`${BASE}models/palm-date.glb`)
+    .then((gltf) => {
+      gltf.scene.updateMatrixWorld(true);
+      const parts: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial }[] = [];
+      gltf.scene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+        mat.roughness = 0.85;
+        mat.metalness = 0;
+        mat.side = THREE.DoubleSide;
+        if (/leaf|foliage/i.test(mat.name)) mat.color.multiplyScalar(0.8);
+        parts.push({ mesh, mat });
+      });
+      return parts;
+    });
+  return palmModel;
+}
+
+/**
+ * Instanced palms for one streamed chunk (medium and high quality). Returns a group that is filled once the model has loaded;
+ * freeing it later only drops the instance buffers, the model stays shared.
+ */
+export function palmInstances(spots: PalmSpot[]): THREE.Group {
+  const group = new THREE.Group();
+  if (!spots.length) return group;
+  const m4 = new THREE.Matrix4(),
+    q = new THREE.Quaternion(),
+    sc = new THREE.Vector3(),
+    pos = new THREE.Vector3(),
+    e = new THREE.Euler();
+  palmParts()
+    .then((parts) => {
+      for (const { mesh, mat } of parts) {
+        const im = new THREE.InstancedMesh(mesh.geometry, mat, spots.length);
+        spots.forEach((s, i) => {
+          const k = s.h / 12;
+          e.set(0, (s.x * 13.7 + s.z * 7.1) % 6.28, 0);
+          q.setFromEuler(e);
+          m4.compose(pos.set(s.x, 0, s.z), q, sc.set(k, k, k)).multiply(mesh.matrixWorld);
+          im.setMatrixAt(i, m4);
+        });
+        im.castShadow = Q.shadows;
+        im.userData.dynamic = true;
+        im.userData.instances = true;
+        im.computeBoundingSphere();
+        group.add(im);
+      }
+    })
+    .catch(() => {
+      /* palms are decoration */
+    });
+  return group;
+}
+export type { PalmSpot };
