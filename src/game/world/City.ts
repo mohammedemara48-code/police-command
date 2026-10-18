@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Q } from '../config/Quality';
 import { surface, worldUV, segments, PROP_MATS } from './Environment';
 import { buildPyramids } from './Pyramids';
+import { onNileRoad } from '../logic/nile';
 import { wallGeo } from './Egypt';
 import { facadeMaterial } from './Facade';
 import { DISTRICT_NAMES, DISTRICT_STYLES, blockLook, districtAt, type District } from '../logic/districts';
@@ -29,7 +30,7 @@ export const ROADS: Rect[] = [
 /** true when (x,z) is on a road (pad = extra margin, e.g. sidewalks for pedestrians). */
 export function onRoad(x: number, z: number, pad = 0) {
   for (const r of ROADS) if (x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad) return true;
-  return false;
+  return onNileRoad(x, z, pad);
 }
 /** walkable on foot: roads + sidewalks, plus the corniche promenade along the sea */
 export function onFoot(x: number, z: number) {
