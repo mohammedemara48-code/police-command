@@ -69,3 +69,6 @@ All CC0. Textures were cropped, made seamless where needed, resized (1k, plus a 
 ## Cairo map
 - The in-game map of Cairo (`src/game/logic/cairoMap.ts`) is hand-drawn for this project from approximate coordinates of well-known places. It uses no OpenStreetMap data, no map tiles and no traced third-party map, so no ODbL attribution applies. If OpenStreetMap-derived data is ever added, it needs "© OpenStreetMap contributors" (ODbL) here and on the map.
 - Speech-bubble lines (`src/game/config/barks.ts`) are original writing for this game.
+
+## Cairo street plan
+- The open city's streets, Nile banks, islands, squares and bridges are our own hand-drawn longitude/latitude polylines (`src/game/logic/cairo.ts`). No OpenStreetMap or other map data is included, so no ODbL attribution applies. Sources used to place things are listed in `docs/DISTRICT_REFERENCE.md`.

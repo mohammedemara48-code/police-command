@@ -58,9 +58,18 @@ Date palm, ficus / acacia type and jacaranda street trees are common in Cairo st
 
 ## The Cairo map (`src/game/logic/cairoMap.ts`)
 
-Hand-authored and approximate, drawn from common knowledge of where these places are (approximate coordinates checked against public place descriptions such as Wikipedia articles for Cairo Tower, Cairo Opera House, Mesaha Square, Giza Zoo, Ramses Square, Shubra, 6th October Bridge, Faisal Street, Haram Street and the Ring Road). The banks of the Nile, Gezira and Roda, the streets and the squares are simplified polylines, not traced from any map. The map keeps: the Nile, Gezira, Qasr El Nil and Tahrir bridges, 6th of October Bridge, Tahrir, Talaat Harb, Ramses and Mesaha squares, Dokki, Mohandessin, Zamalek, Imbaba, Giza, Faisal, Haram Street, Shubra Street, the western Ring Road, the pyramids and the Cairo Tower.
-Interpretation: positions are good to a few hundred metres at best; street curves are smoothed; many streets are left out; the game's single bridge stands for Tahrir and Qasr El Nil; each playable district is a compressed piece of its real street; the lateral position on the avenue is exaggerated slightly so the dot sits on the line.
+Hand-authored and approximate. **No map data was imported:** the open city's streets, squares, Nile banks, islands and bridges (`src/game/logic/cairo.ts`) are our own hand-drawn longitude/latitude polylines, placed from common knowledge of where these places are and checked against public place descriptions (Wikipedia articles for Cairo Tower, Cairo Opera House, Tahrir Square, Mesaha Square, Giza Zoo, Ramses Square, Shubra, Qasr El Nil Bridge, 6th October Bridge, Faisal Street, Haram Street and the Ring Road). Because nothing came from OpenStreetMap, there is no ODbL data to attribute; `CREDITS.md` says so.
+
+What the world holds, in true relative positions (origin = Tahrir Square, 31.2357 E, 30.0444 N; 1 world metre = 5 real metres): the Nile with both banks, Gezira and Roda; the Qasr El Nil, Tahrir, University, Galaa, Imbaba and 6th of October bridges and the southern Ring Road bridge; Tahrir, Talaat Harb, Ramses, Mesaha and Giza squares as one-way roundabouts; Haram Street and Faisal Street running south-west from Giza square to the plateau; the western Ring Road; Shubra Street north from Ramses; Qasr El Nil, Talaat Harb, 26th of July, Qasr El Aini, Galaa, Sudan, Dokki and Mohandessin streets, both corniches, Salah Salem, Autostrad. A rotated grid of generated local streets fills the built-up zones between them.
+
+Interpretation, stated plainly:
+- Positions are good to a few hundred real metres at best; street curves are smoothed hand strokes; many real streets are left out.
+- The Nile is drawn at its real position but, at 1:5 horizontal scale, it is a 50-70 m river; squares are 65-120 m across; lanes stay real size.
+- The 6th of October flyover is at ground level, bridges are plain decks with parapets.
+- Local grids between the drawn streets are generated, not surveyed; buildings are generic lots with the district facade looks.
+- The world is about 3.0 x 4.1 km in game metres (15 x 20 km of real Cairo) and ends at a visible checkpoint (barrier arms and a concrete wall) where a road leaves it; beyond is flat desert you cannot enter.
+- The map screen draws these same streets (plus the generated side streets from a certain zoom), so the map and the world cannot disagree. Only the built-up outline, plateau shading and two park outlines on the map are map-only.
 
 ## Outskirts and the Haram edge
 
-Photos and descriptions of the Haram Street / Faisal edge (mid-rise informal brick and concrete blocks, palms, walled plots, dust haze) guided the generic blocks, walls and groves in `src/game/world/Outskirts.ts`. Interpretation: the buildings are generic boxes with the existing facade textures, and the walled boulevard at the end of the playable street is visual only.
+Photos and descriptions of the Haram Street / Faisal edge (mid-rise informal brick and concrete blocks, palms, walled plots, dust haze) guided the facade mix in the Haram and Faisal zones. In the open city these roads are real streets running on to the plateau: the pyramids stand at their real position at the end of the pyramids spur and are hazed, not a backdrop.
