@@ -1,6 +1,6 @@
 # Credits
 
-Everything below is CC0 / public domain unless marked otherwise. The only exceptions are the Dodge Challenger model (CC-BY 3.0, attribution below) and the three.js `Water` shader and its normal map (MIT).
+Everything below is CC0 / public domain unless marked otherwise. The only exceptions are the Dodge Challenger model (CC-BY 3.0, attribution below) and the three.js `Water` shader (MIT).
 
 ## Kenney, audio and early models
 
@@ -42,10 +42,10 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 
 ## Environment
 
-- Kerbs/sea wall `Concrete034`, beach sand `Ground054` and breakwater rocks `Rock030` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).
+- Kerbs and corniche wall `Concrete034` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).
 - Sky lighting: "Kloofendal 48d Partly Cloudy (Pure Sky)" HDRI from Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky), CC0 (`sky_1k.hdr`).
 - Egyptian street set (apartment blocks, road signs, striped kerbs, taxi roof sign, microbus roof rack, patrol door decals): drawn in code for this project (`src/game/world/Egypt.ts`), MIT like the rest of the code.
-- Water normal map `waternormals.jpg` and the `Water` shader from the three.js examples (https://github.com/mrdoob/three.js), MIT.
+- The `Water` shader from the three.js examples (https://github.com/mrdoob/three.js), MIT.
 - Shop windows and their goods, street lamps, benches, bins, signs and the corniche railing are built in code.
 
 ## VIP escort (v1.6)
@@ -60,3 +60,8 @@ All CC0. Textures were cropped, made seamless where needed, resized (1k, plus a 
 - Date palm (`models/palm-date.glb`): "Mature date palm tree" by Innerscene, CC0 - https://www.innerscene.com/tools/library/3d-parts/mature-date-palm-tree-af8bdc6f. Simplified and compressed with glTF-Transform (meshopt, WebP 256 px).
 - The Giza pyramids are modelled in code (`src/game/world/Pyramids.ts`) from published dimensions; see `docs/DISTRICT_REFERENCE.md`.
 - Wikimedia Commons photographs listed in `docs/DISTRICT_REFERENCE.md` were studied as visual reference only; none of them ships with the game.
+
+## Nile landmarks
+- Embankment and pedestal stone (`stone_*`): Poly Haven "Granite Wall" (https://polyhaven.com/a/granite_wall), CC0. Island park ground (`park_*`): Poly Haven "Grass Path 2" (https://polyhaven.com/a/grass_path_2), CC0. Girder steel (`steel_*`): Poly Haven "Metal Plate" (https://polyhaven.com/a/metal_plate), CC0. Bridge and flyover concrete reuse `concrete_*` and the road / pavement sets above. Resized to 1k (512 px for low quality) WebP.
+- River normal map (`river_normal.webp`): generated for this project from filtered noise (`CC0`, no third-party source).
+- Qasr El Nil Bridge, the lions, the felucca boats, the 6th of October flyover, Gezira island and Cairo Tower are modelled in code (`src/game/world/Nile.ts`, `CairoTower.ts`) from the dimensions and photographs listed in `docs/DISTRICT_REFERENCE.md`. No model or photograph from those sources ships with the game.
