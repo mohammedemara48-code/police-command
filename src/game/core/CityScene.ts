@@ -136,6 +136,7 @@ export class CityScene {
     if (!this.streetP) {
       this.streetP = import('./StreetPlay').then(({ StreetPlay }) => {
         this.street = new StreetPlay(this.scene, this.camera, this.root, this.carRoot, this.markerRoot);
+        this.street.hour = () => this.cityHour;
         return this.street;
       });
       this.streetP.catch(() => {

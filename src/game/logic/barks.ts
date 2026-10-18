@@ -37,6 +37,13 @@ export function fillVocative(line: string, vocatives: readonly string[], rnd: ()
   return line.replace('{V}', v);
 }
 
+/** Whether `pickBark` would speak now (cheap check before looking for a speaker). */
+export function canBark(state: BarkState, id: string, now: number, opts: PickOptions = {}): boolean {
+  const last = state.last.get(id);
+  if (last !== undefined && now - last < (opts.cooldown ?? BARK_COOLDOWN)) return false;
+  return !!opts.priority || now - state.lastAny >= (opts.gap ?? BARK_GAP);
+}
+
 /**
  * Returns the line to show, or null when the situation is cooling down or the gap is not over.
  * A refusal changes nothing, so a blocked situation can simply try again on a later frame.

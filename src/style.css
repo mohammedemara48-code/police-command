@@ -3254,7 +3254,49 @@ html.cutscene .toast-stack {
   }
 }
 
-/* ===== Street barks: small speech bubble above the status toast ===== */
+/* ===== Street talk: bubbles above the people who speak, and the radio strip ===== */
+.street-bubble {
+  position: fixed;
+  left: 0;
+  top: 0;
+  max-width: 62vw;
+  width: max-content;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 11px 5px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #14202e;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  font:
+    700 13px/1.35 Cairo,
+    sans-serif;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 58;
+  will-change: transform;
+}
+.street-bubble.show {
+  opacity: 1;
+}
+.street-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-bottom: 0;
+  border-top-color: rgba(255, 255, 255, 0.95);
+}
+.street-bubble b {
+  font-size: 10px;
+  font-weight: 700;
+  filter: brightness(0.55) saturate(1.4);
+}
 #street-bark {
   position: fixed;
   left: 50%;
@@ -3266,12 +3308,12 @@ html.cutscene .toast-stack {
   flex-direction: column;
   gap: 1px;
   padding: 5px 12px 6px;
-  border-radius: 14px;
-  background: rgba(6, 12, 22, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #fff;
+  border-radius: 10px;
+  background: rgba(6, 12, 22, 0.9);
+  border: 1px solid rgba(126, 200, 255, 0.45);
+  color: #eaf2ff;
   font:
-    700 14px/1.4 Cairo,
+    700 13px/1.4 Cairo,
     sans-serif;
   text-align: center;
   pointer-events: none;
@@ -3288,7 +3330,9 @@ html.cutscene .toast-stack {
 #street-bark b {
   font-size: 11px;
   font-weight: 700;
+  color: #3aa0ff;
 }
-html.cutscene #street-bark {
+html.cutscene #street-bark,
+html.cutscene .street-bubble {
   visibility: hidden !important;
 }

@@ -559,6 +559,13 @@ class ModelLib {
   }
 
   private tmp = new THREE.Vector3();
+  /** Call after moving an actor instantly, so the move is not read as a sprint. */
+  snap(obj: THREE.Object3D, speed = 0) {
+    const a = this.actors.find((x) => x.obj === obj);
+    if (!a) return;
+    obj.getWorldPosition(a.last);
+    a.speed = speed;
+  }
   update(dt: number) {
     if (dt <= 0) return;
     for (const a of this.actors) {

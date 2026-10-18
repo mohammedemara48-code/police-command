@@ -96,8 +96,31 @@ import { setHaze } from '../world/Haze';
 import { LION_SPOTS } from '../logic/nile';
 import { setPyramidHaze, updatePyramids } from '../world/Pyramids';
 import { Barks } from '../ui/Barks';
-import { DAMAGE_WORDS, LANDMARK_BARK, STICKERS, type BarkId } from '../config/barks';
+import {
+  BARKS,
+  DAMAGE_WORDS,
+  DRIVERS,
+  LANDMARK_BARK,
+  PATROL_MARKINGS,
+  SHOP_BARK,
+  STICKERS,
+  type BarkId,
+  type RadioId,
+  type VoiceId
+} from '../config/barks';
+import type { Speaker } from '../ui/Barks';
+import { Crowd } from './Crowd';
+import { quality } from '../config/Quality';
+import type { ShopSpot } from '../logic/crowd';
 import { damageWord } from '../logic/barks';
+import {
+  boomLength,
+  clampDistance,
+  distanceToBlocked,
+  wallLift,
+  CAM_PAD_CAR,
+  CAM_PAD_FOOT
+} from '../logic/camera';
 import { rearSticker } from '../world/Stickers';
 import { egyptBlock, gantry, streetNameSign, kerbStripeMat, roofRack, taxiSign, rollWheels, type SignDest } from '../world/Egypt';
 import {
@@ -196,20 +219,6 @@ const MISSION_POOL: MissionDef[] = [
   { id: 'm-sub-drugs', placeId: 'suburb', kind: 'drugs', title: 'مداهمة بيت', blurb: 'بلاغ مخدرات في الهرم' }
 ];
 
-type Ped = {
-  mesh: THREE.Group;
-  female: boolean;
-  phase: number;
-  speed: number;
-  dir: number;
-  z0: number;
-  z1: number;
-  legL: THREE.Object3D;
-  legR: THREE.Object3D;
-  armL: THREE.Object3D;
-  armR: THREE.Object3D;
-};
-
 type Traffic = {
   waitT?: number;
   mesh: THREE.Group;
@@ -238,7 +247,7 @@ function policeDecal() {
   x.font = 'bold 22px Arial';
   x.textAlign = 'center';
   x.textBaseline = 'middle';
-  x.fillText('POLICE   الشرطة', 256, 36);
+  x.fillText('شرطة   POLICE', 256, 36);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   decalMat = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -2 });
@@ -255,7 +264,6 @@ export class StreetPlay {
   private suspect: THREE.Group | null = null;
   private rain: THREE.Points | null = null;
   private rainVel: Float32Array | null = null;
-  private peds: Ped[] = [];
   private traffic: Traffic[] = [];
   private flash: THREE.PointLight[] = [];
   private inCar = false;
@@ -335,12 +343,20 @@ export class StreetPlay {
   private siren = false;
   private damage = 0;
   private hitCool = 0;
+  private nudgeGoal: number | null = null;
   // street barks (see config/barks.ts)
   private barks = new Barks();
   private hpLow = false;
   private prevStars = 0;
-  private ambientT = 45;
-  private pedBarkT = 0;
+  private ambientT = 20;
+  private lifeT = 0;
+  private parkT = 0;
+  private sirenWas = false;
+  private chaseTalkT = 0;
+  private crowd: Crowd | null = null;
+  private shopSpots: ShopSpot[] = [];
+  /** hour of the day (0-24), set by the city scene */
+  hour: (() => number) | null = null;
   /** smoothed steering wheel, -1..1 */
   private steerCur = 0;
   private carMax = 16;
@@ -606,20 +622,21 @@ export class StreetPlay {
     this.squad.onGunfire = (x, z) => {
       this.panicAt.set(x, 0, z);
       this.panicT = 6;
+      this.bark('pedScared', false, new THREE.Vector3(x, 0, z));
     };
     this.squad.onShot = () => {
       this.recoil = 1;
       this.bark('shotFired');
     };
     this.squad.onEvent = (e) => {
-      const id: BarkId =
-        e === 'surrender' ? 'suspectSurrender' : e === 'flee' ? 'suspectRuns' : e === 'cuff' ? 'cuffing' : e;
-      this.bark(id);
+      if (e === 'outOfAmmo') this.dispatch('outOfAmmo');
+      else if (e === 'surrender') this.bark('suspectSurrender');
+      else if (e === 'flee') this.bark('suspectRuns');
+      else if (e === 'cuff') this.bark('cuffing');
     };
     this.buildGun();
     this.buildTrafficLights();
-    this.spawnPeople();
-    this.spawnStrollers();
+    this.spawnCrowd();
     this.spawnTraffic();
     this.buildRain();
   }
@@ -840,7 +857,7 @@ export class StreetPlay {
         g.position.x -= Math.cos(g.rotation.y) * 1.2;
         g.position.z += Math.sin(g.rotation.y) * 1.2;
         audio.sample('confirm', 0.6);
-        if (!this.spDui) this.bark('speederCaught');
+        if (!this.spDui) this.bark('speederCaught', false, g.position);
         this.setStatus(
           this.spDui ? 'العربية وقفت. انزل وروح للسواق — خلي بالك.' : 'العربية وقفت على جنب. انزل واكتب المخالفة 📝'
         );
@@ -1629,6 +1646,7 @@ export class StreetPlay {
     g.position.set(fx0, 0, z);
     g.rotation.y = rot;
     g.userData.static = true;
+    this.shopSpots.push({ x: fx0, z, side, name });
     this.addDisplay(g, name);
     // awning
     let aw = this.shopMats.get(color);
@@ -2125,9 +2143,9 @@ export class StreetPlay {
     const stars = Math.round(q.threat);
     if (q.hp <= 30 && q.hp > 0 && !this.hpLow) {
       this.hpLow = true;
-      this.bark('lowHealth');
+      this.dispatch('lowHealth');
     } else if (q.hp > 45) this.hpLow = false;
-    if (stars >= 3 && this.prevStars < 3) this.bark('backupCalled');
+    if (stars >= 3 && this.prevStars < 3) this.dispatch('backupCalled');
     this.prevStars = stars;
     const ring = (cls: string, pct: number, icon: string, label: string) => {
       const v = Math.max(0, Math.min(100, Math.round(pct)));
@@ -2445,64 +2463,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   private sea: Sea | null = null;
-  private strollers: Array<{ g: THREE.Object3D; v: number; z: number }> = [];
-  /** people walking along the corniche promenade */
-  private spawnStrollers() {
-    const cols = [0x8d2f45, 0x1f6f6a, 0xe7d7c1, 0x3d4d8a, 0x4a4038, 0x202228];
-    for (let i = 0; i < (Q.lowDetailPeople ? 6 : 12); i++) {
-      const female = i % 2 === 1;
-      const { g } = this.makePerson(female, cols[i % cols.length], 0x1a120e);
-      const v = (0.8 + Math.random() * 0.5) * (i % 3 === 0 ? -1 : 1);
-      const z = CORNICHE.z0 + 2.5 + (i % 4) * 1.6;
-      g.position.set(-110 + Math.random() * 220, 0.14, z);
-      g.rotation.y = v > 0 ? Math.PI / 2 : -Math.PI / 2;
-      models.setClip(g, 'walk');
-      this.group.add(g);
-      this.strollers.push({ g, v, z });
-    }
-  }
-  private stepStrollers(dt: number) {
-    for (const s of this.strollers) {
-      const p = s.g.position;
-      p.x += s.v * dt;
-      if (p.x > 120 || p.x < -120) {
-        s.v = -s.v;
-        s.g.rotation.y = s.v > 0 ? Math.PI / 2 : -Math.PI / 2;
-      }
-    }
-  }
 
-  private spawnPeople() {
-    const dresses = [0x8d2f45, 0x1f6f6a, 0xe7d7c1, 0x111111, 0x3d4d8a];
-    const hairs = [0x1a120e, 0x3a2416, 0x0e0e0e, 0x5a3820];
-    const jackets = [0x1c2430, 0x4a4038, 0x202228, 0x16324a];
-    let n = 0;
-    for (const place of STREET_PLACES) {
-      const crowd = Q.lowDetailPeople ? 4 : Math.round(6 * DISTRICT_STYLES[districtAt(place.z)].crowd);
-      for (let i = 0; i < crowd; i++) {
-        const female = i % 2 === 0;
-        const col = female ? dresses[n % dresses.length] : jackets[n % jackets.length];
-        const built = this.makePerson(female, col, hairs[n % hairs.length]);
-        const side = i < 3 ? 1 : -1;
-        const z = place.z - 18 + (i % 3) * 12;
-        built.g.position.set(side * 6.5, 0, z);
-        this.group.add(built.g);
-        this.peds.push({
-          mesh: built.g,
-          female,
-          phase: Math.random() * Math.PI * 2,
-          speed: 0.7 + Math.random() * 0.55,
-          dir: i % 2 === 0 ? 1 : -1,
-          z0: place.z - 28,
-          z1: place.z + 28,
-          legL: built.legL,
-          legR: built.legR,
-          armL: built.armL,
-          armR: built.armR
-        });
-        n++;
-      }
-    }
+  /** The street crowd (pavements, kerbs, doors, ahwa, vendors, Nile promenade), sized by the quality preset. */
+  private spawnCrowd() {
+    this.crowd = new Crowd(this.group, quality, this.shopSpots, CORNICHE.z0, (c, o) => this.mat(c, o));
   }
 
   private makePoliceCar(lights: boolean) {
@@ -2556,11 +2520,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       fx.glow(lr, 0xff2244);
       fx.glow(lb, 0x2266ff);
     }
-    // rear-window slogan, one per car
-    g.add(rearSticker(STICKERS.patrol[Math.floor(Math.random() * STICKERS.patrol.length)]!, 1.25, -2.36, 0.78, {
-      ink: '#06142b',
-      fill: 'rgba(235,242,252,0.92)'
-    }));
+    // official rear marking: the word «شرطة» and the emergency number, white on police blue
+    const plaque = { ink: '#ffffff', fill: '#16418f' };
+    g.add(rearSticker(PATROL_MARKINGS.rearTop, 0.86, -2.36, 1.02, plaque));
+    g.add(rearSticker(PATROL_MARKINGS.rear, 1.36, -2.36, 0.72, plaque));
     // Egyptian-style patrol car: realistic white sedan, blue band and "POLICE / الشرطة" on the doors, roof light bar
     models.dress(g, 'car-sedan2', { length: 4.7, tint: 0xf6f7f8 });
     for (const side of [-1, 1]) {
@@ -2858,7 +2821,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.hudEl = ui.querySelector('#street-hp');
     this.hudHtml = '';
     this.radioEl = ui.querySelector('#street-radio');
-    this.barks.mount(ui);
+    this.barks.mount(ui, this.camera);
     this.retEl = ui.querySelector('#street-ret');
     this.radioEl!.addEventListener('click', () => {
       this.radioT = 0;
@@ -3014,11 +2977,121 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (rb) rb.innerHTML = '<i>🛞</i><span>فرامل</span>';
   }
 
-  /** Street barks stay out of cutscenes, the tutorial, menus and radio calls; mission results may break in. */
-  private bark(id: BarkId, priority = false): boolean {
-    if (this.cut.active || this.tutOn || this.hubEl) return false;
-    if (!priority && (this.resultEl || this.radioEl?.classList.contains('show'))) return false;
-    return this.barks.say(id, priority) !== null;
+  /** Street talk stays out of cutscenes, the tutorial, menus and radio calls; mission results may break in. */
+  private quiet(priority: boolean): boolean {
+    if (this.cut.active || this.tutOn || this.hubEl) return true;
+    return !priority && !!(this.resultEl || this.radioEl?.classList.contains('show'));
+  }
+
+  /** A person on screen who may say this: pedestrians, vendors, drivers in traffic. Null when nobody fits. */
+  private speakerFor(who: readonly VoiceId[], focus: THREE.Vector3, only?: (s: { shop: string | null }) => boolean): Speaker | null {
+    const me = this.inCar ? this.car.position : this.player.position;
+    let best = this.crowd?.speakerFor(who, this.camera, me, 34, focus, only) ?? null;
+    let bd = Infinity;
+    if (best) bd = Math.hypot(best.obj.position.x - focus.x, best.obj.position.z - focus.z);
+    if (!only && who.some((w) => DRIVERS.includes(w))) {
+      for (const t of [...this.traffic, ...this.cross]) {
+        const kind = t.mesh.userData.vehicle as string | undefined;
+        const role: VoiceId = kind === 'microbus' ? 'microbus' : kind === 'taxi' ? 'taxi' : 'driver';
+        if (!who.includes(role)) continue;
+        const d = Math.hypot(t.mesh.position.x - focus.x, t.mesh.position.z - focus.z);
+        if (d >= bd || d > 30 || !this.crowd?.onScreen(t.mesh, 2.2, this.camera)) continue;
+        best = { obj: t.mesh, role, height: kind === 'microbus' ? 2.6 : 1.9 };
+        bd = d;
+      }
+    }
+    return best;
+  }
+
+  /** Someone on the street reacts. `focus` is where it happens (defaults to the officer). */
+  private bark(id: BarkId, priority = false, focus?: THREE.Vector3, only?: (s: { shop: string | null }) => boolean): boolean {
+    if (this.quiet(priority) || !this.barks.ready(id, priority)) return false;
+    const at = focus ?? (this.inCar ? this.car.position : this.player.position);
+    const sp = this.speakerFor(BARKS[id].who, at, only);
+    return !!sp && this.barks.say(id, sp, priority) !== null;
+  }
+
+  /** Official dispatcher line (never a joke). */
+  private dispatch(id: RadioId, priority = false) {
+    if (this.quiet(priority)) return;
+    this.barks.radio(id, priority);
+  }
+
+  /** Things people notice around the officer, checked a couple of times a second. */
+  private tickLife(dt: number) {
+    this.lifeT -= dt;
+    this.ambientT -= dt;
+    if (this.siren && !this.sirenWas) this.bark('sirenOn');
+    this.sirenWas = this.siren;
+    const car = this.car.position;
+    // the patrol car left at the junction, across the lane or on the kerb
+    if (Math.abs(this.speed) < 0.3 && !this.chasing) this.parkT += dt;
+    else this.parkT = 0;
+    if (this.parkT > 3.5 && this.badlyParked()) {
+      this.parkT = -20;
+      this.bark('parkedBadly', false, car);
+    }
+    if (this.chasing && this.suspect) {
+      this.chaseTalkT -= dt;
+      if (this.chaseTalkT <= 0) {
+        this.chaseTalkT = 6;
+        this.bark('chaseNear', false, this.suspect.position);
+      }
+    }
+    if (this.lifeT > 0) return;
+    this.lifeT = 0.5;
+    const me = this.inCar ? car : this.player.position;
+    if (!this.inCar && this.crowd) {
+      const near = this.crowd.nearest(me, 7);
+      if (near) {
+        const spot = new THREE.Vector3(near.x, 0, near.z);
+        if (near.kind === 'shop' && near.shop) {
+          const id = SHOP_BARK[near.shop];
+          if (id) this.bark(id, false, spot, (sp) => sp.shop === near.shop);
+        } else if (near.kind === 'vendor') this.bark('vendorCall', false, spot);
+        else if (near.kind === 'ahwa') this.bark('ahwaTalk', false, spot);
+        else if (Math.hypot(near.x - me.x, near.z - me.z) < 3.5) this.bark('officerPasses', false, spot);
+      }
+    }
+    if (this.ambientT <= 0 && !this.quiet(false)) {
+      this.ambientT = 16 + Math.random() * 14;
+      this.ambient();
+    }
+  }
+
+  private badlyParked(): boolean {
+    const c = this.car.position;
+    const nearJunction = CROSS_Z.some((z) => Math.abs(c.z - z) < 6 && Math.abs(c.x) < 7);
+    const across = Math.abs(Math.sin(this.yaw)) > 0.55;
+    const onKerb = Math.abs(c.x) > 3.9 && Math.abs(c.x) < 8;
+    return c.z > -100 && c.z < 240 && (nearJunction || across || onKerb);
+  }
+
+  /** What the street talks about when nothing is happening: the hour, the river, the bridge, the tower, rank, neighbours. */
+  private ambient() {
+    const me = this.inCar ? this.car.position : this.player.position;
+    const hr = this.hour?.() ?? 12;
+    const picks: (() => boolean)[] = [];
+    const time: BarkId = hr < 5 || hr >= 19 ? 'timeNight' : hr < 11 ? 'timeMorning' : hr < 16 ? 'timeNoon' : 'timeSunset';
+    picks.push(() => this.bark(time));
+    const idx = RANKS.indexOf(rank());
+    if (idx <= 1) picks.push(() => this.bark('rankLow'));
+    else if (idx >= RANKS.length - 2) picks.push(() => this.bark('rankHigh'));
+    if (me.z > 214 && me.z < 252) picks.push(() => this.bark('nileView'));
+    if (me.z >= 252 && me.z < 372) picks.push(() => this.bark('bridgeCrossing'));
+    if (me.z >= 372) picks.push(() => this.bark('towerView'));
+    picks.push(() => this.chatter());
+    picks.push(() => this.chatter());
+    picks.sort(() => Math.random() - 0.5);
+    for (const f of picks) if (f()) return;
+  }
+
+  /** Two neighbours on the pavement talk to each other. */
+  private chatter(): boolean {
+    const me = this.inCar ? this.car.position : this.player.position;
+    const pair = this.crowd?.chatPair(this.camera, me, 30);
+    if (!pair || !this.barks.readyChat(pair.chat)) return false;
+    return this.barks.chat(pair.chat, pair.a, pair.b);
   }
 
   private statusT = 0;
@@ -3142,8 +3215,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         ? `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} في ${Math.round(this.msTime)} ثانية. +${100 + 50 * stars} خبرة.${after !== before ? ` 🎖 ترقية: بقيت ${after}!` : ''}`
         : `${reason || 'المهمة فشلت.'} جرّب تاني.`
     };
-    if (success) this.bark(after !== before ? 'rankUp' : 'missionComplete', true);
-    else if (!quiet) this.bark('missionFailed', true);
+    if (success) this.dispatch(after !== before ? 'rankUp' : 'missionComplete', true);
+    else if (!quiet) this.dispatch('missionFailed', true);
     this.lastResult = { success, levelId: lv.id };
     this.onReport?.(report);
     // progress is already saved above; the outro only delays the result card
@@ -3337,22 +3410,22 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const yaw = this.inCar ? this.velYaw + wrapAngle(this.car.rotation.y - this.velYaw) * 0.35 : this.camYaw;
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
-    let b = back;
-    // pull the camera in when the spot behind the player is inside a building block
-    const pad = this.inCar ? 4.5 : 6.5; // on foot the sidewalk is walkable space for the camera too
-    // walk the boom outwards and stop at the first wall/building it would pass through (not just the end point)
+    // the camera may use the road and the first stretch of pavement, never the building blocks behind it
+    const pad = this.inCar ? CAM_PAD_CAR : CAM_PAD_FOOT;
     const tx = target.position.x,
       tz = target.position.z;
-    let clear = 1.2;
-    while (clear < back && onRoad(tx - sin * clear, tz - cos * clear, pad)) clear += 0.4;
-    b = Math.max(2.4, Math.min(back, clear - 0.6));
-    const boxed = b < 3.2 && !onRoad(tx - sin * b, tz - cos * b, pad);
+    const { length: b, boxed } = boomLength((x, z) => onRoad(x, z, pad), tx, tz, yaw, back);
     // ease the boom length (no pops), and rise smoothly as it shortens
     this.camB = k >= 1 ? b : this.camB + (b - this.camB) * Math.min(1, k * 1.5);
     const cb = this.camB;
     let h = up + Math.max(0, (back - cb) / back) * 2.2;
     // wedged with walls all round: go overhead instead of showing the inside of a wall
     if (boxed) h = Math.max(h, up + 6);
+    // slow car facing a wall: look down on it rather than at a facade filling the screen
+    if (this.inCar && Math.abs(this.speed) < 4) {
+      const f = distanceToBlocked((x, z) => onRoad(x, z, 2.4), tx, tz, Math.sin(this.yaw), Math.cos(this.yaw), 10, 2);
+      h += wallLift(f);
+    }
     const cx = target.position.x - sin * cb,
       cz = target.position.z - cos * cb;
     // on foot next to the patrol car: lift over it instead of clipping into the body
@@ -3364,6 +3437,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const dest = this.camDest.set(cx, h, cz);
     if (!Number.isFinite(this.camPos.x + this.camPos.y + this.camPos.z)) this.camPos.copy(dest);
     this.camPos.lerp(dest, k);
+    // whatever the easing did, the camera stays close enough to keep the target in view
+    const keep = clampDistance(this.camPos.x, this.camPos.z, tx, tz);
+    this.camPos.x = keep.x;
+    this.camPos.z = keep.z;
     this.camera.position.copy(this.camPos);
     const ahead = this.inCar ? this.rig.ahead * (this.speed < 0 ? -0.5 : 1) : 0;
     this.look.set(target.position.x + sin * ahead, this.inCar ? 1.1 : 1.3, target.position.z + cos * ahead);
@@ -3384,8 +3461,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     }
     const input = this.wants();
     this.stepActor(dt, input);
-    this.stepPeds(dt);
-    this.stepStrollers(dt);
+    this.crowd?.update(dt, this.inCar ? this.car.position : this.player.position, this.camera, this.avenueGreen, {
+      x: this.panicAt.x,
+      z: this.panicAt.z,
+      t: this.panicT
+    });
     this.sea?.update(dt);
     updatePyramids((this.inCar ? this.car.position : this.player.position).z);
     this.stepTraffic(dt);
@@ -3407,12 +3487,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.tickReticle();
     this.tickLights(dt);
     if (this.panicT > 0) this.panicT -= dt;
-    if (this.pedBarkT > 0) this.pedBarkT -= dt;
-    this.ambientT -= dt;
-    if (this.ambientT <= 0) {
-      this.ambientT = 55 + Math.random() * 40;
-      this.bark('monaQuip');
-    }
+    this.tickLife(dt);
     this.stepRain(dt);
     this.stepLights();
     rollWheels(this.car, this.speed * dt);
@@ -3446,6 +3521,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       this.cut.update(dt);
       this.tickOcclusion(dt);
     } else this.followCamera(dt);
+    this.camera.updateMatrixWorld();
+    this.barks.update();
     this.uiT += dt;
     if (this.uiT > 0.12) {
       this.uiT = 0;
@@ -3580,6 +3657,29 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         this.stuckX = cp.x;
         this.stuckZ = cp.z;
       } else this.stuckT += dt;
+      if (this.stuckT > 1.2 && this.stuckT <= 3 && throttle > 0) {
+        // nose against a wall: swing the car round to lie along the road (the freer side) so it can drive off again
+        if (this.nudgeGoal === null) {
+          const free = (x: number, z: number) => onRoad(x, z, 2.4);
+          const base = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2);
+          const l = distanceToBlocked(free, cp.x, cp.z, Math.sin(base + Math.PI / 2), Math.cos(base + Math.PI / 2), 14, 2);
+          const r = distanceToBlocked(free, cp.x, cp.z, Math.sin(base - Math.PI / 2), Math.cos(base - Math.PI / 2), 14, 2);
+          this.nudgeGoal = base + (l >= r ? Math.PI / 2 : -Math.PI / 2);
+        }
+        const off = wrapAngle(this.nudgeGoal - this.yaw);
+        if (Math.abs(off) > 0.2) {
+          this.yaw = wrapAngle(this.yaw + off * Math.min(1, dt * 2));
+          this.velYaw = this.yaw;
+          this.car.rotation.y = this.yaw;
+          this.speed = Math.min(this.speed, 0) - 1.5 * dt;
+        } else {
+          // lined up with the road: let it drive off
+          this.stuckT = 0;
+          this.stuckX = cp.x;
+          this.stuckZ = cp.z;
+          this.nudgeGoal = null;
+        }
+      } else if (this.stuckT === 0) this.nudgeGoal = null;
       if (this.stuckT > 3) {
         this.offRoadT = 2;
         this.stuckT = 0;
@@ -3656,50 +3756,6 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     }
   }
 
-  private stepPeds(dt: number) {
-    const me = this.inCar ? this.car.position : this.player.position;
-    const n = this.peds.length;
-    for (let i = 0; i < n; i++) {
-      const p = this.peds[i];
-      const m = p.mesh.position;
-      let speed = p.speed;
-      // flee from gunfire: run along the sidewalk away from the shots
-      if (this.panicT > 0 && Math.abs(m.z - this.panicAt.z) < 30 && Math.abs(m.x - this.panicAt.x) < 30) {
-        p.dir = m.z >= this.panicAt.z ? 1 : -1;
-        speed = 4.2;
-        if (Math.abs(me.z - m.z) < 10) this.bark('pedScared');
-      }
-      m.z += p.dir * speed * dt;
-      if (m.z > p.z1) p.dir = -1;
-      if (m.z < p.z0) p.dir = 1;
-      // collision avoidance: sidestep other pedestrians and the officer
-      let side = 0;
-      for (let j = 0; j < n; j++) {
-        if (j === i) continue;
-        const o = this.peds[j].mesh.position;
-        const dz = o.z - m.z,
-          dx = o.x - m.x;
-        if (Math.abs(dz) < 1.4 && Math.abs(dx) < 0.8 && Math.sign(dz) === p.dir) side += dx >= 0 ? -1 : 1;
-      }
-      if (!this.inCar && Math.abs(me.z - m.z) < 1.6 && Math.abs(me.x - m.x) < 1) side += me.x >= m.x ? -1.5 : 1.5;
-      if (!this.inCar && this.pedBarkT <= 0 && Math.abs(me.z - m.z) < 2.6 && Math.abs(me.x - m.x) < 2.6) {
-        // someone on the pavement has a word for the officer walking past
-        const r = Math.random();
-        if (this.bark(r < 0.5 ? 'pedGreet' : r < 0.75 ? 'gossipVendor' : 'gossipAhwa')) this.pedBarkT = 18;
-      }
-      const home = m.x > 0 ? 6.5 : -6.5;
-      m.x += side ? side * 1.6 * dt : (home - m.x) * dt * 0.8;
-      m.x = m.x > 0 ? THREE.MathUtils.clamp(m.x, 5, 7.9) : THREE.MathUtils.clamp(m.x, -7.9, -5);
-      p.mesh.rotation.y = p.dir > 0 ? 0 : Math.PI;
-      p.phase += dt * speed * 6;
-      const swing = Math.sin(p.phase) * 0.65;
-      p.legL.rotation.x = swing;
-      p.legR.rotation.x = -swing;
-      p.armL.rotation.x = -swing * 0.6;
-      p.armR.rotation.x = swing * 0.6;
-    }
-  }
-
   private stepTraffic(dt: number) {
     if (this.hitCool > 0) this.hitCool -= dt;
     const red = !this.avenueGreen;
@@ -3764,7 +3820,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       t.side = (t.side ?? 0) + (want - (t.side ?? 0)) * Math.min(1, dt * 2);
       if (want > 0 && near < 22) {
         stop = true;
-        if (near < 14) this.bark('trafficYields');
+        if (near < 14) this.bark('trafficYields', false, t.mesh.position);
       }
       const kerb = t.laneX > 0 ? 1 : -1;
       const wantX = t.laneX + kerb * (t.side ?? 0);
@@ -3781,8 +3837,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       if (this.inCar && !t.bumpT && Math.abs(this.speed) > 8 && Math.abs(t.mesh.position.z - C.z) < 3.4) {
         // passing close without touching
         const gap = Math.abs(t.mesh.position.x - C.x);
-        if (gap > 1.9 && gap < 2.9) this.bark('nearMissCar');
-        else if (near < 7 && t.mesh.userData.vehicle === 'microbus') this.bark('gossipMicrobus');
+        if (gap > 1.9 && gap < 2.9) this.bark('nearMissCar', false, t.mesh.position);
       }
       if (t.bumpT && t.bumpT > 0) {
         t.bumpT -= dt;
@@ -3848,7 +3903,6 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (this.hitCool > 0) return;
     const dmg = hitDamage(v);
     if (dmg <= 0) return;
-    const was = this.damage;
     this.damage = Math.min(100, this.damage + armoredHit(dmg, progress.garage ?? { engine: 0, armor: 0, brakes: 0 }));
     this.hitCool = 0.6;
     audio.sample('crash', Math.min(1, v / 15));
@@ -3857,9 +3911,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.setStatus(
       this.damage >= 100 ? '💥 الدورية متدمرة — بتمشي ببطء.' : `💥 خبطة! ضرر الدورية ${this.damage}% — ${word}`
     );
-    const band = (d: number) => DAMAGE_WORDS.findIndex((r) => d <= r.upTo);
-    const spoke = this.bark(dmg >= 14 ? 'crashHeavy' : 'crashLight');
-    if (band(this.damage) > band(was) && !spoke && !this.cut.active && !this.tutOn) this.barks.show('patrol', word);
+    this.bark(dmg >= 14 ? 'crashHeavy' : 'crashLight', false, this.car.position);
   }
 
   private stepChase(dt: number) {
@@ -3973,10 +4025,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     });
     if (r === 'caught') this.caught();
     else if (r === 'escaped') {
-      this.bark('suspectEscapes', true);
+      this.dispatch('suspectEscapes', true);
       this.finishMission(false, 'العربية بعدت أوي وهربت.', true);
     } else if (r === 'timeout') {
-      this.bark('suspectEscapes', true);
+      this.dispatch('suspectEscapes', true);
       this.finishMission(false, 'الوقت خلص والعربية هربت.', true);
     }
   }

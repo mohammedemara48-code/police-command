@@ -1,6 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { BARK_COOLDOWN, BARK_GAP, createBarkState, damageWord, fillVocative, pickBark } from '../src/game/logic/barks';
-import { BARKS, DAMAGE_WORDS, LANDMARK_BARK, STICKERS, VOCATIVES, VOICES } from '../src/game/config/barks';
+import {
+  BARK_COOLDOWN,
+  BARK_GAP,
+  canBark,
+  createBarkState,
+  damageWord,
+  fillVocative,
+  pickBark
+} from '../src/game/logic/barks';
+import {
+  BARKS,
+  CHATTER,
+  DAMAGE_WORDS,
+  LANDMARK_BARK,
+  PATROL_MARKINGS,
+  RADIO,
+  SHOP_BARK,
+  STICKERS,
+  VOCATIVES,
+  VOICES
+} from '../src/game/config/barks';
 import { DISTRICT_STYLES } from '../src/game/logic/districts';
 
 const lines = ['أ ب', 'ج د', 'هـ و'];
@@ -107,23 +126,78 @@ describe('damageWord', () => {
 /** words as the player reads them: the vocative placeholder counts as its two words */
 const words = (line: string) => line.replace('{V}', 'يا X').split(/\s+/).filter(Boolean).length;
 
+describe('canBark', () => {
+  it('agrees with pickBark without changing anything', () => {
+    const s = createBarkState();
+    expect(canBark(s, 'x', 10)).toBe(true);
+    expect(canBark(s, 'x', 10)).toBe(true);
+    pickBark(s, 'x', lines, 10);
+    expect(canBark(s, 'x', 11)).toBe(false);
+    expect(canBark(s, 'y', 11)).toBe(false);
+    expect(canBark(s, 'y', 11, { priority: true })).toBe(true);
+    expect(canBark(s, 'y', 10 + BARK_GAP)).toBe(true);
+    expect(canBark(s, 'x', 10 + BARK_COOLDOWN)).toBe(true);
+  });
+});
+
+describe('who speaks', () => {
+  const all = Object.entries(BARKS);
+
+  it('only ordinary people of the street have a voice: never the radio, Mona or the officer', () => {
+    for (const k of Object.keys(VOICES)) expect(k, k).not.toMatch(/radio|mona|officer|police|patrol|dispatch/i);
+    for (const [id, s] of all) {
+      expect(s.who.length, id).toBeGreaterThan(0);
+      for (const v of s.who) expect(VOICES[v], `${id}: ${v}`).toBeDefined();
+    }
+    for (const [id, c] of Object.entries(CHATTER))
+      for (const v of c.who) expect(VOICES[v], `${id}: ${v}`).toBeDefined();
+  });
+
+  it('the radio is a separate channel with plain professional lines', () => {
+    for (const [id, r] of Object.entries(RADIO)) {
+      expect(r.lines.length, id).toBeGreaterThanOrEqual(2);
+      for (const l of r.lines) {
+        expect(l.endsWith('.'), `${id}: ${l}`).toBe(true);
+        expect(l.includes('{V}'), l).toBe(false);
+        expect(/يا باشا|يا عم|يا ريس|ههه|😂|!/.test(l), `${id}: ${l}`).toBe(false);
+      }
+    }
+    // no street situation is also a radio id: the two channels never share a line
+    const street = new Set(all.flatMap(([, s]) => [...s.lines]));
+    for (const r of Object.values(RADIO)) for (const l of r.lines) expect(street.has(l), l).toBe(false);
+  });
+});
+
 describe('bark data', () => {
   const all = Object.entries(BARKS);
 
-  it('every situation has 2-4 short variants (2-5 words) and a known voice', () => {
+  it('every situation has 6-10 short variants (2-7 words)', () => {
     for (const [id, s] of all) {
-      expect(s.lines.length, id).toBeGreaterThanOrEqual(2);
-      expect(s.lines.length, id).toBeLessThanOrEqual(4);
-      expect(VOICES[s.voice], id).toBeDefined();
+      expect(s.lines.length, id).toBeGreaterThanOrEqual(6);
+      expect(s.lines.length, id).toBeLessThanOrEqual(10);
       for (const l of s.lines) {
         expect(words(l), `${id}: ${l}`).toBeGreaterThanOrEqual(2);
-        expect(words(l), `${id}: ${l}`).toBeLessThanOrEqual(5);
+        expect(words(l), `${id}: ${l}`).toBeLessThanOrEqual(7);
+      }
+    }
+  });
+
+  it('ambient chatter: every kind has 6+ two-part exchanges', () => {
+    for (const [id, c] of Object.entries(CHATTER)) {
+      expect(c.lines.length, id).toBeGreaterThanOrEqual(6);
+      for (const l of c.lines) {
+        const parts = l.split('||');
+        expect(parts.length, `${id}: ${l}`).toBe(2);
+        for (const part of parts) {
+          expect(words(part), `${id}: ${l}`).toBeGreaterThanOrEqual(2);
+          expect(words(part), `${id}: ${l}`).toBeLessThanOrEqual(8);
+        }
       }
     }
   });
 
   it('has no duplicate lines anywhere', () => {
-    const flat = all.flatMap(([, s]) => [...s.lines]);
+    const flat = [...all.flatMap(([, s]) => [...s.lines]), ...Object.values(CHATTER).flatMap((c) => [...c.lines])];
     expect(new Set(flat).size).toBe(flat.length);
   });
 
@@ -142,11 +216,12 @@ describe('bark data', () => {
     ];
     const text = [
       ...all.flatMap(([, s]) => [...s.lines]),
+      ...Object.values(CHATTER).flatMap((c) => [...c.lines]),
       ...DAMAGE_WORDS.map((d) => d.word),
-      ...STICKERS.patrol,
       ...STICKERS.microbus
     ].join(' | ');
-    for (const b of banned) expect(text.includes(b), b).toBe(false);
+    // whole words only: «بسبوسة» (the sweet) is fine
+    for (const b of banned) expect(new RegExp(`(^|[\\s|،.!؟?])${b}($|[\\s|،.!؟?])`).test(text), b).toBe(false);
   });
 
   it('covers every district with a landmark situation', () => {
@@ -157,11 +232,52 @@ describe('bark data', () => {
     }
   });
 
-  it('has a few vocatives and stickers that fit on a plaque', () => {
-    expect(VOCATIVES.length).toBeGreaterThanOrEqual(3);
-    for (const s of [...STICKERS.patrol, ...STICKERS.microbus]) {
+  it('every shop in the street has a shopkeeper line', () => {
+    const shops = ['صيدلية', 'مخبز', 'كافيه', 'سوبر ماركت', 'مطعم', 'ملابس', 'موبايلات', 'حلويات', 'بنك', 'مكتبة'];
+    for (const n of shops) {
+      expect(SHOP_BARK[n], n).toBeDefined();
+      expect(BARKS[SHOP_BARK[n]!].who, n).toEqual(['shopkeeper']);
+    }
+  });
+
+  it('covers what happens in the game: time of day, the Nile, the bridge, the tower, rank, crashes, the siren', () => {
+    for (const id of [
+      'timeMorning',
+      'timeNoon',
+      'timeSunset',
+      'timeNight',
+      'nileView',
+      'bridgeCrossing',
+      'towerView',
+      'rankLow',
+      'rankHigh',
+      'crashLight',
+      'crashHeavy',
+      'sirenOn',
+      'chaseNear',
+      'shotFired',
+      'cuffing',
+      'parkedBadly',
+      'officerPasses'
+    ])
+      expect(BARKS[id as keyof typeof BARKS], id).toBeDefined();
+  });
+});
+
+describe('patrol car marking and status words', () => {
+  it('the patrol car carries only official markings; the joke slogans are for microbuses', () => {
+    expect(PATROL_MARKINGS.rearTop).toBe('شرطة');
+    expect(PATROL_MARKINGS.rear).toContain('122');
+    expect(Object.keys(STICKERS)).toEqual(['microbus']);
+    for (const s of STICKERS.microbus) {
       expect(s.length, s).toBeLessThanOrEqual(30);
       expect(words(s), s).toBeLessThanOrEqual(6);
     }
+  });
+
+  it('damage words are plain and serious', () => {
+    const ok = /^(سليمة|ضرر (طفيف|متوسط|كبير|شديد)|غير صالحة للسير)$/;
+    for (const d of DAMAGE_WORDS) expect(ok.test(d.word), d.word).toBe(true);
+    expect(VOCATIVES.length).toBeGreaterThanOrEqual(3);
   });
 });
