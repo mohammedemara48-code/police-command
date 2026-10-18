@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { models, MEN, WOMEN } from './Models';
-import { CROWD_RADIUS, DISTRICT_DENSITY, avenueSegments, planCrowd, type CrowdQuality, type CrowdSpec, type ShopSpot } from '../logic/crowd';
+import { CROWD_DRAW_CAP, CROWD_RADIUS, DISTRICT_DENSITY, FACE_LOD_DIST, avenueSegments, planCrowd, type CrowdQuality, type CrowdSpec, type ShopSpot } from '../logic/crowd';
 import type { VoiceId } from '../config/barks';
 import type { Speaker } from '../ui/Barks';
 
@@ -22,6 +22,10 @@ interface Person {
   waitT: number;
   /** when a bystander last spoke */
   talkT: number;
+  /** eyes, brows and lashes (hidden on far people) */
+  face: THREE.Object3D[] | null;
+  far: boolean;
+  d2: number;
 }
 
 const HAIRS = [0x16100c, 0x2a1a10, 0x0e0e0e, 0x4a2f1c];
@@ -32,6 +36,8 @@ export class Crowd {
   readonly people: Person[] = [];
   private props = new THREE.Group();
   private radius: number;
+  private cap: number;
+  private cand: Person[] = [];
   private segs = avenueSegments();
   private fwd = new THREE.Vector3();
   private tmp = new THREE.Vector3();
@@ -46,6 +52,7 @@ export class Crowd {
     private mat: (color: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial
   ) {
     this.radius = CROWD_RADIUS[quality];
+    this.cap = CROWD_DRAW_CAP[quality];
     const plan = planCrowd(quality, shops, promenadeZ);
     parent.add(this.props);
     for (const p of plan.props) this.prop(p.kind, p.x, p.z, p.yaw);
@@ -114,7 +121,10 @@ export class Crowd {
       lane: spec.axis === 'z' ? spec.x : spec.z,
       speed: spec.speed,
       waitT: Math.random() * 2,
-      talkT: 0
+      talkT: 0,
+      face: null,
+      far: false,
+      d2: 0
     };
     if (seated) {
       models.setClip(g, 'drive');
@@ -147,24 +157,50 @@ export class Crowd {
     const fx = this.fwd.x / fl,
       fz = this.fwd.z / fl;
     const R2 = this.radius * this.radius;
-    let drawn = 0;
+    const cand = this.cand;
+    cand.length = 0;
     for (const p of this.people) {
       const g = p.g;
       const pos = g.position;
       const dx = pos.x - me.x,
         dz = pos.z - me.z;
       const d2 = dx * dx + dz * dz;
-      // skinned meshes are never frustum-culled by three, so people behind the camera are hidden here
-      const behind = (pos.x - cam.position.x) * fx + (pos.z - cam.position.z) * fz < -3 && d2 > 25;
+      p.d2 = d2;
       // avenue walkers that fell far behind are moved ahead of the officer, so the pavements around them stay busy
       if (p.spec.kind === 'walk' && d2 > R2 * 1.3) this.recycle(p, me, fz);
-      const vis = d2 < R2 && !behind;
-      if (g.visible !== vis) g.visible = vis;
-      if (!vis) continue;
-      drawn++;
+      // skinned meshes are never frustum-culled by three, so people behind the camera are hidden here
+      const behind = (pos.x - cam.position.x) * fx + (pos.z - cam.position.z) * fz < -3 && d2 > 25;
+      if (d2 < R2 && !behind) cand.push(p);
+      else if (g.visible) g.visible = false;
+    }
+    // only the nearest few are drawn
+    if (cand.length > this.cap) {
+      cand.sort((a, b) => a.d2 - b.d2);
+      for (let i = this.cap; i < cand.length; i++) cand[i]!.g.visible = false;
+      cand.length = this.cap;
+    }
+    for (const p of cand) {
+      if (!p.g.visible) p.g.visible = true;
+      this.lod(p);
       this.step(p, dt, me, green, panic);
     }
-    this.drawn = drawn;
+    this.drawn = cand.length;
+  }
+
+  private lod(p: Person) {
+    if (!p.face) {
+      if (!p.g.userData.dressed) return;
+      p.face = [];
+      p.g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        const n = (m.material as THREE.Material | undefined)?.name;
+        if (m.isMesh && (n === 'Brows' || n === 'Eyes' || n === 'Human.eyelashes01')) p.face!.push(o);
+      });
+    }
+    const far = p.d2 > FACE_LOD_DIST * FACE_LOD_DIST;
+    if (far === p.far && p.face.length) return;
+    p.far = far;
+    for (const o of p.face) o.visible = !far;
   }
 
   /** Put a walker on a pavement 30-38 m ahead (or sometimes behind), more often in the busy districts. */

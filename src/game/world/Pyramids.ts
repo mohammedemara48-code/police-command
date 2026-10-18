@@ -14,7 +14,7 @@ const SCALE = 0.6;
 function stepped(base: number, top: number, h: number, courses: number, seed: number, dark = 0) {
   const parts: THREE.BufferGeometry[] = [];
   let s = seed;
-  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const hs = Array.from({ length: courses }, () => 0.7 + rnd() * 0.6);
   const sum = hs.reduce((a, b) => a + b, 0);
   const half = (y: number) => base / 2 - (y / h) * (base / 2 - top / 2);
@@ -60,6 +60,7 @@ interface Mat {
 }
 const mats: Mat[] = [];
 let group: THREE.Group | null = null;
+const dust: THREE.MeshBasicMaterial[] = [];
 const haze = new THREE.Color(0xd6c9b0);
 let daylight = 1;
 
@@ -96,6 +97,38 @@ export function buildPyramids(parent: THREE.Group) {
     }
     group!.add(g);
   });
+  // dust haze hugging the plateau floor in front of the pyramids, so the ground melts into the base instead of ending in a line
+  const gc = document.createElement('canvas');
+  gc.width = 4;
+  gc.height = 64;
+  const gx = gc.getContext('2d')!;
+  const grad = gx.createLinearGradient(0, 64, 0, 0);
+  grad.addColorStop(0, 'rgba(255,255,255,0.85)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  gx.fillStyle = grad;
+  gx.fillRect(0, 0, 4, 64);
+  const gt = new THREE.CanvasTexture(gc);
+  for (const [z, w, h, o] of [
+    [-300, 1000, 70, 0.7],
+    [-420, 1100, 110, 0.75],
+    [-520, 1200, 150, 0.6]
+  ] as const) {
+    const m = new THREE.MeshBasicMaterial({
+      map: gt,
+      transparent: true,
+      depthWrite: false,
+      fog: false,
+      opacity: o,
+      color: haze
+    });
+    m.userData.o = o;
+    dust.push(m);
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+    p.position.set(0, h / 2 - 2, z);
+    p.renderOrder = 2;
+    group.add(p);
+  }
   group.visible = false;
   parent.add(group);
 }
@@ -109,6 +142,10 @@ export function updatePyramids(playerZ: number) {
   for (const { m, base } of mats) {
     m.color.copy(base).multiplyScalar(1 - mix * 0.55);
     m.emissive.copy(haze).multiplyScalar(mix * 0.55 * Math.max(0.12, daylight));
+  }
+  for (const m of dust) {
+    m.color.copy(haze).multiplyScalar(Math.max(0.25, daylight));
+    m.opacity = (m.userData.o as number) * Math.max(0.35, daylight);
   }
 }
 

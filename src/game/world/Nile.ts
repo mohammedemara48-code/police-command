@@ -204,8 +204,8 @@ export function buildNile(group: THREE.Group, sun: THREE.Vector3): NileBuild {
   };
   // Gezira island park and dusty ground; outer Dokki bank beyond the city footprint
   ground(-WIDE / 2, WIDE / 2, NILE.islandZ + 8.4, 1300, 0x93a36f, 9, 'park');
-  ground(155, WIDE / 2, -100, NILE.bankZ + 0.3, 0xb4a88c, 12, 'desert');
-  ground(-WIDE / 2, -155, -100, NILE.bankZ + 0.3, 0xb4a88c, 12, 'desert');
+  ground(155, WIDE / 2, -100, NILE.bankZ + 0.3, 0x8c8372, 12, 'desert');
+  ground(-WIDE / 2, -155, -100, NILE.bankZ + 0.3, 0x8c8372, 12, 'desert');
 
   // ---- Qasr El Nil Bridge ----
   const zA = NILE.bankZ + 0.8,

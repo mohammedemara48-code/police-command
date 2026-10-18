@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Q } from '../config/Quality';
 import { surface, worldUV, segments, PROP_MATS } from './Environment';
 import { buildPyramids } from './Pyramids';
+import { buildOutskirts } from './Outskirts';
 import { onNileRoad } from '../logic/nile';
 import { wallGeo } from './Egypt';
 import { facadeMaterial } from './Facade';
@@ -89,9 +90,8 @@ export function buildCity(group: THREE.Group, _low: boolean) {
   mk(kerbGeos, surface('concrete', 0xcfcac2), 1.2);
   mk(lineGeos, PROP_MATS.paint);
 
-  // ground: dusty earth between the blocks, open desert beyond the Haram end of the avenue
-  const gz1 = CITY.z1 + 10,
-    sandEnd = -45;
+  // ground: dusty earth between the blocks; the city carries on beyond the grid (see Outskirts.ts)
+  const gz1 = CITY.z1 + 10;
   const groundPart = (za: number, zb: number, w: number, tint: number, size: number) => {
     const g = new THREE.PlaneGeometry(w, zb - za);
     g.rotateX(-Math.PI / 2);
@@ -102,9 +102,8 @@ export function buildCity(group: THREE.Group, _low: boolean) {
     m.userData.city = true;
     group.add(m);
   };
-  groundPart(CITY.z0 - 30, sandEnd, CITY.x1 - CITY.x0 + 60, 0xd9c8a2, 12);
-  groundPart(sandEnd, gz1, CITY.x1 - CITY.x0 + 60, 0x8f8676, 9);
-  groundPart(-1500, CITY.z0 - 30, 2600, 0xd9c8a2, 16);
+  groundPart(CITY.z0 - 30, gz1, CITY.x1 - CITY.x0 + 60, 0x8f8676, 9);
+  buildOutskirts(group);
   buildPyramids(group);
 
   // blocks: merged per city block and facade material, so off-screen blocks are culled as a unit

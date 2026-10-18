@@ -21,6 +21,11 @@ export const OLD_CROWD = { low: 22, medium: 39, high: 39 } as const;
 /** How far from the officer people are drawn and animated, in metres. */
 export const CROWD_RADIUS: Record<CrowdQuality, number> = { low: 40, medium: 58, high: 74 };
 
+/** Most people drawn at once (the nearest ones win): each skinned person costs several draw calls. */
+export const CROWD_DRAW_CAP: Record<CrowdQuality, number> = { low: 16, medium: 34, high: 56 };
+/** Beyond this distance the eyes, brows and lashes are not drawn (saves three draw calls per far person). */
+export const FACE_LOD_DIST = 16;
+
 export function crowdTotal(q: CrowdQuality): number {
   return Object.values(CROWD_COUNTS[q]).reduce((a, b) => a + b, 0);
 }

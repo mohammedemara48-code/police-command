@@ -611,6 +611,7 @@ export class StreetPlay {
     this.group.add(this.eventGroup);
     this.mergeStatic();
     buildCity(this.group, Q.lowDetailPeople);
+    flushPalms(this.group);
     this.spawnCrossTraffic();
     this.squad = new Squad(this.group, (hostage) => {
       const g = hostage
