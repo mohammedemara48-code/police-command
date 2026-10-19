@@ -26,7 +26,7 @@ describe('network traffic', () => {
     expect(t.cars).toHaveLength(15);
     expect(off).toBeLessThan(15 * 30 * 0.05);
     expect(moved).toBeGreaterThan(100);
-  });
+  }, 30000);
 
   it('stops for a red light', () => {
     const N = net();

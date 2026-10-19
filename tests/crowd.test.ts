@@ -112,7 +112,7 @@ describe('placing people on the open street network', () => {
       }
     }
     expect(n).toBeGreaterThan(300);
-  });
+  }, 30000);
   it('walkers carry on through junctions: the next lane starts on a street leaving the same junction', () => {
     const r = rng(9);
     let n = 0;

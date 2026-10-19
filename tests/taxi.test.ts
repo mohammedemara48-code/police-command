@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { routeAim } from '../src/game/logic/routeAim';
 import {
   STOPS,
   stopSpots,
@@ -324,5 +325,28 @@ describe('passenger talk', () => {
       expect(PERSONA_LOOK[p].name.length).toBeGreaterThan(0);
       for (const t of CHAT_TOPICS[p]) expect(TALK[t]).toBeDefined();
     }
+  });
+});
+
+describe('the objective arrow follows the road route', () => {
+  const route = [
+    { x: 0, z: 0 },
+    { x: 0, z: 100 },
+    { x: 100, z: 100 },
+    { x: 100, z: 300 }
+  ];
+  const target = { x: 100, z: 300 };
+  it('aims at a waypoint along the street, not straight at the destination', () => {
+    const a = routeAim(route, { x: 0, z: 10 }, target);
+    expect(a.x).toBe(0);
+    expect(a.z).toBe(100);
+  });
+  it('goes round the corner as the car passes it', () => {
+    const a = routeAim(route, { x: 0, z: 98 }, target);
+    expect(a).toEqual({ x: 100, z: 100 });
+  });
+  it('points at the destination itself once it is close, or when there is no route', () => {
+    expect(routeAim(route, { x: 100, z: 290 }, target)).toEqual(target);
+    expect(routeAim([], { x: 0, z: 0 }, target)).toEqual(target);
   });
 });

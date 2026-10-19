@@ -124,6 +124,7 @@ import {
 import { TaxiService } from './TaxiService';
 import { isTaxiVehicle, stopSpots, spotOf } from '../logic/taxi';
 import { POLICE_ONLY_BARKS } from '../config/barks';
+import { routeAim } from '../logic/routeAim';
 
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
@@ -1521,7 +1522,9 @@ export class StreetPlay {
     if (this.arrow) this.arrow.visible = has && step?.t !== 'goto';
     if (this.dirEl) {
       this.dirEl.dataset.d = `${Math.round(dist)} م`;
-      const v = this.tmpV.copy(this.msTarget).setY(1.5).project(this.camera);
+      // the arrow points along the road route (a point ~24 m ahead on it), not straight through the buildings
+      const aim = has ? this.routeAim(pos) : this.msTarget;
+      const v = this.tmpV.set(aim.x, 1.5, aim.z).project(this.camera);
       const on = Math.abs(v.x) < 0.9 && Math.abs(v.y) < 0.85 && v.z < 1;
       this.dirEl.style.display = has && dist > 4 ? 'block' : 'none';
       this.dirEl.classList.toggle('onscreen', on);
@@ -1538,6 +1541,11 @@ export class StreetPlay {
       }
     }
     if (this.mode === 'police') this.renderHud();
+  }
+
+  /** A point on the road route to the objective, about `ahead` metres further along from where we are. */
+  private routeAim(pos: { x: number; z: number }, ahead = 24): { x: number; z: number } {
+    return routeAim(this.route, pos, this.msTarget, ahead);
   }
 
   // ===================== mission runner =====================
@@ -2278,7 +2286,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.closeMap();
     this.msText = '';
     if (this.mode === 'taxi' && isTaxiVehicle(this.vehicle)) this.taxi.start(this.vehicle);
-    // a quiet stretch of road a short drive before a rank: try a few ranks and distances until the car sits on a carriageway
+    // the shift starts AT a rank: the car pulls up at the kerb of the first rank with its people waiting, and they board straight away
     const N = net();
     const ids = ['dokki', 'mohandessin', 'zamalek', 'ramses', 'tahrir', 'giza'].sort(() => Math.random() - 0.5);
     let cx = 0,
@@ -2291,7 +2299,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       if (!spot || !n || n.e.ring || n.e.bridge) continue;
       const y = N.at(n.e, n.s).yaw;
       const right = n.e.half * 0.45;
-      for (const back of [46, 34, 58, 24]) {
+      for (const back of [3, 6, 9, 12, 16]) {
         const x = spot.x - Math.sin(y) * back - Math.cos(y) * right,
           z = spot.z - Math.cos(y) * back + Math.sin(y) * right;
         if (onRoad(x, z, -1.5)) {
@@ -2299,6 +2307,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
           cz = z;
           yaw = y;
           found = true;
+          this.taxi.ensureQueue(id, this.vehicle === 'microbus' ? 3 : 1);
           break;
         }
       }
@@ -3367,6 +3376,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       missionId: police ? this.missionId : null,
       pins: taxiMap ? rankPins : undefined,
       objective: this.msHasTarget ? { x: this.msTarget.x, z: this.msTarget.z } : null,
+      route: this.msHasTarget ? this.route : undefined,
       picked: picked,
       here: here.id
     };

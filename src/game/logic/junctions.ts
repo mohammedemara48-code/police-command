@@ -21,6 +21,11 @@ export interface Trim {
 }
 export interface Corner {
   poly: V2[];
+  /** the two arms the corner joins, the side of each facing the other (in the edge's own frame: +1 left, -1 right) */
+  ea?: number;
+  sa?: 1 | -1;
+  eb?: number;
+  sb?: 1 | -1;
 }
 export interface Junctions {
   trims: Map<number, Trim>;
@@ -105,7 +110,13 @@ export function junctionsOf(N: RoadNet): Junctions {
         if (Math.hypot(c.x - oa.x, c.z - oa.z) < PAVEMENT * 4 && Math.hypot(c.x - ob.x, c.z - ob.z) < PAVEMENT * 4)
           q = c;
       }
-      const c: Corner = { poly: [ia, oa, q, ob, ib] };
+      const c: Corner = {
+        poly: [ia, oa, q, ob, ib],
+        ea: A.e.id,
+        sa: sideA as 1 | -1,
+        eb: B.e.id,
+        sb: sideB as 1 | -1
+      };
       const l = cornersByNode.get(n.id);
       if (l) l.push(c);
       else cornersByNode.set(n.id, [c]);
@@ -153,6 +164,15 @@ export function pavementSpan(e: REdge, side: 1 | -1): { s0: number; s1: number }
 export function endMargins(e: REdge): { a: number; b: number } {
   const t = J().trims.get(e.id);
   return t ? { a: Math.max(t.aL, t.aR), b: Math.max(t.bL, t.bR) } : { a: 0, b: 0 };
+}
+
+/** The pavement corner at a node that joins an edge's pavement on `side` to the neighbouring arm, if the junction has one there. */
+export function cornerFrom(node: number, edge: number, side: 1 | -1): { edge: number; side: 1 | -1 } | null {
+  for (const c of J().cornersByNode.get(node) ?? []) {
+    if (c.ea === edge && c.sa === side) return { edge: c.eb!, side: c.sb! };
+    if (c.eb === edge && c.sb === side) return { edge: c.ea!, side: c.sa! };
+  }
+  return null;
 }
 
 /** The pavement corners at a junction (poles and signs stand on them). */

@@ -9,8 +9,9 @@ import {
   CROWD_RADIUS,
   FACE_LOD_DIST,
   crossings,
+  advanceLane,
+  dodgeRoom,
   lanePose,
-  nextLane,
   pickCrossing,
   pickLane,
   planCrowd,
@@ -422,7 +423,6 @@ export class Crowd {
     // walking along a pavement
     const lane = p.lane;
     if (!lane) return;
-    const N = net();
     let speed = p.speed;
     if (scared) {
       speed = 4.2;
@@ -434,15 +434,20 @@ export class Crowd {
         lane.rel = -lane.rel as 1 | -1;
       }
     }
-    const e = N.edges[lane.e]!;
-    lane.s += lane.dir * speed * dt;
-    if (lane.s > e.len - 0.4 || lane.s < 0.4) {
-      const before = lanePose(lane);
+    {
       const sid = p.spec.kind === 'promenade' ? 'corniche' : undefined;
-      p.lane = nextLane(lane, this.rnd, sid);
-      const after = lanePose(p.lane);
-      p.lx = before.x - after.x;
-      p.lz = before.z - after.z;
+      const before = lanePose(lane);
+      const step = advanceLane(lane, speed * dt, this.rnd, sid);
+      p.lane = step.lane;
+      if (step.stuck) {
+        p.state = 'away';
+        return;
+      }
+      if (step.turned) {
+        const after = lanePose(p.lane);
+        p.lx = before.x - after.x;
+        p.lz = before.z - after.z;
+      }
     }
     const q = lanePose(p.lane!);
     // step aside for the officer on foot
@@ -453,6 +458,8 @@ export class Crowd {
     let want = 0;
     if (ox * ox + oz * oz < 2.2 * 2.2 && Math.abs(ox * Math.sin(q.yaw) + oz * Math.cos(q.yaw)) < 1.8)
       want = ox * rx + oz * rz > 0 ? -1.3 : 1.3;
+    // never step into the road to let the officer pass: towards the carriageway is -rel along the right-hand vector
+    if (want * p.lane!.rel < 0) want = Math.sign(want) * Math.min(Math.abs(want), dodgeRoom(p.lane!));
     p.dodge += (want - p.dodge) * Math.min(1, dt * 3);
     const k = Math.exp(-dt * 3);
     p.lx *= k;

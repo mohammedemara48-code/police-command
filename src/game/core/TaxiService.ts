@@ -12,6 +12,7 @@ import {
   dropAt,
   emptyQueues,
   newJob,
+  newWaiting,
   nextTarget,
   payout,
   restock,
@@ -175,6 +176,9 @@ export class TaxiService {
     if (!ui) return;
     const el = document.createElement('div');
     el.id = 'street-taxi';
+    // small screens start as a slim strip; a tap opens or closes the details
+    el.classList.toggle('open', !window.matchMedia('(max-width: 560px), (max-height: 520px)').matches);
+    el.addEventListener('click', () => el.classList.toggle('open'));
     ui.appendChild(el);
     this.hud = el;
   }
@@ -439,6 +443,13 @@ export class TaxiService {
     this.host.target(spot ? { x: spot.x, z: spot.z } : null);
   }
 
+  /** Make sure at least `n` people wait at a rank (the shift starts there). */
+  ensureQueue(id: string, n: number) {
+    const q = this.queues[id];
+    if (!q) return;
+    while (q.length < n) q.push(newWaiting(id, this.vehicle, Math.random));
+  }
+
   /** What the map and radar show: every rank, with a colour for its role right now. */
   pins(): { id: string; name: string; x: number; z: number; color: string; badge: string }[] {
     const dropIds = new Set(this.job.riders.map((r) => r.to));
@@ -481,11 +492,12 @@ export class TaxiService {
       : t
         ? `🅿 روح: <b>${this.nameOf(t.stop)}</b> · ${distTxt}`
         : 'مفيش ركاب دلوقتي — استنى شوية';
-    const html = `<div class="tx-head"><span>${this.vehicle === 'tuktuk' ? '🛺 توكتوك' : '🚐 ميكروباص'}</span><span class="tx-day">النهارده ${money(this.session.total)}</span></div>
+    const short = (id: string) => this.nameOf(id).replace(/^موقف /, '');
+    const strip = `<div class="tx-strip"><span class="tx-go">${this.job.riders.length ? '🏁' : '🅿'} <b>${t ? short(t.stop) : 'استنى شوية'}</b>${t ? ` <em>${distTxt}</em>` : ''}</span><span class="tx-fare">${money(total)}</span><span class="tx-seats">${seatIcons}</span><span class="tx-more-btn" aria-hidden="true">▾</span></div>`;
+    const html = `${strip}<div class="tx-more"><div class="tx-head"><span>${this.vehicle === 'tuktuk' ? '🛺 توكتوك' : '🚐 ميكروباص'}</span><span class="tx-day">النهارده ${money(this.session.total)}</span></div>
       <div class="tx-state">${state}</div>
-      <div class="tx-meter"><small>العداد</small><b>${money(total)}</b><span class="tx-seats">${seatIcons}</span></div>
       ${riderRows ? `<ul class="tx-riders">${riderRows}</ul>` : ''}
-      <div class="tx-foot">${this.session.trips} مشوار · بقشيش ${money(this.session.tips)} · إجمالي ${this.vehicle === 'tuktuk' ? 'التوكتوك' : 'الميكروباص'}: ${money(book.total)}${this.feedback ? `<br>${this.feedback}` : ''}</div>
+      <div class="tx-foot">${this.session.trips} مشوار · بقشيش ${money(this.session.tips)} · إجمالي ${this.vehicle === 'tuktuk' ? 'التوكتوك' : 'الميكروباص'}: ${money(book.total)}${this.feedback ? `<br>${this.feedback}` : ''}</div></div>
       ${this.toast && performance.now() < this.toast.until ? `<div class="tx-toast">${this.toast.text}</div>` : ''}`;
     if (html !== this.hudHtml) {
       this.hud.innerHTML = html;

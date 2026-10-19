@@ -84,6 +84,8 @@ export interface MapState {
   missionId: string | null;
   /** current objective on the avenue, if any */
   objective: { x: number; z: number } | null;
+  /** the road route from the officer to the objective (game coordinates), drawn as a dashed line */
+  route?: { x: number; z: number }[];
   /** district the player has picked in the list */
   picked: string | null;
   /** district the officer is in */
@@ -494,6 +496,22 @@ export class CairoMap {
       );
     }
 
+    // the road route to the objective
+    if (st.route && st.route.length > 1) {
+      ctx.save();
+      ctx.beginPath();
+      st.route.forEach((w, i) => {
+        const q = toScreen(this.view, this.w, this.h, gameToMap(w.x, w.z));
+        if (i) ctx.lineTo(q.x, q.y);
+        else ctx.moveTo(q.x, q.y);
+      });
+      ctx.lineWidth = 4;
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([9, 6]);
+      ctx.strokeStyle = 'rgba(255,210,61,0.95)';
+      ctx.stroke();
+      ctx.restore();
+    }
     // the current objective and the officer
     if (st.objective) {
       const o = toScreen(this.view, this.w, this.h, gameToMap(st.objective.x, st.objective.z));

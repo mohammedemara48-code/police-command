@@ -3602,15 +3602,138 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
   font-weight: 800;
   font-size: 15px;
 }
-@media (max-height: 700px) {
+
+/* taxi HUD: a slim strip (next stop + distance, fare, seats) that opens on tap */
+#street-taxi {
+  pointer-events: auto;
+  cursor: pointer;
+}
+#street-taxi .tx-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+#street-taxi .tx-go {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#street-taxi .tx-go em {
+  font-style: normal;
+  opacity: 0.75;
+  font-weight: 600;
+}
+#street-taxi .tx-fare {
+  color: #ffd23d;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+#street-taxi .tx-strip .tx-seats {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+#street-taxi .tx-more-btn {
+  opacity: 0.6;
+  transition: transform 0.15s;
+}
+#street-taxi.open .tx-more-btn {
+  transform: rotate(180deg);
+}
+#street-taxi .tx-more {
+  display: none;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+#street-taxi.open .tx-more {
+  display: block;
+}
+/* wide screens already show the head with the day total, so only the strip's own fare is kept in one place */
+@media (min-width: 561px) and (min-height: 521px) {
+  #street-taxi .tx-more-btn {
+    display: none;
+  }
+}
+@media (max-width: 560px), (max-height: 520px) {
+  #street-taxi {
+    top: calc(58px + env(safe-area-inset-top));
+    left: 130px;
+    right: 10px;
+    width: auto;
+    padding: 4px 8px;
+    border-radius: 10px;
+  }
   #street-taxi .tx-foot {
     display: none;
   }
 }
-@media (max-width: 560px) {
+@media (max-height: 520px) {
   #street-taxi {
-    left: 10px;
-    width: auto;
-    top: calc(176px + env(safe-area-inset-top));
+    left: auto;
+    right: 10px;
+    width: min(300px, 38vw);
+  }
+}
+
+/* police mission card: smaller on phones so the road stays visible behind it */
+@media (max-width: 560px) and (orientation: portrait) {
+  #street-result .mission-card {
+    padding: 8px 12px 10px !important;
+    max-width: min(360px, 92vw) !important;
+    margin-bottom: 110px !important;
+  }
+  #street-result .mission-card .mc-tag {
+    font-size: 11px !important;
+    padding: 2px 10px !important;
+  }
+  #street-result .mission-card h2 {
+    font-size: 16px !important;
+    margin: 4px 0 2px !important;
+  }
+  #street-result .mission-card > p {
+    font-size: 12px !important;
+    margin: 2px 0 !important;
+    line-height: 1.4 !important;
+  }
+  #street-result .mission-card .mc-steps {
+    margin: 4px 0 !important;
+    gap: 3px !important;
+  }
+  #street-result .mission-card .mc-steps li {
+    font-size: 12px !important;
+    min-height: 0 !important;
+    padding: 2px 6px !important;
+  }
+  #street-result .mission-card .mc-steps span {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 11px !important;
+    line-height: 20px !important;
+  }
+  #street-result .mission-card .mc-help {
+    display: none !important;
+  }
+  #street-result .mission-card .mc-reward {
+    font-size: 12px !important;
+  }
+  #street-result .mission-card button {
+    padding: 8px !important;
+    font-size: 14px !important;
+    margin-top: 4px !important;
+  }
+}
+@media (max-width: 560px) and (orientation: portrait) {
+  body[data-play='street'] #street-obj {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    max-width: 62vw !important;
+  }
+  body[data-play='street'] #street-obj > em {
+    font-size: 13px !important;
   }
 }

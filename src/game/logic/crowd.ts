@@ -10,6 +10,7 @@ import { hash01, type District } from './districts';
 import { inRiver, net, type REdge } from './roadnet';
 import { lots } from './lots';
 import { zebras, type Zebra } from '../world/roadMesh';
+import { cornerFrom, pavementSpan } from './junctions';
 
 export type CrowdQuality = 'low' | 'medium' | 'high';
 export type CrowdKind = 'walk' | 'group' | 'shop' | 'ahwa' | 'vendor' | 'cross' | 'side' | 'promenade';
@@ -203,12 +204,16 @@ export function pickLane(me: { x: number; z: number }, rnd: () => number, o: Pic
     const e = near[Math.floor(rnd() * near.length)]!;
     const lane: Lane = {
       e: e.id,
-      s: 3 + rnd() * (e.len - 6),
+      s: 0,
       dir: rnd() < 0.5 ? 1 : -1,
       rel: rnd() < 0.5 ? 1 : -1,
       off: o.off ?? 0.8 + rnd() * 1.6
     };
     if (e.oneway) lane.dir = 1;
+    // only where this side of the street really has a pavement (junctions cut it back)
+    const span = laneSpan(lane);
+    if (span.s1 - span.s0 < 6) continue;
+    lane.s = span.s0 + 2 + rnd() * (span.s1 - span.s0 - 4);
     const p = lanePose(lane);
     const d = Math.hypot(p.x - me.x, p.z - me.z);
     if (d < o.rMin || d > o.rMax || !fitForPeople(p.x, p.z)) continue;
@@ -217,6 +222,87 @@ export function pickLane(me: { x: number; z: number }, rnd: () => number, o: Pic
     return lane;
   }
   return null;
+}
+
+/** The stretch of the edge where the lane's own side has a pavement (the junction boxes at both ends are cut out). */
+export function laneSpan(l: Lane): { s0: number; s1: number } {
+  const e = net().edges[l.e]!;
+  // pavement side in the edge's frame: right of the walking direction is -1 when walking from a to b
+  return pavementSpan(e, (-l.rel * l.dir) as 1 | -1);
+}
+
+/**
+ * A walker has reached the end of its pavement. At a junction with a pavement corner it turns the corner onto the neighbouring street
+ * (never straight across the carriageway: crossing is only done at the zebras); otherwise it turns back. Between two streets with no
+ * junction box (a bend) it just carries on.
+ */
+export function turnAtEnd(l: Lane, rnd: () => number, sid?: string): Lane {
+  const N = net();
+  const e = N.edges[l.e]!;
+  const nid = l.dir > 0 ? e.b : e.a;
+  const n = N.nodes[nid]!;
+  const back: Lane = { ...l, dir: -l.dir as 1 | -1, rel: -l.rel as 1 | -1 };
+  if (n.edges.length < 3) {
+    const nx = nextLane(l, rnd, sid);
+    const sp = laneSpan(nx);
+    return sp.s1 - sp.s0 >= 2 ? { ...nx, s: Math.max(sp.s0 + 0.4, Math.min(sp.s1 - 0.4, nx.s)) } : back;
+  }
+  if (rnd() < 0.2) return back;
+  const side = (-l.rel * l.dir) as 1 | -1;
+  const to = cornerFrom(nid, e.id, side);
+  if (!to) return back;
+  const t = N.edges[to.edge]!;
+  if (sid && !t.sid.startsWith(sid)) return back;
+  const sp = pavementSpan(t, to.side);
+  if (sp.s1 - sp.s0 < 2) return back;
+  const atStart = t.a === nid;
+  const dir: 1 | -1 = atStart ? 1 : -1;
+  return {
+    e: t.id,
+    s: atStart ? sp.s0 + 0.4 : sp.s1 - 0.4,
+    dir,
+    rel: (-to.side * dir) as 1 | -1,
+    off: l.off
+  };
+}
+
+/** Is the pose ground a person can stand on, and is the short way from one pose to the next clear too? */
+export function clearWalk(from: Pose, to: Pose): boolean {
+  if (!fitForPeople(to.x, to.z)) return false;
+  for (let q = 1; q < 16; q++)
+    if (!fitForPeople(from.x + ((to.x - from.x) * q) / 16, from.z + ((to.z - from.z) * q) / 16)) return false;
+  return true;
+}
+
+/**
+ * Walk a lane forward by `ds` metres along its pavement; at the end of the pavement turn the corner (or back). A step (or corner) that
+ * would put the walker on the roadway, in a building or in the water turns it back instead; `stuck` means even that is no good
+ * (the caller should put the person somewhere else).
+ */
+export function advanceLane(
+  l: Lane,
+  ds: number,
+  rnd: () => number,
+  sid?: string
+): { lane: Lane; turned: boolean; stuck: boolean } {
+  const here = lanePose(l);
+  const sp = laneSpan(l);
+  const s = l.s + l.dir * ds;
+  let next: Lane;
+  let turned = false;
+  if (s > sp.s1 - 0.4 || s < sp.s0 + 0.4) {
+    next = turnAtEnd({ ...l, s: Math.max(sp.s0, Math.min(sp.s1, s)) }, rnd, sid);
+    turned = true;
+  } else next = { ...l, s };
+  if (clearWalk(here, lanePose(next))) return { lane: next, turned, stuck: false };
+  const back: Lane = { ...l, dir: -l.dir as 1 | -1, rel: -l.rel as 1 | -1, s: l.s - l.dir * ds };
+  if (clearWalk(here, lanePose(back))) return { lane: back, turned: false, stuck: false };
+  return { lane: l, turned: false, stuck: true };
+}
+
+/** How far a walker may step sideways towards the carriageway and still be on the pavement. */
+export function dodgeRoom(l: Lane): number {
+  return Math.max(0, l.off - 0.35);
 }
 
 /** The lane a walker takes when it reaches the end of its edge: through the junction on a random street. */
