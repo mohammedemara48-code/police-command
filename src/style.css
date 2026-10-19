@@ -3619,8 +3619,17 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
 #street-taxi .tx-go {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+#street-taxi .tx-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+#street-taxi .tx-go em {
+  flex: none;
 }
 #street-taxi .tx-go em {
   font-style: normal;
@@ -3681,11 +3690,11 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
 }
 
 /* police mission card: smaller on phones so the road stays visible behind it */
-@media (max-width: 560px) and (orientation: portrait) {
+@media (max-width: 560px) and (orientation: portrait), (max-height: 520px) {
   #street-result .mission-card {
     padding: 8px 12px 10px !important;
     max-width: min(360px, 92vw) !important;
-    margin-bottom: 110px !important;
+    max-height: 92vh !important;
   }
   #street-result .mission-card .mc-tag {
     font-size: 11px !important;
@@ -3735,5 +3744,30 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
   }
   body[data-play='street'] #street-obj > em {
     font-size: 13px !important;
+  }
+}
+@media (max-width: 560px) and (orientation: portrait) {
+  #street-result .mission-card {
+    margin-bottom: 110px !important;
+  }
+}
+@media (max-height: 520px) {
+  #street-result .mission-card {
+    max-width: min(520px, 70vw) !important;
+    padding: 6px 12px 8px !important;
+  }
+  #street-result .mission-card h2 {
+    font-size: 15px !important;
+    margin: 2px 0 !important;
+  }
+  #street-result .mission-card .mc-steps li,
+  #street-result .mission-card > p {
+    font-size: 11px !important;
+  }
+  #street-result .mission-card .mc-steps {
+    margin: 2px 0 !important;
+  }
+  #street-result .mission-card .mc-steps li {
+    padding: 1px 6px !important;
   }
 }

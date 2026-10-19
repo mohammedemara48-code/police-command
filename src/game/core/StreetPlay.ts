@@ -124,7 +124,7 @@ import {
 import { TaxiService } from './TaxiService';
 import { isTaxiVehicle, stopSpots, spotOf } from '../logic/taxi';
 import { POLICE_ONLY_BARKS } from '../config/barks';
-import { routeAim } from '../logic/routeAim';
+import { routeAim, roadDistance } from '../logic/routeAim';
 
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
@@ -298,6 +298,10 @@ export class StreetPlay {
     }),
     say: (who, text, look, delay) => this.barks.sayLine(who, text, look, delay),
     status: (t) => this.setStatus(t),
+    routeLength: () => {
+      const p = this.inCar ? this.car.position : this.player.position;
+      return this.msHasTarget ? roadDistance(this.route, p, this.msTarget) : null;
+    },
     target: (at) => {
       if (at) this.msTarget.set(at.x, 0, at.z);
       this.msHasTarget = !!at;
@@ -1500,6 +1504,8 @@ export class StreetPlay {
     const pos = this.inCar ? this.car.position : this.player.position;
     const has = this.msHasTarget && !this.resultEl;
     const dist = has ? Math.hypot(this.msTarget.x - pos.x, this.msTarget.z - pos.z) : 0;
+    // what the cards show is the distance by road
+    const shown = has ? roadDistance(this.route, pos, this.msTarget) : 0;
     if (this.mode !== 'police') {
       if (this.objEl && this.objHtml) {
         this.objEl.innerHTML = '';
@@ -1510,7 +1516,7 @@ export class StreetPlay {
         this.msIdx >= 0
           ? `<span class="timer">⏱ ${Math.max(0, Math.ceil(this.level.limit - this.msTime))}ث</span>`
           : '';
-      const html = `<small>${isPatrol(this.level.id) ? '🚨' : `مهمة ${this.level.id}/${LEVELS.length}`} · ${this.level.title} ${timer}</small><div class="now">➤ ${this.msText || '...'}</div>${has ? `<em>${dist >= 1000 ? `${(dist / 1000).toFixed(1)} كم` : `${Math.round(dist)} م`}</em>` : ''}`;
+      const html = `<small>${isPatrol(this.level.id) ? '🚨' : `مهمة ${this.level.id}/${LEVELS.length}`} · ${this.level.title} ${timer}</small><div class="now">➤ ${this.msText || '...'}</div>${has ? `<em>${shown >= 1000 ? `${(shown / 1000).toFixed(1)} كم` : `${Math.round(shown)} م`}</em>` : ''}`;
       if (html !== this.objHtml) {
         this.objEl.innerHTML = html;
         this.objHtml = html;
@@ -1521,7 +1527,7 @@ export class StreetPlay {
     this.beacon.position.set(this.msTarget.x, 0, this.msTarget.z);
     if (this.arrow) this.arrow.visible = has && step?.t !== 'goto';
     if (this.dirEl) {
-      this.dirEl.dataset.d = `${Math.round(dist)} م`;
+      this.dirEl.dataset.d = `${Math.round(shown)} م`;
       // the arrow points along the road route (a point ~24 m ahead on it), not straight through the buildings
       const aim = has ? this.routeAim(pos) : this.msTarget;
       const v = this.tmpV.set(aim.x, 1.5, aim.z).project(this.camera);
@@ -1535,7 +1541,9 @@ export class StreetPlay {
       } else {
         let ang = Math.atan2(v.y, v.x);
         if (v.z > 1) ang += Math.PI;
-        this.dirEl.style.left = `${50 + Math.cos(ang) * 38}%`;
+        // on a wide landscape screen the touch buttons sit at the right edge, so the edge marker stays further in
+        const reach = this.camera.aspect > 1.3 ? 31 : 38;
+        this.dirEl.style.left = `${50 + Math.cos(ang) * reach}%`;
         this.dirEl.style.top = `${50 - Math.sin(ang) * 30}%`;
         this.dirEl.style.transform = `translate(-50%,-50%) rotate(${-ang}rad)`;
       }

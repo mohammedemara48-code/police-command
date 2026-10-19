@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { routeAim } from '../src/game/logic/routeAim';
+import { routeAim, roadDistance } from '../src/game/logic/routeAim';
 import {
   STOPS,
   stopSpots,
@@ -348,5 +348,19 @@ describe('the objective arrow follows the road route', () => {
   it('points at the destination itself once it is close, or when there is no route', () => {
     expect(routeAim(route, { x: 100, z: 290 }, target)).toEqual(target);
     expect(routeAim([], { x: 0, z: 0 }, target)).toEqual(target);
+  });
+});
+
+describe('distance by road', () => {
+  const route = [
+    { x: 0, z: 0 },
+    { x: 0, z: 100 },
+    { x: 100, z: 100 }
+  ];
+  it('follows the streets, never less than the straight line', () => {
+    const d = roadDistance(route, { x: 0, z: 0 }, { x: 100, z: 100 });
+    expect(d).toBeCloseTo(200, 5);
+    expect(roadDistance([], { x: 0, z: 0 }, { x: 30, z: 40 })).toBe(50);
+    expect(roadDistance(route, { x: 100, z: 100 }, { x: 100, z: 100 })).toBe(0);
   });
 });

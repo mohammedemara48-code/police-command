@@ -51,6 +51,8 @@ export interface TaxiHost {
   status: (text: string) => void;
   /** point the objective arrow, GPS line and edge marker at a place (or nothing) */
   target: (at: { x: number; z: number } | null) => void;
+  /** distance by road to the current target, when it is known */
+  routeLength: () => number | null;
   /** fix a damaged vehicle a little (called after each fare) */
   repair: (amount: number) => void;
   /** a person model's clip */
@@ -472,7 +474,8 @@ export class TaxiService {
     if (!this.hud) return;
     const t = nextTarget(this.job, this.queues, car);
     const spot = t ? spotOf(t.stop) : null;
-    const dist = spot ? Math.hypot(spot.x - car.x, spot.z - car.z) : 0;
+    const straight = spot ? Math.hypot(spot.x - car.x, spot.z - car.z) : 0;
+    const dist = Math.max(straight, spot ? (this.host.routeLength() ?? 0) : 0);
     const distTxt = dist >= 1000 ? `${(dist / 1000).toFixed(1)} كم` : `${Math.round(dist)} م`;
     const total = this.job.riders.reduce((n, r) => n + payout(r).fare, 0);
     const book = sanitizeBook(progress.earnings)[this.vehicle];
@@ -493,7 +496,7 @@ export class TaxiService {
         ? `🅿 روح: <b>${this.nameOf(t.stop)}</b> · ${distTxt}`
         : 'مفيش ركاب دلوقتي — استنى شوية';
     const short = (id: string) => this.nameOf(id).replace(/^موقف /, '');
-    const strip = `<div class="tx-strip"><span class="tx-go">${this.job.riders.length ? '🏁' : '🅿'} <b>${t ? short(t.stop) : 'استنى شوية'}</b>${t ? ` <em>${distTxt}</em>` : ''}</span><span class="tx-fare">${money(total)}</span><span class="tx-seats">${seatIcons}</span><span class="tx-more-btn" aria-hidden="true">▾</span></div>`;
+    const strip = `<div class="tx-strip"><span class="tx-go"><span class="tx-name">${this.job.riders.length ? '🏁' : '🅿'} <b>${t ? short(t.stop) : 'استنى شوية'}</b></span>${t ? `<em>${distTxt}</em>` : ''}</span><span class="tx-fare">${money(total)}</span><span class="tx-seats">${seatIcons}</span><span class="tx-more-btn" aria-hidden="true">▾</span></div>`;
     const html = `${strip}<div class="tx-more"><div class="tx-head"><span>${this.vehicle === 'tuktuk' ? '🛺 توكتوك' : '🚐 ميكروباص'}</span><span class="tx-day">النهارده ${money(this.session.total)}</span></div>
       <div class="tx-state">${state}</div>
       ${riderRows ? `<ul class="tx-riders">${riderRows}</ul>` : ''}

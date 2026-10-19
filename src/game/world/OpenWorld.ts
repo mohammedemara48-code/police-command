@@ -64,8 +64,8 @@ function materials() {
   mats = {
     asphalt: po(surface('asphalt', Q.hdri ? 0x9a9a9a : 0xb8b8b8).clone(), -1),
     // pavements read as light grey paving and the kerb as a paler stone edge, so road / kerb / pavement / ground are four clear tones
-    paving: po(surface('concrete', 0xb4b8be).clone(), -1),
-    kerb: po(new THREE.MeshStandardMaterial({ color: 0xdedad2, roughness: 0.9 }), -2),
+    paving: po(surface('concrete', 0x9c9a96).clone(), -1),
+    kerb: po(new THREE.MeshStandardMaterial({ color: 0xcfcbc2, roughness: 0.9 }), -2),
     paint: po(M.paint.clone(), -3),
     stone: surface('stone', 0xcfc4ae),
     concrete: surface('concrete', 0xcfcac2),
