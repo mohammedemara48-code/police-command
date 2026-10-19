@@ -17,6 +17,7 @@ import {
   subtract,
   area,
   type FPoly,
+  type Fillet,
   type ProfPt
 } from '../logic/roadShape';
 
@@ -186,6 +187,7 @@ export function pourRoads(
   for (const f of shapeOf(N).fillets) {
     if (!inside(f.P.x, f.P.z)) continue;
     for (const t of f.tris) acc.asphalt.flat(FILLET_Y, t.p);
+    filletKerb(acc, f);
   }
   // zebra crossings at junctions
   for (const n of N.nodes) {
@@ -346,11 +348,67 @@ function pourBand(acc: Acc, self: number, ya: number) {
       let w0 = v0,
         w1 = v1;
       if (t !== 'inner') {
+        // the rounded corner draws its own kerb along the whole arc (see filletKerb)
+        if (filletTris(S).has(t.c)) continue;
         const sg = clipSegToPoly(v0, v1, t.c, t.j);
         if (!sg) continue;
         [w0, w1] = sg;
       }
       kerbEdge(acc, q, w0, w1, cx, cz, t === 'inner' ? ya - 0.002 : 0.035);
+    }
+  }
+}
+
+const filletSet = new WeakMap<object, Set<object>>();
+function filletTris(S: ReturnType<typeof shapeOf>) {
+  let m = filletSet.get(S);
+  if (!m) {
+    m = new Set();
+    for (const f of S.fillets) for (const t of f.tris) m.add(t);
+    filletSet.set(S, m);
+  }
+  return m;
+}
+
+/**
+ * The kerb round a junction corner, drawn once along the arc: one face, one top strip of constant width and stripes by
+ * arc length (per-piece kerbs on the short chords came out ragged, each chord with its own stripe phase).
+ */
+function filletKerb(acc: Acc, f: Fillet) {
+  const N = net();
+  const S = shapeOf(N);
+  const own = new Set<object>(f.tris);
+  const K = acc.kerb ?? acc.paving;
+  const a = f.arc;
+  const tot: number[] = [0];
+  for (let k = 1; k < a.length; k++) tot.push(tot[k - 1]! + Math.hypot(a[k]!.x - a[k - 1]!.x, a[k]!.z - a[k - 1]!.z));
+  const L = tot[tot.length - 1]!;
+  // whole stripes, so the corner starts and ends on a stripe edge
+  const n = Math.max(1, Math.round(L / STRIPE));
+  const inward = (v: V2): V2 => {
+    const dx = f.c.x - v.x,
+      dz = f.c.z - v.z;
+    const l = Math.hypot(dx, dz) || 1;
+    return { x: v.x + (dx / l) * KERB_W, z: v.z + (dz / l) * KERB_W };
+  };
+  for (let k = 0; k + 1 < a.length; k++) {
+    const v0 = a[k]!,
+      v1 = a[k + 1]!;
+    const g = Math.floor((((tot[k]! + tot[k + 1]!) / 2) * n) / L);
+    const c = acc.kerb ? (g & 1 ? BLACK : YELLOW) : undefined;
+    const [nx, nz] = outward(v0, v1, f.c.x, f.c.z);
+    // where another street runs into the corner the arc is not a kerb there
+    const mid = { x: (v0.x + v1.x) / 2 - nx * 0.05, z: (v0.z + v1.z) / 2 - nz * 0.05 };
+    if (N.onRoad(mid.x, mid.z, 0)) continue;
+    K.wall(v0.x, v0.z, v1.x, v1.z, FILLET_Y - 0.005, PAVE_Y, nx, nz, c);
+    if (acc.kerb) {
+      const q = [v0, v1, inward(v1), inward(v0)];
+      let pieces: FPoly[] = [{ p: area(q) < 0 ? q.reverse() : q, t: ['cut', 'cut', 'cut', 'cut'] }];
+      const xs = q.map((v) => v.x),
+        zs = q.map((v) => v.z);
+      for (const v of near(S.gridC, Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)))
+        for (const cp of carrPolys(S, v)) if (!own.has(cp)) pieces = pieces.flatMap((r) => subtract(r, cp, false));
+      for (const r of pieces) if (r.p.length >= 3 && fArea(r.p) > 1e-5) acc.kerb.flat(PAVE_Y + 0.004, r.p, c);
     }
   }
 }
@@ -393,7 +451,8 @@ function kerbEdge(acc: Acc, q: FPoly, w0: V2, w1: V2, cx: number, cz: number, y0
         t: ['cut', 'cut', 'cut', 'cut']
       };
       if (area(r.p) < 0) r = { p: r.p.slice().reverse(), t: r.t };
-      for (let k = 0; k < q.p.length && r.p.length >= 3; k++) r = clipHalf(r, q.p[k]!, q.p[(k + 1) % q.p.length]!, true, 'cut');
+      for (let k = 0; k < q.p.length && r.p.length >= 3; k++)
+        r = clipHalf(r, q.p[k]!, q.p[(k + 1) % q.p.length]!, true, 'cut');
       if (r.p.length >= 3 && fArea(r.p) > 1e-5) acc.kerb.flat(PAVE_Y + 0.004, r.p, c);
     }
     s = e;
