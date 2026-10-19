@@ -56,6 +56,22 @@ export function inWedge(N: RoadNet, e: REdge, f: REdge, x: number, z: number): b
   return false;
 }
 
+/**
+ * Short stubs of a big junction cluster (a square, a flyover foot) end at nodes a few metres from each other without sharing one;
+ * their carriageways legitimately merge around those nodes.
+ */
+export function inCluster(N: RoadNet, e: REdge, f: REdge, x: number, z: number): boolean {
+  const r = e.half + f.half + 3;
+  for (const q of [e, f]) {
+    if (q.len > 70) continue;
+    for (const n of [q.a, q.b]) {
+      const nd = N.nodes[n]!;
+      if (Math.hypot(nd.x - x, nd.z - z) < r) return true;
+    }
+  }
+  return false;
+}
+
 /** Roads crossing without a junction, and carriageways lying on top of each other away from a shared junction. */
 export function roadConflicts(N: RoadNet, onlyInfill = false): RoadConflict[] {
   const out: RoadConflict[] = [];
@@ -94,6 +110,7 @@ export function roadConflicts(N: RoadNet, onlyInfill = false): RoadConflict[] {
           if (onlyInfill && !e.infill && !f.infill) continue;
           if (dseg({ x, z }, f.pts[h.i]!, f.pts[h.i + 1]!) >= f.half - 0.3) continue;
           if (inWedge(N, e, f, p.x, p.z)) continue;
+          if (inCluster(N, e, f, p.x, p.z)) continue;
           const key = `o${Math.min(e.id, f.id)}:${Math.max(e.id, f.id)}:${Math.round(x / 6)}:${Math.round(z / 6)}`;
           if (seen.has(key)) continue;
           seen.add(key);

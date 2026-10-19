@@ -82,7 +82,7 @@ describe('ranks', () => {
       expect(Number.isFinite(s.x + s.z + s.px + s.pz), s.stop.id).toBe(true);
       const d = Math.hypot(s.px - s.x, s.pz - s.z);
       expect(d).toBeGreaterThan(1.5);
-      expect(d).toBeLessThan(9);
+      expect(d).toBeLessThan(12);
     }
   });
   it('the named ranks exist: Haram, Dokki, Tahrir, Shubra, Ramses', () => {

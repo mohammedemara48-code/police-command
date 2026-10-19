@@ -39,7 +39,7 @@ export const WORLD_BOX = (() => {
 
 export type RoadClass = 'arterial' | 'collector' | 'local';
 /** Half width of the carriageway, and the pavement beyond it. */
-export const ROAD_HALF: Record<RoadClass, number> = { arterial: 6.4, collector: 4.8, local: 3.9 };
+export const ROAD_HALF: Record<RoadClass, number> = { arterial: 8.6, collector: 6.5, local: 5.3 };
 export const PAVEMENT = 3.2;
 
 export interface Street {

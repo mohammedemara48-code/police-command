@@ -125,6 +125,7 @@ import { TaxiService } from './TaxiService';
 import { isTaxiVehicle, stopSpots, spotOf } from '../logic/taxi';
 import { POLICE_ONLY_BARKS } from '../config/barks';
 import { routeAim, roadDistance } from '../logic/routeAim';
+import { slideAlong, alignYaw, kerbCrashes } from '../logic/kerb';
 
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
@@ -3712,18 +3713,38 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       const nx = C0.x + cmx + Math.sin(this.yaw) * bump * dir,
         nz = C0.z + cmz + Math.cos(this.yaw) * bump * dir;
       if (!onRoad(C0.x + cmx, C0.z + cmz, rp) || !onRoad(nx, nz, noseRp)) {
-        // kerb/building: lose the speed going into it, keep sliding along it
-        if (onRoad(C0.x + cmx, C0.z, rp)) {
-          C0.x += cmx;
-          this.wallHit(0, -Math.sign(cmz));
-          this.speed *= 1 - Math.min(0.9, dt * 2.5);
-        } else if (onRoad(C0.x, C0.z + cmz, rp)) {
-          C0.z += cmz;
-          this.wallHit(-Math.sign(cmx), 0);
-          this.speed *= 1 - Math.min(0.9, dt * 2.5);
-        } else {
-          if (Math.abs(this.speed) > 6) this.crash(Math.abs(this.speed) * 0.6);
-          this.speed *= -0.2;
+        // the edge of the asphalt: slide along it, ease back toward the middle and line up with the street
+        const N = net();
+        const rn = N.nearest(C0.x + cmx, C0.z + cmz, 30);
+        let moved = false;
+        if (rn) {
+          const mid = N.at(rn.e, rn.s);
+          const ix = mid.x - (C0.x + cmx),
+            iz = mid.z - (C0.z + cmz);
+          const il = Math.hypot(ix, iz) || 1;
+          const sl = slideAlong({ x: cmx, z: cmz }, { x: ix / il, z: iz / il }, dt);
+          const tx = C0.x + sl.move.x,
+            tz = C0.z + sl.move.z;
+          if (
+            onRoad(tx, tz, rp) &&
+            onRoad(tx + Math.sin(this.yaw) * bump * dir, tz + Math.cos(this.yaw) * bump * dir, noseRp)
+          ) {
+            C0.x = tx;
+            C0.z = tz;
+            this.speed *= sl.keep;
+            const dy = alignYaw(this.yaw, mid.yaw, sl.head, dt);
+            this.yaw = wrapAngle(this.yaw + dy);
+            this.velYaw = wrapAngle(this.velYaw + dy);
+            this.car.rotation.y = this.yaw;
+            if (sl.head > 0.5 && Math.abs(this.speed) > 8) this.wallHit(-Math.sign(ix), -Math.sign(iz));
+            moved = true;
+          } else if (kerbCrashes(this.speed, sl.head)) {
+            this.crash(Math.abs(this.speed) * 0.5);
+          }
+        }
+        if (!moved) {
+          // wedged: back off gently
+          this.speed *= -0.15;
         }
       } else {
         C0.x += cmx;
@@ -3735,10 +3756,15 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         this.distAcc = 0;
       }
       if (!onRoad(this.car.position.x, this.car.position.z, rp)) {
-        // hit a kerb/building: back out and bleed speed
-        this.car.position.x -= Math.sin(this.yaw) * this.speed * dt * 1.5;
-        this.car.position.z -= Math.cos(this.yaw) * this.speed * dt * 1.5;
-        this.speed *= -0.25;
+        // still over the edge: ease back toward the middle of the road (no bounce)
+        const rn = net().nearest(this.car.position.x, this.car.position.z, 30);
+        if (rn) {
+          const mid = net().at(rn.e, rn.s);
+          const k = Math.min(1, dt * 4);
+          this.car.position.x += (mid.x - this.car.position.x) * k * 0.5;
+          this.car.position.z += (mid.z - this.car.position.z) * k * 0.5;
+        }
+        this.speed *= 1 - Math.min(0.5, dt * 1.5);
       }
       // never stay wedged off the road (pushed by traffic into a block): back to the nearest junction
       this.offRoadT = onRoad(this.car.position.x, this.car.position.z, rp) ? 0 : this.offRoadT + dt;
