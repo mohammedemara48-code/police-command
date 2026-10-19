@@ -12,6 +12,8 @@ import type { OBB } from './collide';
 
 /** Spacing (m) at which a lot's outline is tested against streets and pavements, when placing it and when auditing it. */
 export const OUTLINE_STEP = 0.8;
+/** rows of buildings behind the street frontage (measured: perf equals main with two rows) */
+const BACK_ROWS = 2;
 
 export interface Lot extends OBB {
   id: number;
@@ -308,7 +310,7 @@ export class Lots {
       }
     }
     // courtyards and back rows: blocks are filled behind the street frontage (up to two more rows, with the odd gap left as a yard)
-    for (let row = 0; row < 2; row++) {
+    for (let row = 0; row < BACK_ROWS; row++) {
       const fronts = this.lots.filter((l) => !l.reserved && l.edge >= 0 && (l.row ?? 0) === row);
       for (const f of fronts) {
         const r = rng(f.id * 131 + 7 + row);
