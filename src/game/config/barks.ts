@@ -768,6 +768,7 @@ export const PATROL_MARKINGS = { rear: 'النجدة 122', rearTop: 'شرطة' }
 /** Rear-window slogans painted on the microbuses (picked at spawn, no per-frame cost). */
 export const STICKERS = {
   microbus: [
+    'عم عشم مات\nدا زمن خد و هات',
     'الراكب ملك والباقي زحمة',
     'على قد الفلوس',
     'من عرق جبيني',

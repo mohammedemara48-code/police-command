@@ -273,9 +273,15 @@ describe('patrol car marking and status words', () => {
     expect(PATROL_MARKINGS.rear).toContain('122');
     expect(Object.keys(STICKERS)).toEqual(['microbus', 'tuktuk']);
     for (const s of [...STICKERS.microbus, ...STICKERS.tuktuk]) {
-      expect(s.length, s).toBeLessThanOrEqual(30);
-      expect(words(s), s).toBeLessThanOrEqual(6);
+      // a sticker is one line, or two short lines (rhyming couplets like "عم عشم مات / دا زمن خد و هات")
+      const lines = s.split('\n');
+      expect(lines.length, s).toBeLessThanOrEqual(2);
+      for (const l of lines) {
+        expect(l.length, s).toBeLessThanOrEqual(30);
+        expect(words(l), s).toBeLessThanOrEqual(6);
+      }
     }
+    expect(STICKERS.microbus[0]).toBe('عم عشم مات\nدا زمن خد و هات');
   });
 
   it('damage words are plain and serious', () => {

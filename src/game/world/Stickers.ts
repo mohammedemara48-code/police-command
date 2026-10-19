@@ -16,11 +16,18 @@ function material(text: string, ink: string, fill: string) {
   x.roundRect(4, 4, 504, 104, 26);
   x.fill();
   x.fillStyle = ink;
-  x.font = 'bold 62px Cairo, Arial, sans-serif';
   x.textAlign = 'center';
   x.textBaseline = 'middle';
   x.direction = 'rtl';
-  x.fillText(text, 256, 60, 470);
+  const lines = text.split('\n');
+  if (lines.length > 1) {
+    x.font = 'bold 42px Cairo, Arial, sans-serif';
+    x.fillText(lines[0]!, 256, 34, 470);
+    x.fillText(lines[1]!, 256, 82, 470);
+  } else {
+    x.font = 'bold 62px Cairo, Arial, sans-serif';
+    x.fillText(text, 256, 60, 470);
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   const m = new THREE.MeshBasicMaterial({
