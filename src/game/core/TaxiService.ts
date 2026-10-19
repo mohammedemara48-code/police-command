@@ -786,7 +786,7 @@ export class TaxiService {
                 const look = PERSONA_LOOK[o.persona];
                 const near = o.away >= 1000 ? `${(o.away / 1000).toFixed(1)} كم` : `${Math.round(o.away)} م`;
                 const on = this.accepted === o.id;
-                return `<li class="${on ? 'on' : ''}"><span class="o-who">${look.icon}${o.size > 1 ? `×${o.size}` : ''}</span><span class="o-route"><b>${this.nameOf(o.from).replace(/^موقف /, '')}</b> ← ${this.nameOf(o.to).replace(/^موقف /, '')}<small>${o.km.toFixed(1)} كم · الموقف بعيد عنك ${near}</small></span><span class="o-fare">${money(o.fare)}</span><button type="button" data-acc="${o.id}">${on ? 'اتقبل ✓' : 'اقبل'}</button></li>`;
+                return `<li class="${on ? 'on' : ''}"><span class="o-who">${look.icon}${o.size > 1 ? `×${o.size}` : ''}</span><span class="o-route"><b>${this.nameOf(o.from).replace(/^موقف /, '')}</b> ← ${this.nameOf(o.to).replace(/^موقف /, '')}<small>${o.km.toFixed(1)} كم · الموقف بعيد عنك ${near}${o.same ? ` · +${o.same} زيّها` : ''}</small></span><span class="o-fare">${money(o.fare)}</span><button type="button" data-acc="${o.id}">${on ? 'اتقبل ✓' : 'اقبل'}</button></li>`;
               })
               .join('')
           : `<li class="empty">${seatsFree(this.job) <= 0 ? 'العربية مليانة.' : 'مفيش ركاب مستنيين هنا دلوقتي — جرّب منطقة تانية أو استنى شوية.'}</li>`;

@@ -57,6 +57,8 @@ export interface Offer {
   fare: number;
   /** how far the pickup is from the car (world m) */
   away: number;
+  /** other parties waiting for the very same ride (same pickup, drop-off and size), folded into this row */
+  same: number;
 }
 
 /** The meter fare for a party before comfort, time and tips (matches boardRider). */
@@ -85,9 +87,19 @@ export function tripBoard(queues: Queues, job: TaxiJob, zone: ZoneId, car: { x: 
         persona: w.persona,
         km,
         fare,
-        away: Math.hypot(sp.x - car.x, sp.z - car.z)
+        away: Math.hypot(sp.x - car.x, sp.z - car.z),
+        same: 0
       });
     }
   }
-  return out.sort((a, b) => a.away - b.away || b.fare - a.fare);
+  out.sort((a, b) => a.away - b.away || b.fare - a.fare);
+  // identical rides are one row (×N), so the board doesn't repeat itself
+  const rows = new Map<string, Offer>();
+  for (const o of out) {
+    const k = `${o.from}|${o.to}|${o.size}`;
+    const r = rows.get(k);
+    if (r) r.same++;
+    else rows.set(k, o);
+  }
+  return [...rows.values()];
 }

@@ -3413,7 +3413,6 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     let picked = taxiMap ? (firstRank ?? '') : this.missionId;
     const canvas = el.querySelector('.map-canvas') as HTMLCanvasElement;
     const map = new CairoMap(canvas);
-    map.state.wrenches = workshopSpots().map((w) => ({ x: w.px, z: w.pz, name: w.shop.name }));
     const me = this.inCar ? this.car : this.player;
     const sync = (id: string) => {
       picked = id;
@@ -3424,6 +3423,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       player: { x: me.position.x, z: me.position.z, yaw: this.inCar ? this.car.rotation.y : this.yaw },
       missionId: police ? this.missionId : null,
       pins: taxiMap ? rankPins : undefined,
+      wrenches: workshopSpots().map((w) => ({ x: w.px, z: w.pz, name: w.shop.name })),
       objective: this.msHasTarget ? { x: this.msTarget.x, z: this.msTarget.z } : null,
       route: this.msHasTarget ? this.route : undefined,
       picked: picked,

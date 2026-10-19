@@ -86,13 +86,13 @@ describe('prices and buying', () => {
   });
   it('repairs cost by the percent of damage, and a short wallet fixes only a part', () => {
     expect(repairCost('tuktuk', 0)).toBe(0);
-    expect(repairCost('tuktuk', 40)).toBe(20);
-    expect(repairCost('microbus', 100)).toBe(110);
+    expect(repairCost('tuktuk', 40)).toBe(8);
+    expect(repairCost('microbus', 100)).toBe(40);
     const full = payRepair('tuktuk', 40, 100);
-    expect(full).toEqual({ fixed: 40, cost: 20, wallet: 80 });
-    const part = payRepair('tuktuk', 40, 10);
+    expect(full).toEqual({ fixed: 40, cost: 8, wallet: 92 });
+    const part = payRepair('tuktuk', 40, 4);
     expect(part.fixed).toBe(20);
-    expect(part.cost).toBe(10);
+    expect(part.cost).toBe(4);
     expect(part.wallet).toBe(0);
     expect(payRepair('tuktuk', 40, 0).fixed).toBe(0);
     expect(payRepair('tuktuk', 0, 50)).toEqual({ fixed: 0, cost: 0, wallet: 50 });

@@ -22,25 +22,25 @@ export interface UpgradeInfo {
 }
 
 const COMMON: Record<Exclude<UpgradeId, 'special'>, UpgradeInfo> = {
-  engine: { id: 'engine', icon: '🏎', name: 'موتور أقوى', blurb: 'سرعة قصوى +5% في كل مستوى', base: 450 },
-  accel: { id: 'accel', icon: '⚡', name: 'تسارع', blurb: 'بتطلع بسرعة أكتر +6% في كل مستوى', base: 320 },
-  brakes: { id: 'brakes', icon: '🛑', name: 'فرامل وتماسك', blurb: 'فرامل +7% وتماسك +3% في كل مستوى', base: 260 },
-  armor: { id: 'armor', icon: '🛡', name: 'هيكل متين', blurb: 'الخبطات بتأذي أقل 10% في كل مستوى', base: 380 },
-  comfort: { id: 'comfort', icon: '🛋', name: 'راحة الركاب', blurb: 'الركاب بيصبروا أكتر والبقشيش أحلى', base: 220 }
+  engine: { id: 'engine', icon: '🏎', name: 'موتور أقوى', blurb: 'سرعة قصوى +5% في كل مستوى', base: 150 },
+  accel: { id: 'accel', icon: '⚡', name: 'تسارع', blurb: 'بتطلع بسرعة أكتر +6% في كل مستوى', base: 110 },
+  brakes: { id: 'brakes', icon: '🛑', name: 'فرامل وتماسك', blurb: 'فرامل +7% وتماسك +3% في كل مستوى', base: 90 },
+  armor: { id: 'armor', icon: '🛡', name: 'هيكل متين', blurb: 'الخبطات بتأذي أقل 10% في كل مستوى', base: 130 },
+  comfort: { id: 'comfort', icon: '🛋', name: 'راحة الركاب', blurb: 'الركاب بيصبروا أكتر والبقشيش أحلى', base: 70 }
 };
 
 /** The upgrade that only one vehicle gets. */
 const SPECIAL: Partial<Record<VehicleId, UpgradeInfo>> = {
-  tuktuk: { id: 'special', icon: '🛞', name: 'جنوط عريضة وشاسيه', blurb: 'بيلف أسهل +4% في كل مستوى', base: 300 },
+  tuktuk: { id: 'special', icon: '🛞', name: 'جنوط عريضة وشاسيه', blurb: 'بيلف أسهل +4% في كل مستوى', base: 100 },
   microbus: {
     id: 'special',
     icon: '🧰',
     name: 'مساعدين وتعليق',
     blurb: 'الركاب بيحسوا بالمطبات أقل 10% في كل مستوى',
-    base: 340
+    base: 120
   },
-  private: { id: 'special', icon: '🔧', name: 'ظبط الدركسيون', blurb: 'بيلف أسهل +3% في كل مستوى', base: 280 },
-  police: { id: 'special', icon: '🔧', name: 'ظبط الدركسيون', blurb: 'بيلف أسهل +3% في كل مستوى', base: 280 }
+  private: { id: 'special', icon: '🔧', name: 'ظبط الدركسيون', blurb: 'بيلف أسهل +3% في كل مستوى', base: 95 },
+  police: { id: 'special', icon: '🔧', name: 'ظبط الدركسيون', blurb: 'بيلف أسهل +3% في كل مستوى', base: 95 }
 };
 
 /** What a vehicle's workshop sells, in menu order. */
@@ -93,7 +93,7 @@ export const tipMul = (t: Tuning): number => 1 + 0.06 * t.comfort;
 export const rideMul = (v: VehicleId, t: Tuning): number => (v === 'microbus' ? 1 - 0.1 * t.special : 1);
 
 /** EGP per percent of damage. */
-export const REPAIR_RATE: Record<VehicleId, number> = { tuktuk: 0.5, microbus: 1.1, private: 0.8, police: 0 };
+export const REPAIR_RATE: Record<VehicleId, number> = { tuktuk: 0.2, microbus: 0.4, private: 0.3, police: 0 };
 export const repairCost = (v: VehicleId, damagePct: number): number =>
   Math.max(0, Math.ceil(Math.max(0, Math.min(100, damagePct)) * REPAIR_RATE[v] - 1e-9));
 

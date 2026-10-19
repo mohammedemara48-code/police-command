@@ -71,6 +71,20 @@ describe('the trip board', () => {
   });
 });
 
+describe('the trip board folds identical rides into one row', () => {
+  const car = spotOf('dokki')!;
+  it('shows x2 for two parties going the same way, and keeps different trips apart', () => {
+    const q = emptyQueues();
+    q.dokki = [W(1, 'dokki', 'haram'), W(2, 'dokki', 'haram'), W(3, 'dokki', 'shubra'), W(4, 'dokki', 'haram', 2)];
+    const rows = tripBoard(q, newJob('microbus'), 'dokki', car);
+    expect(rows).toHaveLength(3);
+    const same = rows.find((o) => o.to === 'haram' && o.size === 1)!;
+    expect(same.id).toBe(1);
+    expect(same.same).toBe(1);
+    expect(rows.filter((o) => o.same === 0)).toHaveLength(2);
+  });
+});
+
 describe('choosing the next rank', () => {
   const car = spotOf('dokki')!;
   it('goes to the nearest rank in the zone, not the nearest overall', () => {
