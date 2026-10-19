@@ -56,12 +56,19 @@ export function stepLoco(s: Loco, ix: number, iy: number, camYaw: number, run: b
   return { vx, vz, yaw };
 }
 
-/** Lazy follow camera: drifts behind the player while they move forward-ish, holds when they run toward it. */
-export function followCamYaw(camYaw: number, playerYaw: number, speed: number, dt: number) {
+/**
+ * GTA-style follow camera on foot: while the player moves, the view eases round behind them. Heading away from the
+ * camera it settles in about a second; walking sideways or towards the camera it waits a moment (`moving`, seconds
+ * on the move) and then comes round slowly, so a short strafe or step back never spins the view.
+ */
+export function followCamYaw(camYaw: number, playerYaw: number, speed: number, dt: number, moving = 1) {
   if (speed < 0.6) return camYaw;
   const d = wrapAngle(playerYaw - camYaw);
-  // only drift when heading roughly away from the camera; strafing/backing never spins the view
-  if (Math.abs(d) > 0.9) return camYaw;
-  const rate = 0.9 * Math.min(1, speed / RUN) * dt;
-  return wrapAngle(camYaw + Math.max(-rate, Math.min(rate, d)));
+  const ad = Math.abs(d);
+  const w = ad <= 0.9 ? 1 : moving < 0.7 ? 0 : ad < 2.4 ? 0.16 : 0.1;
+  if (w === 0) return camYaw;
+  const k = (0.7 + 1.6 * Math.min(1, speed / RUN)) * w;
+  const step = d * (1 - Math.exp(-k * dt));
+  const cap = 2.2 * dt;
+  return wrapAngle(camYaw + Math.max(-cap, Math.min(cap, step)));
 }

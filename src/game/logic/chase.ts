@@ -11,7 +11,8 @@ export const GRACE = 6; // s on foot before the chase clock starts
  * capped below the player's top speed, eases off when far (keeps it alive) and brakes for corners.
  */
 export function fleeSpeed(o: { t: number; k: number; playerMax: number; dist: number; turn: number }) {
-  const base = (9.5 + Math.min(4, o.t * 0.15)) * o.k;
+  // scaled with the patrol car (+45%): a getaway driver that the faster police car still has to work for
+  const base = (13.8 + Math.min(5.8, o.t * 0.22)) * o.k;
   let v = Math.min(base, o.playerMax * 0.84);
   if (o.dist > 70)
     v *= 0.8; // rubber band: never just vanish

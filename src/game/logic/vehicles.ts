@@ -113,10 +113,10 @@ export const FEATURES: Record<GameMode, ModeFeatures> = {
 export const featuresOf = (id: VehicleId): ModeFeatures => FEATURES[modeOf(id)];
 
 /** Base top speed (m/s) before the vehicle's own share: the patrol car also gets rank and garage bonuses and the chase boost. */
-export const CIVIL_BASE_SPEED = 18;
+export const CIVIL_BASE_SPEED = 26;
 /** The patrol car's base top speed (m/s) on patrol and in a chase (rank and engine upgrades add to it). */
-export const POLICE_PATROL_SPEED = 16;
-export const POLICE_CHASE_SPEED = 20;
+export const POLICE_PATROL_SPEED = 23;
+export const POLICE_CHASE_SPEED = 29;
 /** Top speed (m/s) of a vehicle before rank / engine bonuses. */
 export function baseTop(v: VehicleId, chasing = false): number {
   return (

@@ -88,7 +88,7 @@ export class NetTraffic {
     c.e = e.id;
     c.s = best!.s;
     c.dir = e.oneway || r() < 0.5 ? 1 : -1;
-    c.cruise = (e.cls === 'arterial' ? 9 : e.cls === 'collector' ? 7.5 : 6) * (0.85 + r() * 0.3);
+    c.cruise = (e.cls === 'arterial' ? 10.5 : e.cls === 'collector' ? 8.6 : 6.9) * (0.85 + r() * 0.3);
     c.v = c.cruise * 0.6;
     c.next = null;
     c.lx = c.lz = c.lyaw = c.px = c.pz = 0;
@@ -247,7 +247,8 @@ export class NetTraffic {
           c.dir = nx.dir;
           c.s = Math.max(0, Math.min(ne.len, nx.dir > 0 ? Math.abs(over) : ne.len - Math.abs(over)));
           c.next = null;
-          c.cruise = (ne.cls === 'arterial' ? 9 : ne.cls === 'collector' ? 7.5 : 6) * (0.85 + this.spawnRnd() * 0.3);
+          c.cruise =
+            (ne.cls === 'arterial' ? 10.5 : ne.cls === 'collector' ? 8.6 : 6.9) * (0.85 + this.spawnRnd() * 0.3);
           // keep the picture continuous: the jump to the new lane fades out
           c.lx = c.lz = c.lyaw = 0;
           this.pose(c, true);

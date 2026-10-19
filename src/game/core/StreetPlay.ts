@@ -7,6 +7,7 @@ import {
   hitDamage,
   smoothSteer,
   camRig,
+  chaseCamYaw,
   topSpeed,
   smokeLevel,
   type CamRig
@@ -477,6 +478,9 @@ export class StreetPlay {
   /** analog joystick (x right, y forward, 0..1) for camera-relative on-foot movement */
   private stick = { x: 0, y: 0 };
   private camYaw = 0;
+  /** the chase camera's eased heading in a car, and seconds on the move on foot (for the follow camera) */
+  private camHead = 0;
+  private footMoving = 0;
   private legPhase = 0;
   private vel = { x: 0, z: 0 };
   private keys = new Set<string>();
@@ -710,7 +714,7 @@ export class StreetPlay {
     if (!this.pullStopped) {
       const v =
         speederSpeed(
-          18 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }),
+          POLICE_CHASE_SPEED * 0.9 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }),
           this.spTurn,
           dist
         ) * (this.inCar ? 1 : 0.3);
@@ -3479,9 +3483,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const target = this.inCar ? this.car : this.player;
     // phones in portrait have a narrow horizontal view: pull the boom back so the officer isn't screen-filling
     const portrait = this.camera.aspect < 0.8 ? 1.35 : 1;
-    const back = (this.inCar ? (this.chasing ? 9.4 : 8.2) : 5.2) * portrait;
+    const back = (this.inCar ? (this.chasing ? 9.4 : 8.2) + (this.rig.pull ?? 0) : 5.2) * portrait;
     const up = (this.inCar ? (this.chasing ? 3.6 : 3.1) : 2.25) * (portrait > 1 ? 1.15 : 1);
-    const yaw = this.inCar ? this.velYaw + wrapAngle(this.car.rotation.y - this.velYaw) * 0.35 : this.camYaw;
+    if (!this.inCar || k >= 1) this.camHead = this.inCar ? this.carCamWant() : this.camYaw;
+    const yaw = this.inCar ? this.camHead : this.camYaw;
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
     // the camera may use the road and the first stretch of pavement, never the building blocks behind it
@@ -3610,7 +3615,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const ph = Math.floor(performance.now() / 420) % 2 === 0;
     for (const l of this.stationLights) l.visible = ph === l.userData.blink > 0;
     const sp = Math.abs(this.speed);
-    audio.engine(this.inCar, Math.min(1, sp / 18));
+    audio.engine(this.inCar, Math.min(1, sp / 26));
     if (this.inCar && sp > 2 && Math.random() < dt * 30) {
       fx.smoke(
         this.group,
@@ -3648,8 +3653,15 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     }
   }
 
+  /** Where the car camera wants to sit: behind the direction of travel, a little towards the nose in a slide. */
+  private carCamWant() {
+    return this.velYaw + wrapAngle(this.car.rotation.y - this.velYaw) * 0.35;
+  }
+
   /** Gameplay camera: chase cam trails a touch and widens the view with speed (rigid and fixed with reduced motion). */
   private followCamera(dt: number) {
+    if (this.inCar)
+      this.camHead = reducedMotion ? this.carCamWant() : chaseCamYaw(this.camHead, this.carCamWant(), this.speed, dt);
     const rig = camRig(this.inCar ? this.speed : 0, this.carMax, reducedMotion, this.rig);
     const fovT = 48 + (this.inCar ? rig.fov : 0);
     this.camFov = reducedMotion ? fovT : this.camFov + (fovT - this.camFov) * Math.min(1, dt * 3);
@@ -3853,7 +3865,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       }
       this.player.rotation.y = this.yaw;
       const spd = Math.hypot(this.vel.x, this.vel.z);
-      this.camYaw = followCamYaw(this.camYaw, this.yaw, spd, dt);
+      this.footMoving = spd > 0.6 ? this.footMoving + dt : 0;
+      this.camYaw = followCamYaw(this.camYaw, this.yaw, spd, dt, this.footMoving);
       if (spd > 0.3) {
         this.stepT -= dt * spd;
         if (this.stepT <= 0) {
@@ -3997,7 +4010,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       t: this.chaseClock,
       k: this.chaseSpeed,
       playerMax: topSpeed(
-        18 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }),
+        POLICE_CHASE_SPEED * 0.9 + rank().car + engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 }),
         this.damage
       ),
       dist,

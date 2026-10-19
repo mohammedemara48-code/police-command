@@ -5,7 +5,7 @@
  * leaves the asphalt or loses speed it should not is reported.
  */
 import { moveCar, ROAD_QUERY, type RoadQuery } from './carMove';
-import { stepCar, smoothSteer } from './driving';
+import { ACCEL, BRAKE, STEER_RATE, stepCar, smoothSteer, steerAuth } from './driving';
 import { wrapAngle } from './locomotion';
 import { net, type REdge, type RoadNet } from './roadnet';
 import { shapeOf } from './roadShape';
@@ -88,12 +88,13 @@ function plan(path: V2[], vmax: number, v: VehicleId): number[] {
     const d = Math.abs(wrapAngle(t2 - t1));
     const L = (Math.hypot(b.x - a.x, b.z - a.z) + Math.hypot(c.x - b.x, c.z - b.z)) / 2;
     const R = d < 1e-4 ? 1e9 : L / d;
-    // the car turns at most ~2.1 rad/s * steer; keep to 55% of it and ~6 m/s² sideways
-    const rate = 2.1 * h.steer * 0.55;
-    lim[i] = Math.min(vmax, Math.max(4, Math.min(rate * R, Math.sqrt(6 * h.grip * R))));
+    // keep to 55% of the yaw rate the wheel gives at that speed, and ~6 m/s² sideways
+    let s = Math.min(vmax, Math.sqrt(6 * h.grip * R));
+    for (let k = 0; k < 8; k++) s = Math.min(s, STEER_RATE * h.steer * 0.55 * Math.max(0.35, steerAuth(s, vmax)) * R);
+    lim[i] = Math.max(4, s);
   }
   // brake in time: v^2 <= v_next^2 + 2 a d
-  const dec = 10 * h.brake;
+  const dec = 10 * (BRAKE / 22) * h.brake;
   for (let i = n - 2; i >= 0; i--) {
     const d = Math.hypot(path[i + 1]!.x - path[i]!.x, path[i + 1]!.z - path[i]!.z);
     lim[i] = Math.min(lim[i]!, Math.sqrt(lim[i + 1]! ** 2 + 2 * dec * d));
@@ -101,7 +102,7 @@ function plan(path: V2[], vmax: number, v: VehicleId): number[] {
   // and speed back up no faster than the car can (acceleration fades towards top speed)
   for (let i = 1; i < n; i++) {
     const d = Math.hypot(path[i]!.x - path[i - 1]!.x, path[i]!.z - path[i - 1]!.z);
-    const a = 10 * h.accel * Math.max(0.3, 1 - (0.65 * lim[i - 1]!) / vmax) * 0.85;
+    const a = ACCEL * h.accel * Math.max(0.3, 1 - (0.65 * lim[i - 1]!) / vmax) * 0.85;
     lim[i] = Math.min(lim[i]!, Math.sqrt(lim[i - 1]! ** 2 + 2 * a * d));
   }
   return lim;

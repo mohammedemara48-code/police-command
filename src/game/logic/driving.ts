@@ -18,8 +18,8 @@ export interface CarInput {
   damage?: number;
 }
 
-export const ACCEL = 10; // m/s²
-export const BRAKE = 22;
+export const ACCEL = 15; // m/s²
+export const BRAKE = 28;
 export const COAST = 3;
 export const REVERSE_MAX = 6;
 export const GRIP = 9; // how fast the velocity heading follows the nose (rad/s-ish)
@@ -27,6 +27,16 @@ export const DRIFT_GRIP = 1.6;
 
 /** Top speed after damage: a wrecked car is slower but never undrivable (60% at 100 damage). */
 export const topSpeed = (max: number, damage = 0) => max * (1 - 0.4 * Math.min(1, Math.max(0, damage) / 100));
+
+/**
+ * Steering authority at |speed| a: none when parked, strongest at mid speed, calmer towards top speed, and above
+ * 20 m/s the wheel gets heavier still, so a flick on a phone stick does not throw the car at 100 km/h.
+ */
+export function steerAuth(a: number, max: number): number {
+  return (Math.min(1, a / 5) * (1 - 0.3 * Math.min(1, a / Math.max(1, max)))) / (1 + Math.max(0, a - 20) / 30);
+}
+/** Yaw rate (rad/s) at full lock and authority 1. */
+export const STEER_RATE = 2.1;
 
 export function stepCar(s: CarState, i: CarInput, dt: number, h: Handling = REFERENCE_HANDLING): CarState {
   const max = topSpeed(i.max, i.damage);
@@ -41,9 +51,9 @@ export function stepCar(s: CarState, i: CarInput, dt: number, h: Handling = REFE
   speed = Math.max(-REVERSE_MAX * h.reverse, Math.min(max, speed));
   // steering: none when parked, strongest at mid speed, a bit calmer at top speed; handbrake swings the tail
   const a = Math.abs(speed);
-  const auth = Math.min(1, a / 5) * (1 - 0.3 * Math.min(1, a / Math.max(1, max)));
+  const auth = steerAuth(a, max);
   const steer = Math.max(-1, Math.min(1, i.steer));
-  yaw = wrapAngle(yaw + steer * 2.1 * h.steer * auth * (i.handbrake ? 1.6 : 1) * Math.sign(speed || 1) * dt);
+  yaw = wrapAngle(yaw + steer * STEER_RATE * h.steer * auth * (i.handbrake ? 1.6 : 1) * Math.sign(speed || 1) * dt);
   const grip = i.handbrake ? DRIFT_GRIP : GRIP * h.grip;
   const d = wrapAngle(yaw - velYaw);
   velYaw = wrapAngle(velYaw + d * Math.min(1, grip * dt));
@@ -85,6 +95,8 @@ export interface CamRig {
   ahead: number;
   /** extra field of view in degrees */
   fov: number;
+  /** metres the boom pulls back at speed */
+  pull?: number;
 }
 /** Chase camera at speed: trails a little more and looks further ahead. Reduced motion: rigid, no zoom. */
 export function camRig(speed: number, max: number, reduced: boolean, out: CamRig): CamRig {
@@ -93,12 +105,25 @@ export function camRig(speed: number, max: number, reduced: boolean, out: CamRig
     out.lag = 0;
     out.ahead = Math.min(4, Math.abs(speed) * 0.25);
     out.fov = 0;
+    out.pull = 0;
     return out;
   }
   out.lag = 0.0008 + a * a * 0.006;
-  out.ahead = Math.min(8, Math.abs(speed) * 0.4);
-  out.fov = Math.min(12, Math.abs(speed) * 0.5);
+  out.ahead = Math.min(10, Math.abs(speed) * 0.4);
+  // the faster you go the wider the view and the further back the camera sits (eased in, so cruising stays calm)
+  out.fov = Math.min(16, Math.abs(speed) * 0.55);
+  out.pull = a * a * 3;
   return out;
+}
+
+/**
+ * The chase camera's heading in a car: eases behind the car (a touch of lag in a turn, then it re-centres), quicker
+ * at speed. Reversing keeps it behind the nose, so it never flips round to face the driver.
+ */
+export function chaseCamYaw(cur: number, target: number, speed: number, dt: number): number {
+  const d = wrapAngle(target - cur);
+  const k = Math.abs(d) > 2.5 ? 9 : 3.2 + Math.min(1, Math.abs(speed) / 20) * 3.5;
+  return wrapAngle(cur + d * (1 - Math.exp(-k * dt)));
 }
 
 /** Hood smoke from damage: 0 below 50%, ramps to 1 at a wreck. */

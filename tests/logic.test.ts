@@ -195,9 +195,18 @@ describe('on-foot locomotion', () => {
   });
   it('camera follows only when moving away from it', () => {
     expect(followCamYaw(0, 0.5, 5, 0.1)).toBeGreaterThan(0);
-    expect(followCamYaw(0, 1.6, 5, 0.1)).toBe(0);
-    expect(followCamYaw(0, 3, 5, 0.1)).toBe(0);
+    // a short strafe or step back holds the view...
+    expect(followCamYaw(0, 1.6, 5, 0.1, 0.2)).toBe(0);
+    expect(followCamYaw(0, 3, 5, 0.1, 0.2)).toBe(0);
+    // ...but keep going that way and it comes round, slowly
+    const side = followCamYaw(0, 1.6, 5, 0.1, 2);
+    expect(side).toBeGreaterThan(0);
+    expect(side).toBeLessThan(0.1);
     expect(followCamYaw(0, 1, 0.2, 0.1)).toBe(0);
+    // running straight on, the view settles behind the player in about a second
+    let c = 0;
+    for (let i = 0; i < 60; i++) c = followCamYaw(c, 0.8, RUN, 1 / 60);
+    expect(c).toBeGreaterThan(0.8 * 0.8);
   });
 });
 
