@@ -7,6 +7,8 @@
  *   sliver     a raised pavement / kerb slab drawn on the drivable carriageway
  *   phantom    asphalt drawn where the car may not drive (an invisible wall on a visible road)
  *   hidden     drivable carriageway that is not drawn as asphalt (the car drives over pavement or ground)
+ *   bare       pavement right at the asphalt edge with no kerb on it (the slab's raw edge shows as a dark wedge, and
+ *              the striped kerb is missing there)
  *
  * Every count must be 0. `spots` clusters the findings (one per ~6 m) for screenshots and debugging.
  */
@@ -16,7 +18,7 @@ import { pourRoads, edgesIn } from './roadMesh';
 import { shapeOf } from '../logic/roadShape';
 import { Soup } from './Soup';
 
-export const EDGE_KINDS = ['gap', 'sliver', 'phantom', 'hidden'] as const;
+export const EDGE_KINDS = ['gap', 'sliver', 'phantom', 'hidden', 'bare'] as const;
 export type EdgeKind = (typeof EDGE_KINDS)[number];
 
 export interface EdgeSpot {
@@ -38,7 +40,9 @@ class TriGrid {
   private cells = new Map<number, number[]>();
   constructor(private tris: number[]) {
     for (let t = 0; t < tris.length; t += 6) {
-      const ar = (tris[t + 2]! - tris[t]!) * (tris[t + 5]! - tris[t + 1]!) - (tris[t + 4]! - tris[t]!) * (tris[t + 3]! - tris[t + 1]!);
+      const ar =
+        (tris[t + 2]! - tris[t]!) * (tris[t + 5]! - tris[t + 1]!) -
+        (tris[t + 4]! - tris[t]!) * (tris[t + 3]! - tris[t + 1]!);
       if (Math.abs(ar) < 1e-9) continue;
       const x0 = Math.min(tris[t]!, tris[t + 2]!, tris[t + 4]!),
         x1 = Math.max(tris[t]!, tris[t + 2]!, tris[t + 4]!);
@@ -89,12 +93,13 @@ function upTris(s: Soup, out: number[]) {
   }
 }
 
-let poured: { asphalt: TriGrid; paving: TriGrid } | null = null;
+let poured: { asphalt: TriGrid; paving: TriGrid; kerb: TriGrid } | null = null;
 /** Pour every chunk of the world (cached). */
 export function pouredSurfaces() {
   if (poured) return poured;
   const asphalt: number[] = [],
-    paving: number[] = [];
+    paving: number[] = [],
+    kerb: number[] = [];
   const C = 128;
   for (let x = Math.floor(WORLD_BOX.x0 / C) * C; x < WORLD_BOX.x1; x += C)
     for (let z = Math.floor(WORLD_BOX.z0 / C) * C; z < WORLD_BOX.z1; z += C) {
@@ -105,8 +110,9 @@ export function pouredSurfaces() {
       upTris(acc.asphalt, asphalt);
       upTris(acc.paving, paving);
       upTris(acc.kerb, paving);
+      upTris(acc.kerb, kerb);
     }
-  poured = { asphalt: new TriGrid(asphalt), paving: new TriGrid(paving) };
+  poured = { asphalt: new TriGrid(asphalt), paving: new TriGrid(paving), kerb: new TriGrid(kerb) };
   return poured;
 }
 export function resetEdgeAudit() {
@@ -157,7 +163,7 @@ export function auditEdges(step = 0.6): EdgeReport {
   const S = pouredSurfaces();
   const G = gardens();
   const inGarden = (x: number, z: number) => G.some((g) => Math.hypot(x - g.c.x, z - g.c.z) < g.r);
-  const counts: Record<EdgeKind, number> = { gap: 0, sliver: 0, phantom: 0, hidden: 0 };
+  const counts: Record<EdgeKind, number> = { gap: 0, sliver: 0, phantom: 0, hidden: 0, bare: 0 };
   const spots: EdgeSpot[] = [];
   const seen = new Map<string, EdgeSpot>();
   let samples = 0;
@@ -190,6 +196,8 @@ export function auditEdges(step = 0.6): EdgeReport {
     if (drive && !asph && !pave) flag('hidden', x, z, edge);
     if (asph && !pave && !driveLoose) flag('phantom', x, z, edge);
     if (!asph && !pave && near(x, z, 0.3)) flag('gap', x, z, edge);
+    // within 0.25 m of the asphalt on the pavement side: that is the kerb's top strip
+    if (pave && !N.onRoad(x, z, 0) && N.onRoad(x, z, 0.25) && !S.kerb.has(x, z)) flag('bare', x, z, edge);
   };
   for (const e of N.edges) {
     const h = e.half;

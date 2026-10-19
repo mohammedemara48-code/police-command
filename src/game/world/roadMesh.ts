@@ -10,7 +10,6 @@ import {
   clipHalf,
   carrPolys,
   TAPER_E,
-  clipSegToPoly,
   fArea,
   near,
   shapeOf,
@@ -29,8 +28,8 @@ const PAINT_Y = 0.07;
 const FILLET_Y = 0.04;
 /** length of one yellow or black kerb stripe (m) */
 export const STRIPE = 1.1;
-const YELLOW: [number, number, number] = [0.93, 0.74, 0.12];
-const BLACK: [number, number, number] = [0.035, 0.035, 0.035];
+const YELLOW: [number, number, number] = [0.97, 0.69, 0.04];
+const BLACK: [number, number, number] = [0.03, 0.03, 0.03];
 /** metres per pavement texture repeat (4 x 4 tiles of 0.5 m) */
 export const TILE_REPEAT = 2;
 
@@ -345,16 +344,22 @@ function pourBand(acc: Acc, self: number, ya: number) {
         acc.paving.wall(v0.x, v0.z, v1.x, v1.z, 0, PAVE_Y, nx, nz);
         continue;
       }
-      let w0 = v0,
-        w1 = v1;
-      if (t !== 'inner') {
-        // the rounded corner draws its own kerb along the whole arc (see filletKerb)
-        if (filletTris(S).has(t.c)) continue;
-        const sg = clipSegToPoly(v0, v1, t.c, t.j);
-        if (!sg) continue;
-        [w0, w1] = sg;
+      if (t === 'inner') {
+        kerbEdge(acc, q, v0, v1, cx, cz, ya - 0.002);
+        continue;
       }
-      kerbEdge(acc, q, w0, w1, cx, cz, t === 'inner' ? ya - 0.002 : 0.035);
+      // the rounded corner draws its own kerb along the whole arc (see filletKerb)
+      if (typeof t !== 'string' && filletTris(S).has(t.c)) continue;
+      // any other edge gets a kerb exactly where drivable asphalt lies just outside it
+      for (const [w0, w1] of asphaltRuns(v0, v1, cx, cz)) kerbEdge(acc, q, w0, w1, cx, cz, 0.035);
+    }
+    for (let k = 0; k < q.p.length; k++) {
+      const t = q.t[k]!;
+      if (t !== 'end' && t !== 'cut' && t !== 'side') continue;
+      const v0 = q.p[k]!,
+        v1 = q.p[(k + 1) % q.p.length]!;
+      if (Math.hypot(v1.x - v0.x, v1.z - v0.z) < 1e-3) continue;
+      for (const [w0, w1] of asphaltRuns(v0, v1, cx, cz)) kerbEdge(acc, q, w0, w1, cx, cz, 0.035);
     }
   }
 }
@@ -384,7 +389,8 @@ function filletKerb(acc: Acc, f: Fillet) {
   for (let k = 1; k < a.length; k++) tot.push(tot[k - 1]! + Math.hypot(a[k]!.x - a[k - 1]!.x, a[k]!.z - a[k - 1]!.z));
   const L = tot[tot.length - 1]!;
   // whole stripes, so the corner starts and ends on a stripe edge
-  const n = Math.max(1, Math.round(L / STRIPE));
+  // short stripes round the corner (at least yellow-black-yellow), so the bend always reads as a striped kerb
+  const n = Math.max(3, Math.round(L / (STRIPE * 0.6)) | 1);
   const inward = (v: V2): V2 => {
     const dx = f.c.x - v.x,
       dz = f.c.z - v.z;
@@ -413,6 +419,52 @@ function filletKerb(acc: Acc, f: Fillet) {
   }
 }
 
+/**
+ * The stretches of a pavement piece's edge v0-v1 that have drivable asphalt right outside them (a kerb belongs
+ * there), found by sampling every 20 cm and refining each end by bisection.
+ */
+function asphaltRuns(v0: V2, v1: V2, cx: number, cz: number): [V2, V2][] {
+  const N = net();
+  const [nx, nz] = outward(v0, v1, cx, cz);
+  const L = Math.hypot(v1.x - v0.x, v1.z - v0.z);
+  const at = (f: number): V2 => ({ x: v0.x + (v1.x - v0.x) * f, z: v0.z + (v1.z - v0.z) * f });
+  const road = (f: number) => {
+    const p = at(f);
+    const x = p.x + nx * 0.08,
+      z = p.z + nz * 0.08;
+    // a rounded corner's asphalt gets its kerb from filletKerb, along the arc
+    return N.onRoad(x, z, 0) && !inFillet(x, z, 0);
+  };
+  const n = Math.max(2, Math.ceil(L / 0.2));
+  const on: boolean[] = [];
+  for (let i = 0; i <= n; i++) on.push(road(i / n));
+  const edge = (a: number, b: number) => {
+    // a is on one side, b on the other: find the switch point
+    const ra = road(a);
+    for (let k = 0; k < 7; k++) {
+      const m = (a + b) / 2;
+      if (road(m) === ra) a = m;
+      else b = m;
+    }
+    return (a + b) / 2;
+  };
+  const out: [V2, V2][] = [];
+  let i = 0;
+  while (i <= n) {
+    if (!on[i]) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j + 1 <= n && on[j + 1]) j++;
+    const f0 = i === 0 ? 0 : edge((i - 1) / n, i / n),
+      f1 = j === n ? 1 : edge(j / n, (j + 1) / n);
+    if ((f1 - f0) * L > 0.02) out.push([at(f0), at(f1)]);
+    i = j + 1;
+  }
+  return out;
+}
+
 function outward(v0: V2, v1: V2, cx: number, cz: number): [number, number] {
   const dx = v1.x - v0.x,
     dz = v1.z - v0.z;
@@ -427,7 +479,7 @@ function outward(v0: V2, v1: V2, cx: number, cz: number): [number, number] {
 }
 
 /** A kerb along w0-w1 of a pavement piece: the face down to the road and the striped top strip (clipped to the piece). */
-function kerbEdge(acc: Acc, q: FPoly, w0: V2, w1: V2, cx: number, cz: number, y0: number) {
+function kerbEdge(acc: Acc, _q: FPoly, w0: V2, w1: V2, cx: number, cz: number, y0: number) {
   const K = acc.kerb ?? acc.paving;
   const [nx, nz] = outward(w0, w1, cx, cz);
   const dx = w1.x - w0.x,
@@ -451,10 +503,81 @@ function kerbEdge(acc: Acc, q: FPoly, w0: V2, w1: V2, cx: number, cz: number, y0
         t: ['cut', 'cut', 'cut', 'cut']
       };
       if (area(r.p) < 0) r = { p: r.p.slice().reverse(), t: r.t };
-      for (let k = 0; k < q.p.length && r.p.length >= 3; k++)
-        r = clipHalf(r, q.p[k]!, q.p[(k + 1) % q.p.length]!, true, 'cut');
-      if (r.p.length >= 3 && fArea(r.p) > 1e-5) acc.kerb.flat(PAVE_Y + 0.004, r.p, c);
+      // the full strip width, minus any carriageway it would cover (clipping it to its own piece left it a sliver
+      // wherever a thin piece runs along the kerb)
+      for (const piece of offCarriage(r)) acc.kerb.flat(PAVE_Y + 0.004, piece.p, c);
     }
     s = e;
   }
+  // round the strip's ends: where the kerb line turns, the next run's strip starts at an angle and would leave a
+  // little wedge of bare slab between the two (the cap stays on the pavement side and off the carriageways)
+  if (acc.kerb && len > 0.05) {
+    const colAt = (d: number) => (Math.floor((p0 + d) / STRIPE + 1e-6) & 1 ? BLACK : YELLOW);
+    for (const [v, d] of [
+      [w0, 0.01],
+      [w1, len - 0.01]
+    ] as const)
+      // (not where the run meets a rounded corner: the arc's own strip carries on there)
+      if (!inFillet(v.x, v.z, KERB_W + 0.1)) kerbCap(acc.kerb, v, nx, nz, colAt(d));
+  }
+}
+
+/** Is (x, z) on a rounded corner's asphalt, or within `pad` of its arc? */
+function inFillet(x: number, z: number, pad: number): boolean {
+  const S = shapeOf(net());
+  const nf = S.fillets.length;
+  for (const id of near(S.gridC, x - pad, z - pad, x + pad, z + pad)) {
+    if (id >= 0 || -1 - id >= nf) continue;
+    const f = S.fillets[-1 - id]!;
+    if (pad > 0) {
+      for (const v of f.arc) if (Math.hypot(v.x - x, v.z - z) < pad) return true;
+      continue;
+    }
+    for (const t of f.tris) {
+      const p = t.p;
+      let sg = 0;
+      for (let k = 0; k < p.length; k++) {
+        const a = p[k]!,
+          b = p[(k + 1) % p.length]!;
+        const c = (b.x - a.x) * (z - a.z) - (b.z - a.z) * (x - a.x);
+        if (c > 1e-9) sg |= 1;
+        if (c < -1e-9) sg |= 2;
+      }
+      if (sg !== 3) return true;
+    }
+  }
+  return false;
+}
+
+/** A disc of kerb-strip radius at a run end, on the pavement side of the run, minus any carriageway it touches. */
+function kerbCap(K: Soup, v: V2, nx: number, nz: number, c: [number, number, number]) {
+  const p: V2[] = [];
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    p.push({ x: v.x + Math.cos(a) * KERB_W, z: v.z + Math.sin(a) * KERB_W });
+  }
+  let r: FPoly = { p, t: p.map(() => 'cut' as const) };
+  if (area(r.p) < 0) r = { p: r.p.slice().reverse(), t: r.t };
+  // keep the side away from the road: the line through v along the run, normal (nx, nz) pointing at the road
+  r = clipHalf(r, v, { x: v.x - nz, z: v.z + nx }, true, 'cut');
+  if (r.p.length >= 3) for (const q of offCarriage(r)) K.flat(PAVE_Y + 0.003, q.p, c);
+}
+
+/** A convex polygon less every carriageway (and fillet, cap, taper) it touches. */
+function offCarriage(r: FPoly): FPoly[] {
+  const S = shapeOf(net());
+  let x0 = Infinity,
+    z0 = Infinity,
+    x1 = -Infinity,
+    z1 = -Infinity;
+  for (const v of r.p) {
+    x0 = Math.min(x0, v.x);
+    x1 = Math.max(x1, v.x);
+    z0 = Math.min(z0, v.z);
+    z1 = Math.max(z1, v.z);
+  }
+  let pieces: FPoly[] = [r];
+  for (const id of near(S.gridC, x0, z0, x1, z1))
+    for (const cp of carrPolys(S, id)) pieces = pieces.flatMap((q) => subtract(q, cp, false));
+  return pieces.filter((q) => q.p.length >= 3 && fArea(q.p) > 1e-5);
 }
