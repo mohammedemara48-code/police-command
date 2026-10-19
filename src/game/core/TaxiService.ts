@@ -52,7 +52,9 @@ import { sheet, type Sheet } from '../ui/Sheet';
 import { CHAT_TOPICS, PERSONA_LOOK, fill, pickTalk, type TalkId } from '../config/taxiTalk';
 import { streetNameSign } from '../world/Egypt';
 import { audio } from '../systems/AudioManager';
+import { VEHICLES } from '../logic/vehicles';
 import type { Speaker } from '../ui/Barks';
+import { driverLine, jamTick, rollMood, type DriverEvent, type DriverMood } from '../logic/driverMood';
 import {
   progress,
   bookEarnings,
@@ -162,6 +164,11 @@ export class TaxiService {
   private lastTalk = new Map<TalkId, number>();
   private complainT = 0;
   private cabSpeaker: Speaker | null = null;
+  private driverSpeaker: Speaker | null = null;
+  private mood: DriverMood = rollMood();
+  private lastMoodLine = '';
+  private jamT = 0;
+  private moodT = 0;
   private active = false;
   private toast: { text: string; until: number } | null = null;
   /** the wallet counter pulses while a coin lands in it */
@@ -205,7 +212,22 @@ export class TaxiService {
     const car = this.host.car();
     this.seated.removeFromParent();
     car.add(this.seated);
-    this.cabSpeaker = { obj: car, role: 'driver', height: 2.2 };
+    // lines come out of the side windows: riders on the kerb side (right), the driver on his own window (left)
+    const hw = VEHICLES[vehicle].hw;
+    const wy = vehicle === 'tuktuk' ? 1.25 : 1.65;
+    this.cabSpeaker = {
+      obj: car,
+      role: 'driver',
+      height: wy,
+      side: { x: -(hw + 0.05), z: vehicle === 'tuktuk' ? -0.3 : -0.4 }
+    };
+    this.driverSpeaker = {
+      obj: car,
+      role: 'driver',
+      height: wy,
+      side: { x: hw + 0.05, z: vehicle === 'tuktuk' ? 0.4 : 1.2 }
+    };
+    this.mood = rollMood();
     this.host.status(
       vehicle === 'tuktuk'
         ? 'بدأت الوردية — الركاب مستنيين في المواقف، افتح 🧾 عشان تختار مشوار.'
@@ -390,6 +412,12 @@ export class TaxiService {
 
     // riders: patience, comfort, complaints
     const gone = tickJob(this.job, dt, { g: g * rideMul(this.vehicle, tune), hit, calm: patienceMul(tune) });
+    if (hit > 3) this.driverEvent('bump', 1300);
+    if (st.inCar) {
+      const j = jamTick(this.jamT, st.speed, dt);
+      this.jamT = j.t;
+      if (j.fire && this.job.riders.length) this.driverEvent('jam');
+    }
     if (hit > 3 && this.job.riders.length) {
       const r = this.job.riders[Math.floor(Math.random() * this.job.riders.length)]!;
       this.cab(r, this.line('crash'));
@@ -520,6 +548,7 @@ export class TaxiService {
         );
     }
     if (paysOnBoarding(this.vehicle)) this.collectSeats(boarded);
+    else this.driverEvent('board', 2400);
     const dests = [...new Set(boarded.map((r) => this.nameOf(r.to).replace(/^موقف /, '')))].join(' و');
     this.host.status(`🙋 ركب ${boarded.reduce((n, r) => n + r.size, 0)} — رايحين ${dests}`);
     this.feedback = `ركب ${boarded.length} من ${this.nameOf(sp.stop.id)}`;
@@ -573,6 +602,9 @@ export class TaxiService {
       this.coin(total, 1100);
     }
     if (p.comfort > 0.85 && p.onTime) this.cab(p.rider, this.line('approve'), 2600);
+    else if (total > 0) this.driverEvent('paid', 2600);
+    // next trip, maybe another mood
+    if (!this.job.riders.length) this.mood = rollMood();
     const paid = p.prepaid ? ` · الكرسي اتدفع ${money(p.prepaid)}` : '';
     this.host.status(
       total > 0
@@ -584,7 +616,17 @@ export class TaxiService {
 
   /** The driver's own line (a microbus driver calls out over his shoulder). */
   private driverSays(text: string, delay = 0) {
-    if (this.cabSpeaker) this.host.say(this.cabSpeaker, text, DRIVER_LOOK, delay);
+    if (this.driverSpeaker) this.host.say(this.driverSpeaker, text, DRIVER_LOOK, delay);
+  }
+
+  /** The driver reacts in today's mood (fed up or joking); at most one line every few seconds. */
+  driverEvent(ev: DriverEvent, delay = 0) {
+    if (!this.active || !this.driverSpeaker) return;
+    const now = performance.now();
+    if (now - this.moodT < 5000) return;
+    this.moodT = now;
+    this.lastMoodLine = driverLine(this.mood, ev, this.lastMoodLine);
+    this.driverSays(this.lastMoodLine, delay);
   }
 
   /** "+12 ج": a coin pops up over the car, then flies into the "في جيبك" counter, with a cash-register clink. */

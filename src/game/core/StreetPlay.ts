@@ -2887,6 +2887,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
 
   private toggleSiren(on = !this.siren) {
     if (on && !VEHICLES[this.vehicle].siren) {
+      // no siren: it's the horn, and the driver says something with it
+      if (this.mode === 'taxi') return this.taxi.driverEvent('honk');
       this.setStatus('العربية دي من غير سارينة — ارجع للدورية لو عايز تفتحها.');
       return;
     }
@@ -3918,7 +3920,10 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         if (closing >= 0) {
           v.px -= this.contact.nx * this.contact.depth * (1 - share);
           v.pz -= this.contact.nz * this.contact.depth * (1 - share);
-          if (closing > 1) v.bumpT = 1.5;
+          if (closing > 1) {
+            v.bumpT = 1.5;
+            if (this.mode === 'taxi') this.taxi.driverEvent('cutoff');
+          }
         }
         if (!v.bumpT && Math.abs(this.speed) > 8 && Math.hypot(v.x - C.x, v.z - C.z) < 3.8) {
           // passing close without touching

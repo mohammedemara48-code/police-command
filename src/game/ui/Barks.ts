@@ -26,6 +26,8 @@ export interface Speaker {
   role: VoiceId;
   /** metres above the object's origin where the bubble tip sits */
   height: number;
+  /** side-window anchor in the object's own frame (metres): the bubble comes out of that window, tail sideways */
+  side?: { x: number; z: number };
 }
 
 interface Bubble {
@@ -169,8 +171,19 @@ export class Barks {
         continue;
       }
       if (t < b.from) continue;
-      b.who.obj.getWorldPosition(this.v);
-      this.v.y += b.who.height;
+      const side = b.who.side;
+      if (side) b.who.obj.localToWorld(this.v.set(side.x, b.who.height, side.z));
+      else {
+        b.who.obj.getWorldPosition(this.v);
+        this.v.y += b.who.height;
+      }
+      // which way the window faces on screen: project a point a bit further out
+      let out = 0;
+      if (side) {
+        const ax = ((this.v.clone().project(cam).x + 1) / 2) * w;
+        const o = b.who.obj.localToWorld(b.tmp.set(side.x * 1.6, b.who.height, side.z)).project(cam);
+        out = ((o.x + 1) / 2) * w - ax;
+      }
       this.v.project(cam);
       const on = this.v.z < 1 && Math.abs(this.v.x) < 1.05 && this.v.y > -1.05 && this.v.y < 1.05;
       if (!on) {
@@ -179,8 +192,14 @@ export class Barks {
       }
       const bw = b.el.offsetWidth,
         bh = b.el.offsetHeight;
-      const bx = Math.min(w - bw / 2 - 6, Math.max(bw / 2 + 6, ((this.v.x + 1) / 2) * w));
-      let by = Math.max(bh + 8, ((1 - this.v.y) / 2) * h);
+      const wx = ((this.v.x + 1) / 2) * w;
+      const dir = side ? (out >= 0 ? 1 : -1) : 0;
+      b.el.classList.toggle('win-r', dir > 0);
+      b.el.classList.toggle('win-l', dir < 0);
+      // a window line sits beside the window (tail pointing back at it), slightly above
+      const sx = dir ? wx + dir * (bw / 2 + 10) : wx;
+      const bx = Math.min(w - bw / 2 - 6, Math.max(bw / 2 + 6, sx));
+      let by = Math.max(bh + 8, ((1 - this.v.y) / 2) * h + (dir ? bh / 2 : 0));
       // two people talking next to each other: stack the bubbles instead of covering one
       for (const o of placed)
         if (Math.abs(o.x - bx) < (o.w + bw) / 2 && Math.abs(o.y - by) < (o.h + bh) / 2 + 4) by = o.y - bh - 8;

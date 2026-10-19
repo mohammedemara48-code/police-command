@@ -3426,6 +3426,24 @@ html.cutscene .toast-stack {
   border-bottom: 0;
   border-top-color: rgba(255, 255, 255, 0.95);
 }
+.street-bubble.win-r::after,
+.street-bubble.win-l::after {
+  top: 50%;
+  bottom: auto;
+  margin: -6px 0 0;
+  border: 6px solid transparent;
+}
+.street-bubble.win-r::after {
+  left: -6px;
+  border-left: 0;
+  border-right-color: rgba(255, 255, 255, 0.95);
+}
+.street-bubble.win-l::after {
+  left: auto;
+  right: -6px;
+  border-right: 0;
+  border-left-color: rgba(255, 255, 255, 0.95);
+}
 .street-bubble b {
   font-size: 10px;
   font-weight: 700;

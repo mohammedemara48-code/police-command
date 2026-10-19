@@ -52,7 +52,12 @@ export class Soup {
   }
 
   /** A flat convex polygon facing up with given texture coordinates (already in repeats). */
-  flatUV(y: number, pts: readonly { x: number; z: number }[], uvs: readonly (readonly [number, number])[], c?: readonly [number, number, number]) {
+  flatUV(
+    y: number,
+    pts: readonly { x: number; z: number }[],
+    uvs: readonly (readonly [number, number])[],
+    c?: readonly [number, number, number]
+  ) {
     if (pts.length < 3) return;
     const a = pts[0]!,
       b = pts[1]!,
