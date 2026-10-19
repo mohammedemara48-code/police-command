@@ -2260,6 +2260,16 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   /** Police missions have their own track; taxi work and free driving share the driving one. */
+  /** How hard the game is going, for the music: chases and speed open more layers and push the tempo. */
+  private musicIntensity() {
+    const spd = this.inCar ? Math.min(1, Math.abs(this.speed) / 22) : 0.1;
+    let i: number;
+    if (this.mode === 'police')
+      i = this.chasing ? 0.7 + 0.3 * spd : this.msIdx >= 0 ? 0.3 + 0.35 * spd : 0.15 + 0.45 * spd;
+    else i = 0.15 + 0.5 * spd + (this.mode === 'taxi' && this.taxi.job.riders.length ? 0.1 : 0);
+    audio.setIntensity(i);
+  }
+
   private playMusic() {
     audio.setTrack(this.mode === 'police' ? 'police' : 'taxi');
   }
@@ -2606,6 +2616,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   disengage() {
     this.stopCutscene();
     this.workshops.stop();
+    audio.setIntensity(0.4);
     this.active = false;
     this.group.visible = false;
     this.root.visible = true;
@@ -3571,6 +3582,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (F.missions) this.tickMission(dt);
     if (F.taxi) this.taxi.update(dt);
     this.workshops.update(dt);
+    this.musicIntensity();
     this.routeT -= dt;
     if (this.routeT <= 0) {
       this.routeT = 0.5;

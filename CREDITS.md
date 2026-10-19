@@ -72,11 +72,11 @@ All CC0. Textures were cropped, made seamless where needed, resized (1k, plus a 
 ## Cairo street plan
 - The open city's streets, Nile banks, islands, squares and bridges are our own hand-drawn longitude/latitude polylines (`src/game/logic/cairo.ts`). No OpenStreetMap or other map data is included, so no ODbL attribution applies. Sources used to place things are listed in `docs/DISTRICT_REFERENCE.md`.
 
-## Music (v2.2)
+## Music (v3, energetic)
 
 All three tracks (menu, taxi / free driving, police missions) are **composed by the game's own code** and synthesised live with WebAudio. There are no samples, no recordings and no third-party tunes, so there is nothing to license:
 
-- `src/game/logic/maqam.ts`: the maqamat (hijaz, rast, bayati as semitone tables with quarter tones), the darbuka rhythms (maqsum, saidi, baladi, ayyub) and a seeded melody generator. Tested in `tests/maqam.test.ts`.
-- `src/game/systems/EgyptianMusic.ts`: the voices (oud, nay, mizmar, darbuka, tabla, drone) and the look-ahead scheduler.
-- Menu: hijaz on D, 76 BPM, soft maqsum on tabla, nay lead. Taxi: rast on C, 108 BPM, maqsum on darbuka, oud lead with a nay echo. Police: hijaz on A, 132 BPM, saidi, mizmar lead with an oud bass.
+- `src/game/logic/maqam.ts`: the maqamat (hijaz, rast, bayati, nahawand as semitone tables with quarter tones), the rhythms on a sixteenth grid (maqsum, saidi, baladi, ayyub, a mahraganat tresillo), the layered groove (dum, tak, ghost notes, clap, riq, dhol, fills), a driving bass, a two-bar hook with ornaments, the bar-by-bar energy curve and the layer thresholds. Tested in `tests/maqam.test.ts`.
+- `src/game/systems/EgyptianMusic.ts`: the voices (oud, nay, mizmar, electro synth, bass, darbuka / tabla / dhol / riq / clap kit) and the look-ahead scheduler. `setIntensity` (chases, speed) opens more layers and raises the tempo up to 10%; `renderOffline` renders a track without a timer for level checks.
+- Menu: rast on D, 112 BPM, maqsum with riq and dhol, oud hook with a nay answer. Taxi: nahawand on C, 124 BPM, mahraganat tresillo kick with claps, electro-synth riff. Police: hijaz on A, 140 BPM, saidi with a hammering dhol, mizmar hook with an oud echo.
 - The scales and rhythms are traditional (public domain knowledge); the generated notes are original output of this code, released under the project licence.

@@ -95,6 +95,13 @@ export class AudioManager {
   }
 
   private wantMusic = false;
+  private intensity = 0.4;
+  /** 0 (cruising) to 1 (chase at speed): opens more layers of the music and nudges the tempo up */
+  setIntensity(v: number) {
+    this.intensity = v;
+    this.music?.setIntensity(v);
+  }
+
   private track: TrackId = 'menu';
   /** 'menu' in the menus, 'taxi' for taxi and free driving, 'police' for police missions. */
   setTrack(t: TrackId) {
@@ -136,6 +143,7 @@ export class AudioManager {
     this.ensure();
     if (!this.ctx || !this.musicGain) return;
     this.music ??= new EgyptianMusic(this.ctx, this.musicGain);
+    this.music.setIntensity(this.intensity);
     this.music.setPaused(this.vol.music < 0.01 || this.vol.master < 0.01);
     this.music.play(this.track);
   }
