@@ -73,7 +73,7 @@ export class Barks {
   }
 
   private put(who: Speaker, text: string, delayMs = 0, look?: { name: string; icon: string; color: string }) {
-    const b = this.bubbles.find((x) => x.who?.obj === who.obj && performance.now() < x.until) ?? this.free();
+    const b = this.bubbles.find((x) => x.who?.obj === who.obj && x.who?.side === who.side && performance.now() < x.until) ?? this.free();
     const voice = look ?? VOICES[who.role];
     b.el.replaceChildren();
     const tag = document.createElement('b');
