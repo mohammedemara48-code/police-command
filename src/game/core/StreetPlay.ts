@@ -76,7 +76,7 @@ import { storyCutscene } from '../../story/cutscenes';
 import { SPEAKERS } from '../../story/speakers';
 import { modelFor, recolorFor, WEAPONS, type WeaponId } from '../logic/character';
 import { onRoad, onFoot, findPath, farNode, followPath } from '../world/City';
-import { drawMiniMap } from '../ui/miniMap';
+import { drawMiniMap, type Dot } from '../ui/miniMap';
 import { setHaze } from '../world/Haze';
 import { buildMonuments } from '../world/monuments';
 import { buildPyramids, setPyramidHaze, updatePyramids } from '../world/Pyramids';
@@ -115,17 +115,18 @@ import {
   VEHICLE_IDS,
   CIVIL_BASE_SPEED,
   FEATURES,
-  handlingOf,
   modeOf,
   sanitizeVehicle,
   type GameMode,
   type VehicleId
 } from '../logic/vehicles';
+import { WorkshopService } from './WorkshopService';
 import { TaxiService } from './TaxiService';
 import { isTaxiVehicle, stopSpots, spotOf } from '../logic/taxi';
 import { POLICE_ONLY_BARKS } from '../config/barks';
 import { routeAim, roadDistance } from '../logic/routeAim';
 import { slideAlong, alignYaw, kerbCrashes } from '../logic/kerb';
+import { tunedHandling, damageMul, workshopSpots } from '../logic/workshop';
 
 import { newCall, type Kind } from '../missions/Dispatch';
 import { Squad } from '../entities/Npc';
@@ -155,6 +156,7 @@ import {
   levelById,
   completeLevel,
   progress,
+  tuningOf,
   rank,
   isPatrol,
   RANKS,
@@ -310,7 +312,22 @@ export class StreetPlay {
     repair: (a) => {
       this.damage = Math.max(0, this.damage - a);
     },
-    idle: (g) => models.setClip(g, 'idle')
+    idle: (g) => models.setClip(g, 'idle'),
+    hour: () => this.hour?.() ?? 12
+  });
+  private workshops: WorkshopService = new WorkshopService({
+    group: this.group,
+    state: () => ({ x: this.car.position.x, z: this.car.position.z, speed: this.speed, inCar: this.inCar }),
+    vehicle: () => this.vehicle,
+    damage: () => this.damage,
+    setDamage: (p) => {
+      this.damage = p;
+    },
+    halt: () => {
+      this.speed = 0;
+    },
+    status: (t) => this.setStatus(t),
+    repairPaid: (c) => this.taxi.repairPaid(c)
   });
   private suspect: THREE.Group | null = null;
   private rain: THREE.Points | null = null;
@@ -2588,6 +2605,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
 
   disengage() {
     this.stopCutscene();
+    this.workshops.stop();
     this.active = false;
     this.group.visible = false;
     this.root.visible = true;
@@ -2623,6 +2641,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     // test hook for automated play-throughs (only with ?autotest)
     if (location.search.includes('autotest')) (window as unknown as { __sp: unknown }).__sp = this;
     this.active = true;
+    this.workshops.start();
     this.group.visible = true;
     this.root.visible = false;
     this.carRoot.visible = false;
@@ -3364,6 +3383,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
             <div class="map-chips">${chips}</div>
             <ul class="map-key">
               <li><i class="k-play"></i>كل الشوارع على الخريطة تقدر تسوق فيها، من الهرم لشبرا ومن الدقي لوسط البلد</li>
+              <li><b class="k-wrench">🔧</b>ورشة: ادخلها بالعربية وصلّح واشتري تطويرات</li>
               <li><i class="k-me"></i>سهم أبيض: مكانك${police ? ' &nbsp; <i class="k-call"></i>أحمر: البلاغ' : ''}</li>
               <li><i class="k-bridge"></i>الكباري بتعدّي النيل فعلاً: قصر النيل والتحرير والجلاء وإمبابة و٦ أكتوبر</li>
               <li class="k-note">الخريطة مرسومة باليد من إحداثيات تقريبية بمقياس مصغّر، مش خريطة رسمية.</li>
@@ -3382,6 +3402,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     let picked = taxiMap ? (firstRank ?? '') : this.missionId;
     const canvas = el.querySelector('.map-canvas') as HTMLCanvasElement;
     const map = new CairoMap(canvas);
+    map.state.wrenches = workshopSpots().map((w) => ({ x: w.px, z: w.pz, name: w.shop.name }));
     const me = this.inCar ? this.car : this.player;
     const sync = (id: string) => {
       picked = id;
@@ -3549,6 +3570,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     }
     if (F.missions) this.tickMission(dt);
     if (F.taxi) this.taxi.update(dt);
+    this.workshops.update(dt);
     this.routeT -= dt;
     if (this.routeT <= 0) {
       this.routeT = 0.5;
@@ -3650,7 +3672,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
 
     if (this.inCar) {
       // arcade handling: analog stick or keys, handbrake (run button / Space) drifts
-      const H = handlingOf(this.vehicle);
+      const H = tunedHandling(this.vehicle, tuningOf(this.vehicle));
       const max =
         this.mode === 'police'
           ? ((this.chasing ? 20 : 16) +
@@ -3975,7 +3997,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (this.hitCool > 0) return;
     const dmg = hitDamage(v);
     if (dmg <= 0) return;
-    this.damage = Math.min(100, this.damage + armoredHit(dmg, progress.garage ?? { engine: 0, armor: 0, brakes: 0 }));
+    const hurt =
+      armoredHit(dmg, progress.garage ?? { engine: 0, armor: 0, brakes: 0 }) * damageMul(tuningOf(this.vehicle));
+    this.damage = Math.min(100, this.damage + Math.max(1, Math.round(hurt)));
     this.hitCool = 0.6;
     audio.sample('crash', Math.min(1, v / 15));
     this.recoil = Math.min(1, v / 10);
@@ -4162,7 +4186,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const ctx = c.getContext('2d');
     if (!ctx) return;
     const pos = this.inCar ? this.car.position : this.player.position;
-    const dots: { x: number; z: number; c: string; r: number }[] = (this.mode === 'taxi' ? [] : places()).map((p) => ({
+    const dots: Dot[] = (this.mode === 'taxi' ? [] : places()).map((p) => ({
       x: p.x,
       z: p.z,
       c: this.mode === 'police' && p.id === this.missionId ? '#ff4d6d' : '#3aa0ff',
@@ -4173,6 +4197,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         dots.push({ x: m.g.position.x, z: m.g.position.z, c: m.state === 'hands' ? '#7dff9a' : '#ff3b3b', r: 2.5 });
     if (this.mode === 'taxi')
       for (const p of this.taxi.pins()) dots.push({ x: p.x, z: p.z, c: p.color, r: p.badge ? 5 : 3 });
+    for (const w of workshopSpots()) dots.push({ x: w.px, z: w.pz, c: '#ff9f1a', r: 5.5, k: 'wrench' });
     if (this.msHasTarget) dots.push({ x: this.msTarget.x, z: this.msTarget.z, c: '#ffd23d', r: 4 });
     if (this.chasing && this.suspect)
       dots.push({ x: this.suspect.position.x, z: this.suspect.position.z, c: '#ffd23d', r: 4 });

@@ -3,6 +3,7 @@
  * the playable stretches of the avenue, the officer and the call markers. Drag to pan, pinch / wheel / buttons to zoom,
  * tap a district pin to pick it.
  */
+import { drawWrench } from './miniMap';
 import {
   BOUNDS,
   ISLANDS,
@@ -76,6 +77,8 @@ export interface MapPin {
 }
 
 export interface MapState {
+  /** workshops, drawn as wrench badges on top of everything else */
+  wrenches?: { x: number; z: number; name: string }[];
   /** when set, these are drawn and picked instead of the four districts */
   pins?: MapPin[];
   /** officer position on the avenue */
@@ -451,6 +454,11 @@ export class CairoMap {
 
     // district pins
     const st = this.state;
+    for (const wr of st.wrenches ?? []) {
+      const s = toScreen(this.view, this.w, this.h, gameToMap(wr.x, wr.z));
+      drawWrench(ctx, s.x, s.y, 9);
+      this.label(wr.name, s.x, s.y + 20, 11, '#ffc266', 0, 4);
+    }
     for (const p of st.pins ?? []) {
       const s = toScreen(this.view, this.w, this.h, gameToMap(p.x, p.z));
       const picked = p.id === st.picked;

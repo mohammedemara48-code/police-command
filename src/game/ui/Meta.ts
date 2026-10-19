@@ -72,6 +72,7 @@ export class Meta {
       this.show(`<h2>إيقاف مؤقت</h2>
         <p>أفضل نتيجة: <b>${this.save.best}</b> · مستوى المسيرة: <b>${this.save.level}</b></p>
         ${settingsHtml()}
+        ${document.documentElement.dataset.mode === 'taxi' ? '<button class="btn ghost" data-a="endshift">🏁 إنهاء الوردية</button>' : ''}
         <button class="btn" data-a="resume">استكمال</button>
         <button class="btn ghost" data-a="restart">القائمة الرئيسية</button>`);
     } else this.hide();
@@ -115,7 +116,12 @@ export class Meta {
     this.el.querySelectorAll<HTMLButtonElement>('[data-a]').forEach((b) =>
       b.addEventListener('click', () => {
         if (b.dataset.a === 'resume') this.setPause(false);
-        else {
+        else if (b.dataset.a === 'endshift') {
+          // clock out of the taxi shift (the summary shows over the street)
+          this.setPause(false);
+          window.dispatchEvent(new CustomEvent('pc:end-shift'));
+        } else {
+          window.dispatchEvent(new CustomEvent('pc:flush-shift'));
           this.persist();
           this.save.shifts += 1;
           store(this.save);

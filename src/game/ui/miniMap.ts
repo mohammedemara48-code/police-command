@@ -6,6 +6,36 @@ export interface Dot {
   z: number;
   c: string;
   r: number;
+  /** a wrench badge (workshop) instead of a plain dot */
+  k?: 'wrench';
+}
+
+/** A small wrench in a round badge, drawn as vector shapes so it never depends on an emoji font. */
+export function drawWrench(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, ring = '#ffffff') {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = '#ff9f1a';
+  ctx.strokeStyle = ring;
+  ctx.lineWidth = Math.max(1.5, r * 0.18);
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.rotate(-Math.PI / 4);
+  ctx.strokeStyle = '#1b1204';
+  ctx.fillStyle = '#1b1204';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = r * 0.28;
+  ctx.beginPath();
+  ctx.moveTo(0, r * 0.62);
+  ctx.lineTo(0, -r * 0.1);
+  ctx.stroke();
+  // the open jaw
+  ctx.lineWidth = r * 0.26;
+  ctx.beginPath();
+  ctx.arc(0, -r * 0.34, r * 0.3, Math.PI * 0.85, Math.PI * 2.15, false);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** Metres from the centre to the edge of the radar. */
@@ -63,9 +93,13 @@ export function drawMiniMap(ctx: CanvasRenderingContext2D, w: number, h: number,
     const d = Math.hypot(dx, dy);
     const rim = Math.min(w, h) / 2 - 6;
     if (d > rim) {
-      if (p.r < 4) continue;
+      if (p.r < 4 || p.k) continue;
       x = w / 2 + (dx / d) * rim;
       y = h / 2 + (dy / d) * rim;
+    }
+    if (p.k === 'wrench') {
+      drawWrench(ctx, x, y, p.r);
+      continue;
     }
     ctx.fillStyle = p.c;
     ctx.beginPath();

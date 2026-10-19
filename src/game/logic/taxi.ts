@@ -237,6 +237,8 @@ export interface Motion {
   g: number;
   /** a collision this step (closing speed, m/s; 0 for none) */
   hit: number;
+  /** share of the patience loss that applies (1 by default; a comfortable car lowers it) */
+  calm?: number;
 }
 
 /** Harsh-driving threshold (m/s²): above this the ride gets rough. */
@@ -248,16 +250,17 @@ export function tickJob(job: TaxiJob, dt: number, m: Motion): Rider[] {
   for (const r of job.riders) {
     r.elapsed += dt;
     const rule = PERSONA_RULES[r.persona];
+    const calm = m.calm ?? 1;
     if (m.g > ROUGH_G) {
       const e = (m.g - ROUGH_G) * dt;
       r.rough += e;
-      r.patience -= e * 6;
+      r.patience -= e * 6 * calm;
     }
     if (m.hit > 3) {
       r.crashes += 1;
       r.patience -= 12 + Math.min(20, m.hit * 1.5);
     }
-    if (r.elapsed > r.expected) r.patience -= (dt * 100 * rule.fuss) / (r.expected * 1.1);
+    if (r.elapsed > r.expected) r.patience -= ((dt * 100 * rule.fuss) / (r.expected * 1.1)) * calm;
   }
   job.riders = job.riders.filter((r) => {
     if (r.patience > 0) return true;
@@ -332,11 +335,23 @@ export function seedQueues(q: Queues, vehicle: TaxiVehicle, rng: Rng) {
 }
 
 /** Someone new turns up at a random rank that is not full, every few seconds. Returns the new passenger. */
-export function restock(q: Queues, vehicle: TaxiVehicle, clock: { t: number }, dt: number, rng: Rng): Waiting | null {
+export function restock(
+  q: Queues,
+  vehicle: TaxiVehicle,
+  clock: { t: number },
+  dt: number,
+  rng: Rng,
+  prefer?: ((stop: string) => boolean) | null
+): Waiting | null {
   clock.t -= dt;
   if (clock.t > 0) return null;
   clock.t = RESTOCK_EVERY * (0.6 + rng() * 0.8);
-  const open = STOPS.filter((s) => q[s.id]!.length < QUEUE_CAP[vehicle]);
+  let open = STOPS.filter((s) => q[s.id]!.length < QUEUE_CAP[vehicle]);
+  // most new passengers turn up in the area the driver chose
+  if (prefer && rng() < 0.7) {
+    const near = open.filter((s) => prefer(s.id));
+    if (near.length) open = near;
+  }
   if (!open.length) return null;
   const s = open[Math.floor(rng() * open.length)]!;
   const w = newWaiting(s.id, vehicle, rng);
@@ -344,11 +359,21 @@ export function restock(q: Queues, vehicle: TaxiVehicle, clock: { t: number }, d
   return w;
 }
 
-/** The rank to head for: the nearest destination of a rider, else (with seats free) the nearest rank with people waiting. */
+/** Which pickups count: a zone filter (ids of the ranks allowed, null for all) and a fare the driver accepted on the trip board. */
+export interface TargetOpts {
+  allow?: ((stop: string) => boolean) | null;
+  accepted?: number | null;
+}
+
+/**
+ * The rank to head for: the nearest destination of a rider, else the rank of the accepted fare, else (with seats free)
+ * the nearest allowed rank with people waiting.
+ */
 export function nextTarget(
   job: TaxiJob,
   q: Queues,
-  car: { x: number; z: number }
+  car: { x: number; z: number },
+  opts: TargetOpts = {}
 ): { stop: string; kind: 'drop' | 'pickup' } | null {
   const d = (id: string) => {
     const s = spotOf(id);
@@ -364,8 +389,15 @@ export function nextTarget(
     }
   }
   if (best) return best;
+  if (opts.accepted != null) {
+    for (const s of STOPS) {
+      const w = q[s.id]!.find((x) => x.id === opts.accepted);
+      if (w && w.size <= seatsFree(job)) return { stop: s.id, kind: 'pickup' };
+    }
+  }
   for (const s of STOPS) {
     if (!q[s.id]!.length || seatsFree(job) <= 0) continue;
+    if (opts.allow && !opts.allow(s.id)) continue;
     const x = d(s.id);
     if (x < bd) {
       bd = x;

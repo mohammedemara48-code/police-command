@@ -14,7 +14,6 @@ import {
   newJob,
   newWaiting,
   nextTarget,
-  payout,
   restock,
   seatsFree,
   seatsUsed,
@@ -23,7 +22,6 @@ import {
   stopSpots,
   tickJob,
   TARIFF,
-  sanitizeBook,
   type Payout,
   type Queues,
   type Rider,
@@ -31,10 +29,36 @@ import {
   type TaxiVehicle,
   type Waiting
 } from '../logic/taxi';
+import {
+  addBailed,
+  addDistance,
+  addRepair,
+  addTrip,
+  finishShift,
+  fuelCharge,
+  hourLabel,
+  newShift,
+  nightBonusOf,
+  type Shift,
+  type ShiftRecord
+} from '../logic/shift';
+import { ALL_ZONES, ZONES, inZone, sanitizeZone, tripBoard, zoneById, type ZoneId } from '../logic/zones';
+import { patienceMul, rideMul, tipMul } from '../logic/workshop';
+import { sheet, type Sheet } from '../ui/Sheet';
 import { CHAT_TOPICS, PERSONA_LOOK, fill, pickTalk, type TalkId } from '../config/taxiTalk';
 import { streetNameSign } from '../world/Egypt';
 import type { Speaker } from '../ui/Barks';
-import { progress, bookEarnings } from '../missions/Levels';
+import {
+  progress,
+  bookEarnings,
+  addWallet,
+  bookShift,
+  setZone,
+  shiftsOf,
+  tuningOf,
+  wallet,
+  setWallet
+} from '../missions/Levels';
 
 const SEEN = 150;
 const HAIL_RANGE = 34;
@@ -53,10 +77,12 @@ export interface TaxiHost {
   target: (at: { x: number; z: number } | null) => void;
   /** distance by road to the current target, when it is known */
   routeLength: () => number | null;
-  /** fix a damaged vehicle a little (called after each fare) */
+  /** fix the vehicle's damage (percent points) */
   repair: (amount: number) => void;
   /** a person model's clip */
   idle: (g: THREE.Object3D) => void;
+  /** the city hour (0-24) */
+  hour: () => number;
 }
 
 interface Standing {
@@ -64,11 +90,36 @@ interface Standing {
   mesh: THREE.Group;
 }
 
-const BEAM = {
-  waiting: { color: 0x3dff9a, opacity: 0.22 },
-  pickup: { color: 0x3dff9a, opacity: 0.55 },
-  drop: { color: 0xffd23d, opacity: 0.6 }
+/** The marker over a rank: a small bobbing arrow, green for people waiting, bigger for the pickup you are heading to, yellow for a drop-off. */
+const MARK = {
+  waiting: { color: 0x3dff9a, scale: 0.75 },
+  pickup: { color: 0x3dff9a, scale: 1.15 },
+  drop: { color: 0xffd23d, scale: 1.15 }
 } as const;
+const ARROW_GEO = new THREE.ConeGeometry(0.42, 0.95, 4);
+ARROW_GEO.rotateX(Math.PI); // point down
+
+/** Where passengers sit in each vehicle (x right, z forward, in the body frame) and how high their seat cushion is. */
+const SEAT_SPOTS: Record<TaxiVehicle, [number, number][]> = {
+  tuktuk: [
+    [-0.26, -0.5],
+    [0.26, -0.5]
+  ],
+  microbus: [
+    [-0.55, 0.45],
+    [0.45, 0.45],
+    [-0.55, -0.7],
+    [0.45, -0.7],
+    [-0.55, -1.85],
+    [0.45, -1.85]
+  ]
+};
+const SEAT_BASE: Record<TaxiVehicle, number> = { tuktuk: 0.75, microbus: 1.0 };
+const SEAT_BODY = new THREE.BoxGeometry(0.42, 0.5, 0.26);
+const SEAT_HEAD = new THREE.SphereGeometry(0.16, 8, 6);
+const SHIRTS = [0x4a6fa5, 0xb55a4a, 0x6b8f71, 0xd8b45a, 0x8a5a9a, 0x3f3f46];
+const SKINS = [0xc99a73, 0xa87550, 0xe0b48e, 0x8d5e3c];
+const nightNow = (hour: number) => hour >= 20 || hour < 5;
 
 const money = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(1)} ج`;
 
@@ -76,11 +127,20 @@ export class TaxiService {
   vehicle: TaxiVehicle = 'tuktuk';
   job: TaxiJob = newJob('tuktuk');
   queues: Queues = emptyQueues();
-  /** earned since the shift started */
-  session = { total: 0, tips: 0, trips: 0, bailed: 0 };
   private clock = { t: 4 };
   private standing = new Map<number, Standing>();
   private beams = new Map<string, THREE.Mesh>();
+  private boarding: { mesh: THREE.Group; t: number; from: THREE.Vector3 }[] = [];
+  private seated = new THREE.Group();
+  private seatKey = '';
+  private lastPos: { x: number; z: number } | null = null;
+  /** off shift: no pickups until the driver clocks in at a rank */
+  onShift = false;
+  shift: Shift = newShift('tuktuk', 12);
+  private sheetEl: Sheet | null = null;
+  /** the fare accepted on the trip board (a waiting party's id) */
+  accepted: number | null = null;
+  zone: ZoneId = ALL_ZONES;
   private signs = new THREE.Group();
   private root = new THREE.Group();
   private hud: HTMLElement | null = null;
@@ -111,30 +171,62 @@ export class TaxiService {
     this.job = newJob(vehicle);
     this.queues = emptyQueues();
     seedQueues(this.queues, vehicle, Math.random);
-    this.session = { total: 0, tips: 0, trips: 0, bailed: 0 };
+    this.zone = sanitizeZone(progress.zone);
+    this.accepted = null;
+    // clocking in happens at the rank where the shift starts
+    this.shift = newShift(vehicle, this.host.hour());
+    this.onShift = true;
     this.clearStanding();
+    this.boarding = [];
     this.boardT = 0;
     this.talkT = 8;
+    this.seatKey = '';
+    this.lastPos = null;
+    this.sheetEl?.close();
     if (!this.active) {
       this.active = true;
       this.buildWorld();
       this.mountHud();
+      window.addEventListener('pc:end-shift', this.onEndShift);
+      window.addEventListener('pc:flush-shift', this.onFlush);
+      window.addEventListener('pagehide', this.onFlush);
     }
     this.root.visible = true;
     this.hudHtml = '';
     const car = this.host.car();
+    this.seated.removeFromParent();
+    car.add(this.seated);
     this.cabSpeaker = { obj: car, role: 'driver', height: 2.2 };
     this.host.status(
       vehicle === 'tuktuk'
-        ? 'اركب التوكتوك وروح أي موقف، الركاب مستنيين.'
-        : 'اركب الميكروباص وروح أي موقف، املا الكراسي ووصّل الركاب.'
+        ? 'بدأت الوردية — الركاب مستنيين في المواقف، افتح 🧾 عشان تختار مشوار.'
+        : 'بدأت الوردية — املا الكراسي ووصّل الركاب، افتح 🧾 عشان تختار مشوار.'
     );
   }
 
+  private onEndShift = () => this.endShift();
+  /** the page is closing or going back to the menu: a shift that did some work is written down */
+  private onFlush = () => {
+    if (this.active && this.onShift && this.shift.trips > 0) {
+      this.closeShift(true);
+      this.shift = newShift(this.vehicle, this.host.hour());
+    }
+  };
+
   stop() {
     if (!this.active) return;
+    // leaving the taxi (another vehicle, back to the menu) closes a shift that did some work
+    if (this.onShift && this.shift.trips > 0) this.closeShift(true);
+    this.onShift = false;
     this.active = false;
+    window.removeEventListener('pc:end-shift', this.onEndShift);
+    window.removeEventListener('pc:flush-shift', this.onFlush);
+    window.removeEventListener('pagehide', this.onFlush);
+    this.sheetEl?.close();
     this.clearStanding();
+    for (const b of this.boarding) b.mesh.removeFromParent();
+    this.boarding = [];
+    this.seated.removeFromParent();
     this.root.visible = false;
     this.hud?.remove();
     this.hud = null;
@@ -153,21 +245,12 @@ export class TaxiService {
         const sign = streetNameSign('موقف', s.stop.name.replace(/^موقف /, ''));
         sign.position.set(s.px, 0, s.pz);
         this.signs.add(sign);
-        const beam = new THREE.Mesh(
-          new THREE.CylinderGeometry(1.1, 1.1, 22, 14, 1, true),
-          new THREE.MeshBasicMaterial({
-            color: 0x3dff9a,
-            transparent: true,
-            opacity: 0.3,
-            depthWrite: false,
-            side: THREE.DoubleSide,
-            fog: false
-          })
-        );
-        beam.position.set(s.x, 11, s.z);
-        beam.visible = false;
-        this.beams.set(s.stop.id, beam);
-        this.signs.add(beam);
+        const arrow = new THREE.Mesh(ARROW_GEO, new THREE.MeshBasicMaterial({ color: 0x3dff9a, fog: false }));
+        arrow.position.set(s.px + (s.x - s.px) * 0.3, 3.0, s.pz + (s.z - s.pz) * 0.3);
+        arrow.userData.baseY = 3.0;
+        arrow.visible = false;
+        this.beams.set(s.stop.id, arrow);
+        this.signs.add(arrow);
       }
       this.root.add(this.signs);
     }
@@ -180,7 +263,13 @@ export class TaxiService {
     el.id = 'street-taxi';
     // small screens start as a slim strip; a tap opens or closes the details
     el.classList.toggle('open', !window.matchMedia('(max-width: 560px), (max-height: 520px)').matches);
-    el.addEventListener('click', () => el.classList.toggle('open'));
+    el.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tx]');
+      if (b) {
+        e.stopPropagation();
+        this.act(b.dataset.tx!);
+      } else el.classList.toggle('open');
+    });
     ui.appendChild(el);
     this.hud = el;
   }
@@ -274,11 +363,24 @@ export class TaxiService {
     const hit = this.hit;
     this.hit = 0;
 
-    restock(this.queues, this.vehicle, this.clock, dt, Math.random);
+    // distance for the shift (fuel is charged by the kilometre)
+    if (this.lastPos && st.inCar && this.onShift) {
+      const d = Math.hypot(me.x - this.lastPos.x, me.z - this.lastPos.z);
+      if (d < 40) this.shift = addDistance(this.shift, d);
+    }
+    this.lastPos = me;
+
+    const zoneOnly = this.zone === ALL_ZONES ? null : (id: string) => inZone(this.zone, id);
+    if (this.onShift) restock(this.queues, this.vehicle, this.clock, dt, Math.random, zoneOnly);
     this.syncStanding(me);
+    this.stepBoarding(dt);
+    // a pickup that someone else took is no longer on offer
+    if (this.accepted !== null && !Object.values(this.queues).some((q) => q.some((w) => w.id === this.accepted)))
+      this.accepted = null;
+    const tune = tuningOf(this.vehicle);
 
     // riders: patience, comfort, complaints
-    const gone = tickJob(this.job, dt, { g, hit });
+    const gone = tickJob(this.job, dt, { g: g * rideMul(this.vehicle, tune), hit, calm: patienceMul(tune) });
     if (hit > 3 && this.job.riders.length) {
       const r = this.job.riders[Math.floor(Math.random() * this.job.riders.length)]!;
       this.cab(r, this.line('crash'));
@@ -290,7 +392,7 @@ export class TaxiService {
       }
     }
     for (const r of gone) {
-      this.session.bailed++;
+      this.shift = addBailed(this.shift);
       this.cab(r, this.line('bail'));
       this.host.status(`😠 ${PERSONA_LOOK[r.persona].name} نزل غضبان قبل ما يوصل — بدون أجرة.`);
       this.feedback = '😠 راكب نزل غضبان';
@@ -299,7 +401,7 @@ export class TaxiService {
     // loading and unloading
     if (st.inCar) {
       this.dropOff(car);
-      this.pickUp(car, dt);
+      if (this.onShift) this.pickUp(car, dt);
     } else this.boardT = 0;
 
     // late riders grumble
@@ -312,7 +414,7 @@ export class TaxiService {
     }
     // people waiting call out when you roll up
     this.hailT -= dt;
-    if (this.hailT <= 0 && st.inCar) {
+    if (this.hailT <= 0 && st.inCar && this.onShift) {
       this.hailT = 6;
       for (const sp of stopSpots()) {
         const q = this.queues[sp.stop.id]!;
@@ -330,11 +432,18 @@ export class TaxiService {
       }
     }
 
-    // beams and the objective arrow
+    // rank markers bob; the objective arrow and the HUD refresh a few times a second
+    const tt = performance.now() / 1000;
+    for (const a of this.beams.values())
+      if (a.visible) {
+        a.position.y = (a.userData.baseY as number) + Math.sin(tt * 4) * 0.22;
+        a.rotation.y += dt * 2;
+      }
     this.hudT -= dt;
     if (this.hudT <= 0) {
       this.hudT = 0.12;
       this.refreshTargets(car);
+      this.syncSeated();
       this.renderHud(car);
     }
   }
@@ -374,6 +483,14 @@ export class TaxiService {
       return;
     }
     this.queues[sp.stop.id] = left;
+    // the people who got in walk to the car and vanish into it
+    for (const w of q.filter((x) => !left.includes(x))) {
+      const stand = this.standing.get(w.id);
+      if (!stand) continue;
+      this.standing.delete(w.id);
+      this.boarding.push({ mesh: stand.mesh, t: 0, from: stand.mesh.position.clone() });
+      if (this.accepted === w.id) this.accepted = null;
+    }
     boarded.forEach((r, i) => {
       this.cab(r, this.line('board', { to: this.nameOf(r.to) }), i * 900);
       if (r.persona === 'cheap' || (r.persona === 'chatty' && Math.random() < 0.4))
@@ -405,44 +522,60 @@ export class TaxiService {
   }
 
   private settle(p: Payout) {
-    this.session.total += p.total;
-    this.session.tips += p.tip;
-    this.session.trips += 1;
+    const tune = tuningOf(this.vehicle);
+    const hour = this.host.hour();
+    const tipExtra = Math.round(p.tip * (tipMul(tune) - 1));
+    const bonus = nightBonusOf(p.fare + p.tip + tipExtra, hour);
+    const total = p.total + tipExtra + bonus;
+    this.shift = addTrip(
+      this.shift,
+      { fare: p.fare, tip: p.tip + tipExtra, stars: p.stars, size: p.rider.size },
+      bonus
+    );
     bookEarnings(this.vehicle, (e) => addPayout(e, p));
-    this.host.repair(25);
+    addWallet(total);
     const stars = '★'.repeat(p.stars) + '☆'.repeat(5 - p.stars);
     const id: TalkId = p.tip > 0 ? 'tipDrop' : p.rider.persona === 'cheap' ? 'cheapDrop' : 'drop';
     this.cab(p.rider, this.line(id), 0);
     if (p.comfort > 0.85 && p.onTime) this.cab(p.rider, this.line('approve'), 1500);
     this.host.status(
-      `💰 +${money(p.total)}${p.tip ? ` (بقشيش ${money(p.tip)})` : ''} · ${stars}${p.onTime ? '' : ' · اتأخرت'}`
+      `💰 +${money(total)}${p.tip + tipExtra ? ` (بقشيش ${money(p.tip + tipExtra)})` : ''}${bonus ? ` · 🌙 +${money(bonus)}` : ''} · ${stars}${p.onTime ? '' : ' · اتأخرت'}`
     );
-    this.toast = { text: `+${money(p.total)}`, until: performance.now() + 2600 };
+    this.toast = { text: `+${money(total)}`, until: performance.now() + 2600 };
     this.feedback = `نزل ${PERSONA_LOOK[p.rider.persona].name} · ${stars}`;
   }
 
   // ---------- markers and HUD
   private refreshTargets(car: { x: number; z: number }) {
-    const t = nextTarget(this.job, this.queues, car);
+    const t = this.onShift ? this.pickTarget(car) : null;
     const dropIds = new Set(this.job.riders.map((r) => r.to));
-    for (const [id, beam] of this.beams) {
-      const waiting = this.queues[id]!.length > 0 && seatsFree(this.job) > 0;
-      const kind = dropIds.has(id)
-        ? 'drop'
-        : t?.stop === id && t.kind === 'pickup'
-          ? 'pickup'
-          : waiting
-            ? 'waiting'
-            : null;
-      beam.visible = !!kind;
+    for (const [id, arrow] of this.beams) {
+      const waiting = this.onShift && this.queues[id]!.length > 0 && seatsFree(this.job) > 0;
+      const kind = !this.onShift
+        ? null
+        : dropIds.has(id)
+          ? 'drop'
+          : t?.stop === id && t.kind === 'pickup'
+            ? 'pickup'
+            : waiting && (this.zone === ALL_ZONES || inZone(this.zone, id))
+              ? 'waiting'
+              : null;
+      arrow.visible = !!kind;
       if (kind) {
-        const m = beam.material as THREE.MeshBasicMaterial;
-        m.color.setHex(BEAM[kind].color);
-        m.opacity = BEAM[kind].opacity;
+        (arrow.material as THREE.MeshBasicMaterial).color.setHex(MARK[kind].color);
+        arrow.scale.setScalar(MARK[kind].scale);
       }
     }
     const spot = t ? spotOf(t.stop) : null;
     this.host.target(spot ? { x: spot.x, z: spot.z } : null);
+  }
+
+  /** Where to head: the drop-off of a rider, the fare accepted on the board, else the nearest pickup in the chosen zone. */
+  private pickTarget(car: { x: number; z: number }) {
+    return nextTarget(this.job, this.queues, car, {
+      allow: this.zone === ALL_ZONES ? null : (id) => inZone(this.zone, id),
+      accepted: this.accepted
+    });
   }
 
   /** Make sure at least `n` people wait at a rank (the shift starts there). */
@@ -470,16 +603,17 @@ export class TaxiService {
     });
   }
 
+  // ---------- the cab HUD
   private renderHud(car: { x: number; z: number; speed: number }) {
     if (!this.hud) return;
-    const t = nextTarget(this.job, this.queues, car);
+    const t = this.onShift ? this.pickTarget(car) : null;
     const spot = t ? spotOf(t.stop) : null;
     const straight = spot ? Math.hypot(spot.x - car.x, spot.z - car.z) : 0;
     const dist = Math.max(straight, spot ? (this.host.routeLength() ?? 0) : 0);
     const distTxt = dist >= 1000 ? `${(dist / 1000).toFixed(1)} كم` : `${Math.round(dist)} م`;
-    const total = this.job.riders.reduce((n, r) => n + payout(r).fare, 0);
-    const book = sanitizeBook(progress.earnings)[this.vehicle];
     const seats = TARIFF[this.vehicle].seats;
+    const sh = this.shift;
+    const shiftTotal = sh.fares + sh.tips + sh.bonus;
     const riderRows = this.job.riders
       .map((r) => {
         const pct = Math.max(0, Math.min(100, Math.round(r.patience)));
@@ -490,21 +624,248 @@ export class TaxiService {
       .join('');
     const used = seatsUsed(this.job);
     const seatIcons = Array.from({ length: seats }, (_, i) => (i < used ? '🧍' : '💺')).join('');
-    const state = this.job.riders.length
-      ? `🏁 وصّل: <b>${spot ? this.nameOf(t!.stop) : ''}</b> · ${distTxt}`
-      : t
-        ? `🅿 روح: <b>${this.nameOf(t.stop)}</b> · ${distTxt}`
-        : 'مفيش ركاب دلوقتي — استنى شوية';
     const short = (id: string) => this.nameOf(id).replace(/^موقف /, '');
-    const strip = `<div class="tx-strip"><span class="tx-go"><span class="tx-name">${this.job.riders.length ? '🏁' : '🅿'} <b>${t ? short(t.stop) : 'استنى شوية'}</b></span>${t ? `<em>${distTxt}</em>` : ''}</span><span class="tx-fare">${money(total)}</span><span class="tx-seats">${seatIcons}</span><span class="tx-more-btn" aria-hidden="true">▾</span></div>`;
-    const html = `${strip}<div class="tx-more"><div class="tx-head"><span>${this.vehicle === 'tuktuk' ? '🛺 توكتوك' : '🚐 ميكروباص'}</span><span class="tx-day">النهارده ${money(this.session.total)}</span></div>
+    const zoneName = this.zone === ALL_ZONES ? 'كل المناطق' : (zoneById(this.zone)?.name ?? '');
+    const mine = this.accepted !== null && t?.kind === 'pickup';
+    const go = !this.onShift
+      ? '<span class="tx-name">⏸ <b>بره الوردية</b></span>'
+      : `<span class="tx-name">${this.job.riders.length ? '🏁' : mine ? '✅' : '🅿'} <b>${t ? short(t.stop) : this.zone === ALL_ZONES ? 'استنى شوية' : 'مفيش ركاب هنا'}</b></span>${t ? `<em>${distTxt}</em>` : ''}`;
+    const strip = `<div class="tx-strip"><button type="button" class="tx-bd" data-tx="${this.onShift ? 'board' : 'start'}" aria-label="${this.onShift ? 'الرحلات' : 'ابدأ وردية'}">${this.onShift ? '🧾' : '▶'}</button><span class="tx-go">${go}</span><span class="tx-fare">${money(shiftTotal)}</span><span class="tx-seats">${seatIcons}</span><span class="tx-more-btn" aria-hidden="true">▾</span></div>`;
+    const hour = this.host.hour();
+    const state = !this.onShift
+      ? 'اضغط ▶ عند أي موقف عشان تبدأ وردية جديدة.'
+      : this.job.riders.length
+        ? `🏁 وصّل: <b>${spot ? this.nameOf(t!.stop) : ''}</b> · ${distTxt}`
+        : t
+          ? `${mine ? '✅ مشوارك' : '🅿 روح'}: <b>${this.nameOf(t.stop)}</b> · ${distTxt}`
+          : this.zone === ALL_ZONES
+            ? 'مفيش ركاب دلوقتي — استنى شوية'
+            : `مفيش ركاب في ${zoneName} دلوقتي — غيّر المنطقة أو استنى`;
+    const more = `<div class="tx-more"><div class="tx-head"><span>${this.vehicle === 'tuktuk' ? '🛺 توكتوك' : '🚐 ميكروباص'} · ${sh.night ? '🌙 وردية ليلية' : '☀️ وردية نهارية'}</span><span class="tx-day">${hourLabel(hour)}</span></div>
       <div class="tx-state">${state}</div>
       ${riderRows ? `<ul class="tx-riders">${riderRows}</ul>` : ''}
-      <div class="tx-foot">${this.session.trips} مشوار · بقشيش ${money(this.session.tips)} · إجمالي ${this.vehicle === 'tuktuk' ? 'التوكتوك' : 'الميكروباص'}: ${money(book.total)}${this.feedback ? `<br>${this.feedback}` : ''}</div></div>
-      ${this.toast && performance.now() < this.toast.until ? `<div class="tx-toast">${this.toast.text}</div>` : ''}`;
+      <div class="tx-foot">${sh.trips} مشوار · ${sh.km.toFixed(1)} كم · بقشيش ${money(sh.tips)} · 📍 ${zoneName} · محفظتك ${money(Math.round(wallet()))}${nightNow(hour) ? ' · 🌙 +15%' : ''}${this.feedback ? `<br>${this.feedback}` : ''}</div>
+      <div class="tx-btns"><button type="button" data-tx="board">🧾 الرحلات</button><button type="button" data-tx="history">📒 الورديات</button>${this.onShift ? '<button type="button" data-tx="end" class="end">🏁 إنهاء الوردية</button>' : '<button type="button" data-tx="start" class="go">▶ ابدأ وردية</button>'}</div></div>`;
+    const html = `${strip}${more}${this.toast && performance.now() < this.toast.until ? `<div class="tx-toast">${this.toast.text}</div>` : ''}`;
     if (html !== this.hudHtml) {
       this.hud.innerHTML = html;
       this.hudHtml = html;
     }
+  }
+
+  private act(what: string) {
+    if (what === 'board') this.openBoard();
+    else if (what === 'history') this.openHistory(this.vehicle);
+    else if (what === 'end') this.endShift();
+    else if (what === 'start') this.clockIn();
+  }
+
+  // ---------- shifts
+  /** Clock in: only at a rank. */
+  clockIn(): boolean {
+    if (this.onShift) return true;
+    const st = this.host.state();
+    const car = { x: st.x, z: st.z, speed: st.speed };
+    if (!stopSpots().some((s) => atSpot(car, s))) {
+      this.host.status('📍 روح أي موقف الأول وقف عنده عشان تبدأ الوردية.');
+      return false;
+    }
+    this.shift = newShift(this.vehicle, this.host.hour());
+    this.onShift = true;
+    this.accepted = null;
+    this.sheetEl?.close();
+    this.hudHtml = '';
+    this.host.status(`▶ بدأت وردية ${this.shift.night ? 'ليلية 🌙 (الأجرة +15%)' : 'نهارية ☀️'}.`);
+    return true;
+  }
+
+  /** Clock out from the HUD or the menu. Riders on board have to be dropped first. */
+  endShift(): ShiftRecord | null {
+    if (!this.active || !this.onShift) return null;
+    if (this.job.riders.length) {
+      this.host.status('🙋 وصّل الركاب اللي معاك الأول وبعدين أنهي الوردية.');
+      return null;
+    }
+    const rec = this.closeShift(false);
+    this.openSummary(rec);
+    return rec;
+  }
+
+  /** Write the shift down (history, fuel charge) and go off shift. */
+  private closeShift(quiet: boolean): ShiftRecord {
+    const rec = finishShift(this.shift, this.host.hour());
+    setWallet(Math.max(0, wallet() - fuelCharge(rec)));
+    bookShift(this.vehicle, rec);
+    this.onShift = false;
+    this.accepted = null;
+    this.host.target(null);
+    for (const a of this.beams.values()) a.visible = false;
+    this.hudHtml = '';
+    if (!quiet) this.feedback = '';
+    return rec;
+  }
+
+  /** The workshop took money for repairs: it counts against this shift. */
+  repairPaid(cost: number) {
+    if (this.onShift) this.shift = addRepair(this.shift, cost);
+  }
+
+  private openSummary(rec: ShiftRecord) {
+    const stars = (n: number) => `${'★'.repeat(Math.round(n))}${'☆'.repeat(5 - Math.round(n))}`;
+    const row = (k: string, v: string, cls = '') => `<div class="tx-row ${cls}"><span>${k}</span><b>${v}</b></div>`;
+    const html = `<h2>🏁 خلصت الوردية ${rec.night ? '🌙' : '☀️'}</h2>
+      <p class="tx-sub">${this.vehicle === 'tuktuk' ? 'توكتوك' : 'ميكروباص'} · ${hourLabel(rec.startHour)} → ${hourLabel(rec.endHour)}${rec.minutes ? ` · ${rec.minutes} دقيقة لعب` : ''}</p>
+      <div class="tx-grid">
+        ${row('المشاوير', `${rec.trips} (${rec.riders} راكب)`)}
+        ${row('المسافة', `${rec.km.toFixed(1)} كم`)}
+        ${row('الأجرة', money(rec.fares))}
+        ${row('البقشيش', money(rec.tips))}
+        ${rec.bonus ? row('زيادة الليل 🌙', money(rec.bonus)) : ''}
+        ${row('البنزين', `− ${money(rec.fuel)}`, 'minus')}
+        ${row('التصليحات', `− ${money(rec.repairs)}`, 'minus')}
+        ${row('أحسن مشوار', money(rec.best))}
+        ${row('التقييم', rec.trips ? `${stars(rec.rating)} ${rec.rating.toFixed(1)}` : '—')}
+        ${rec.bailed ? row('ركاب نزلوا زعلانين', String(rec.bailed), 'minus') : ''}
+      </div>
+      <div class="tx-net ${rec.net >= 0 ? 'plus' : 'minus'}"><span>الصافي</span><b>${rec.net >= 0 ? '+' : '−'}${money(Math.abs(rec.net))}</b></div>
+      <div class="tx-actions"><button type="button" data-a="new">▶ وردية جديدة</button><button type="button" data-a="hist">📒 سجل الورديات</button><button type="button" data-close>تمام</button></div>`;
+    this.sheetEl?.close();
+    this.sheetEl = sheet('tx-summary', html, (card, sh) => {
+      card.querySelector('[data-a="new"]')?.addEventListener('click', () => {
+        if (this.clockIn()) sh.close();
+      });
+      card.querySelector('[data-a="hist"]')?.addEventListener('click', () => this.openHistory(this.vehicle));
+    });
+  }
+
+  openHistory(v: TaxiVehicle) {
+    const list = shiftsOf(v);
+    const stars = (n: number) => (n ? `★ ${n.toFixed(1)}` : '—');
+    const rows = list.length
+      ? list
+          .map((r) => {
+            const d = new Date(r.at);
+            return `<li><span class="h-k">${r.night ? '🌙' : '☀️'}</span><span class="h-d">${d.getDate()}/${d.getMonth() + 1} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}</span><span class="h-t">${r.trips} مشوار · ${r.km.toFixed(1)} كم</span><span class="h-r">${stars(r.rating)}</span><b class="${r.net >= 0 ? 'plus' : 'minus'}">${r.net >= 0 ? '+' : '−'}${money(Math.abs(r.net))}</b></li>`;
+          })
+          .join('')
+      : '<li class="empty">لسه ما خلصتش ولا وردية.</li>';
+    const total = list.reduce((n, r) => n + r.net, 0);
+    const html = `<h2>📒 سجل الورديات</h2>
+      <div class="tx-tabs"><button type="button" data-v="tuktuk" class="${v === 'tuktuk' ? 'on' : ''}">🛺 توكتوك</button><button type="button" data-v="microbus" class="${v === 'microbus' ? 'on' : ''}">🚐 ميكروباص</button></div>
+      <p class="tx-sub">آخر ${list.length} وردية · الصافي الكلي ${total >= 0 ? '+' : '−'}${money(Math.abs(Math.round(total)))}</p>
+      <ul class="tx-hist">${rows}</ul>
+      <div class="tx-actions"><button type="button" data-close>تمام</button></div>`;
+    this.sheetEl?.close();
+    this.sheetEl = sheet('tx-summary', html, (card) => {
+      card
+        .querySelectorAll<HTMLElement>('[data-v]')
+        .forEach((b) => b.addEventListener('click', () => this.openHistory(b.dataset.v as TaxiVehicle)));
+    });
+  }
+
+  // ---------- the trip board
+  openBoard() {
+    const render = () => {
+      const car = this.host.state();
+      const offers = this.onShift ? tripBoard(this.queues, this.job, this.zone, car) : [];
+      const sig = `${this.zone}|${this.onShift}|${this.accepted}|${seatsFree(this.job)}|${offers.map((o) => o.id).join(',')}`;
+      return { offers, sig };
+    };
+    const html = (offers: ReturnType<typeof render>['offers']) => {
+      const chips = [{ id: ALL_ZONES, name: 'كل المناطق' }, ...ZONES]
+        .map(
+          (z) =>
+            `<button type="button" class="chip ${z.id === this.zone ? 'on' : ''}" data-zone="${z.id}">${z.name}</button>`
+        )
+        .join('');
+      const rows = !this.onShift
+        ? '<li class="empty">انت بره الوردية — اضغط ▶ عند موقف عشان تبدأ.</li>'
+        : offers.length
+          ? offers
+              .map((o) => {
+                const look = PERSONA_LOOK[o.persona];
+                const near = o.away >= 1000 ? `${(o.away / 1000).toFixed(1)} كم` : `${Math.round(o.away)} م`;
+                const on = this.accepted === o.id;
+                return `<li class="${on ? 'on' : ''}"><span class="o-who">${look.icon}${o.size > 1 ? `×${o.size}` : ''}</span><span class="o-route"><b>${this.nameOf(o.from).replace(/^موقف /, '')}</b> ← ${this.nameOf(o.to).replace(/^موقف /, '')}<small>${o.km.toFixed(1)} كم · الموقف بعيد عنك ${near}</small></span><span class="o-fare">${money(o.fare)}</span><button type="button" data-acc="${o.id}">${on ? 'اتقبل ✓' : 'اقبل'}</button></li>`;
+              })
+              .join('')
+          : `<li class="empty">${seatsFree(this.job) <= 0 ? 'العربية مليانة.' : 'مفيش ركاب مستنيين هنا دلوقتي — جرّب منطقة تانية أو استنى شوية.'}</li>`;
+      return `<h2>🧾 الرحلات المتاحة</h2><div class="tx-chips">${chips}</div><ul class="tx-offers">${rows}</ul><p class="tx-sub">اختار منطقة وبعدين اقبل مشوار، أو سوق لأي موقف والركاب بيركبوا لوحدهم.</p><div class="tx-actions"><button type="button" data-close>تمام</button></div>`;
+    };
+    let last = '';
+    let timer = 0;
+    this.sheetEl?.close();
+    const bind = (card: HTMLElement, sh: Sheet) => {
+      card.querySelectorAll<HTMLElement>('[data-zone]').forEach((b) =>
+        b.addEventListener('click', () => {
+          this.zone = sanitizeZone(b.dataset.zone);
+          setZone(this.zone);
+          this.accepted = null;
+          last = '';
+          refresh(sh);
+        })
+      );
+      card.querySelectorAll<HTMLElement>('[data-acc]').forEach((b) =>
+        b.addEventListener('click', () => {
+          this.accepted = Number(b.dataset.acc);
+          const o = render().offers.find((x) => x.id === this.accepted);
+          if (o)
+            this.host.status(
+              `✅ اتقبل: ${this.nameOf(o.from)} ← ${this.nameOf(o.to)} · ${money(o.fare)} — الموقف متعلّم على الخريطة.`
+            );
+          sh.close();
+        })
+      );
+    };
+    const refresh = (sh: Sheet) => {
+      const { offers, sig } = render();
+      if (sig === last) return;
+      last = sig;
+      sh.set(html(offers));
+    };
+    this.sheetEl = sheet('tx-board', '', bind, () => window.clearInterval(timer));
+    refresh(this.sheetEl);
+    const sh = this.sheetEl;
+    timer = window.setInterval(() => refresh(sh), 1500);
+  }
+
+  // ---------- who is in the cab
+  /** Small seated people in the windows, one per rider (a party of two shows two). */
+  private syncSeated() {
+    const key = this.job.riders.map((r) => `${r.persona}${r.size}`).join(',');
+    if (key === this.seatKey) return;
+    this.seatKey = key;
+    for (const c of [...this.seated.children]) c.removeFromParent();
+    const spots = SEAT_SPOTS[this.vehicle];
+    let i = 0;
+    this.job.riders.forEach((r, ri) => {
+      for (let k = 0; k < r.size && i < spots.length; k++, i++) {
+        const [x, z] = spots[i]!;
+        const g = new THREE.Group();
+        const shirt = SHIRTS[(ri * 2 + k) % SHIRTS.length]!;
+        const skin = SKINS[(r.id + k) % SKINS.length]!;
+        const body = new THREE.Mesh(SEAT_BODY, new THREE.MeshLambertMaterial({ color: shirt }));
+        body.position.y = 0.15;
+        const head = new THREE.Mesh(SEAT_HEAD, new THREE.MeshLambertMaterial({ color: skin }));
+        head.position.y = 0.55;
+        g.add(body, head);
+        g.position.set(x, SEAT_BASE[this.vehicle], z);
+        this.seated.add(g);
+      }
+    });
+  }
+
+  /** People who just got in walk to the vehicle, shrink and are gone. */
+  private stepBoarding(dt: number) {
+    if (!this.boarding.length) return;
+    const car = this.host.car().position;
+    for (const b of this.boarding) {
+      b.t += dt / 0.6;
+      const k = Math.min(1, b.t);
+      b.mesh.position.set(b.from.x + (car.x - b.from.x) * k, b.from.y + 0.2 * k, b.from.z + (car.z - b.from.z) * k);
+      b.mesh.scale.setScalar(1 - 0.7 * k);
+    }
+    for (const b of this.boarding) if (b.t >= 1) b.mesh.removeFromParent();
+    this.boarding = this.boarding.filter((b) => b.t < 1);
   }
 }

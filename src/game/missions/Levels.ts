@@ -13,6 +13,9 @@ import {
 import type { WeaponId } from '../logic/character';
 import { emptyBook, sanitizeBook, type EarningsBook } from '../logic/taxi';
 import { DEFAULT_VEHICLE, sanitizeVehicle, type VehicleId } from '../logic/vehicles';
+import { emptyShifts, pushShift, sanitizeShifts, type ShiftBook, type ShiftRecord } from '../logic/shift';
+import { emptyBook as emptyTuningBook, sanitizeTuning, type Tuning, type TuningBook } from '../logic/workshop';
+import { ALL_ZONES, sanitizeZone, type ZoneId } from '../logic/zones';
 export type Who = 'mona' | 'hamed' | 'yasser' | 'suspect' | 'informant' | 'boss';
 export interface Line {
   who: Who;
@@ -360,7 +363,17 @@ export interface Progress {
   vehicle?: VehicleId;
   /** fares earned in the tuk-tuk and the microbus, kept per vehicle */
   earnings?: EarningsBook;
+  /** the driver's wallet in EGP (fares, minus what the workshop costs) */
+  wallet?: number;
+  /** workshop upgrades per vehicle */
+  tuning?: TuningBook;
+  /** the last 30 shifts of each taxi vehicle */
+  shifts?: ShiftBook;
+  /** the area chosen for taxi work */
+  zone?: ZoneId;
 }
+
+const sanitizeWallet = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(1e9, v) : 0);
 
 function load(): Progress {
   try {
@@ -375,7 +388,11 @@ function load(): Progress {
       ownedWeapons: sanitizeOwned(raw.ownedWeapons),
       garage: sanitizeGarage(raw.garage),
       vehicle: sanitizeVehicle(raw.vehicle),
-      earnings: sanitizeBook(raw.earnings)
+      earnings: sanitizeBook(raw.earnings),
+      wallet: sanitizeWallet(raw.wallet),
+      tuning: sanitizeTuning(raw.tuning),
+      shifts: sanitizeShifts(raw.shifts),
+      zone: sanitizeZone(raw.zone)
     };
   } catch {
     return {
@@ -387,7 +404,11 @@ function load(): Progress {
       ownedWeapons: [...DEFAULT_OWNED],
       garage: { ...DEFAULT_GARAGE },
       vehicle: DEFAULT_VEHICLE,
-      earnings: emptyBook()
+      earnings: emptyBook(),
+      wallet: 0,
+      tuning: emptyTuningBook(),
+      shifts: emptyShifts(),
+      zone: ALL_ZONES
     };
   }
 }
@@ -467,5 +488,37 @@ export function bookEarnings(v: 'tuktuk' | 'microbus', f: (e: EarningsBook[typeo
 
 export function setGarage(g: GarageLevels) {
   progress.garage = sanitizeGarage(g);
+  saveProgress();
+}
+
+/** The driver's wallet (EGP). */
+export const wallet = () => progress.wallet ?? 0;
+export function setWallet(v: number) {
+  progress.wallet = sanitizeWallet(v);
+  saveProgress();
+}
+export function addWallet(v: number) {
+  setWallet((progress.wallet ?? 0) + v);
+}
+
+export const tuningOf = (v: VehicleId): Tuning => (progress.tuning ??= emptyTuningBook())[v];
+export function setTuning(v: VehicleId, t: Tuning) {
+  const book = sanitizeTuning(progress.tuning);
+  book[v] = t;
+  progress.tuning = sanitizeTuning(book);
+  saveProgress();
+}
+
+/** Remember a finished shift (the last 30 per vehicle are kept) and pay what it earned into the wallet. */
+export function bookShift(v: 'tuktuk' | 'microbus', rec: ShiftRecord) {
+  const book = sanitizeShifts(progress.shifts);
+  book[v] = pushShift(book[v], rec);
+  progress.shifts = book;
+  saveProgress();
+}
+export const shiftsOf = (v: 'tuktuk' | 'microbus'): ShiftRecord[] => sanitizeShifts(progress.shifts)[v];
+
+export function setZone(z: ZoneId) {
+  progress.zone = sanitizeZone(z);
   saveProgress();
 }
