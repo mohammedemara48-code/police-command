@@ -3632,7 +3632,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
             H.top
           : CIVIL_BASE_SPEED * H.top;
       // a tuk-tuk is narrow enough to cut over the pavement (slower there); everything else keeps to the carriageway
-      const rp = this.vehicle === 'tuktuk' ? 2 : 0.4;
+      // the car's centre stays half a metre inside the asphalt edge (so its wheels never climb the kerb); the nose may overhang a little
+      const rp = this.vehicle === 'tuktuk' ? 2 : -0.5;
+      const noseRp = this.vehicle === 'tuktuk' ? rp + 2 : rp + 1.2;
       if (
         this.vehicle === 'tuktuk' &&
         Math.abs(this.speed) > 7 &&
@@ -3683,7 +3685,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       const bump = VEHICLES[this.vehicle].hl - 0.15;
       const nx = C0.x + cmx + Math.sin(this.yaw) * bump * dir,
         nz = C0.z + cmz + Math.cos(this.yaw) * bump * dir;
-      if (!onRoad(C0.x + cmx, C0.z + cmz, rp) || !onRoad(nx, nz, rp + 2)) {
+      if (!onRoad(C0.x + cmx, C0.z + cmz, rp) || !onRoad(nx, nz, noseRp)) {
         // kerb/building: lose the speed going into it, keep sliding along it
         if (onRoad(C0.x + cmx, C0.z, rp)) {
           C0.x += cmx;

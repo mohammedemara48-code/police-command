@@ -18,9 +18,9 @@ export function onIsland(x: number, z: number): boolean {
 const DUST: [number, number, number] = [0.98, 0.93, 0.84];
 const GRASS: [number, number, number] = [0.66, 0.82, 0.52];
 /** Bare city ground between the buildings: paved yard / concrete, not sand. */
-const YARD: [number, number, number] = [0.6, 0.58, 0.54];
+const YARD: [number, number, number] = [0.62, 0.55, 0.43];
 /** Planted blocks share the yard material (a green tint on it), so they cost no extra draw call. */
-const LAWN: [number, number, number] = [0.46, 0.64, 0.36];
+const LAWN: [number, number, number] = [0.5, 0.74, 0.34];
 
 /** Sand belongs to the Giza plateau; everywhere else the ground is city ground. */
 const PLATEAU = toWorld([31.1342, 29.9792]);
@@ -32,7 +32,7 @@ export function groundAt(x: number, z: number): 'sand' | 'lawn' | 'yard' {
   const w = Math.max(0, Math.min(1, (SAND_NONE - d) / (SAND_NONE - SAND_FULL)));
   if (w > 0 && hash01(Math.floor(x / 12) * 733 + Math.floor(z / 12) * 31 + 5) < w) return 'sand';
   // a few planted blocks among the paved yards (never in the dense centre)
-  if (hash01(Math.floor(x / 26) * 1291 + Math.floor(z / 26) * 17 + 9) < 0.16) return 'lawn';
+  if (hash01(Math.floor(x / 22) * 1291 + Math.floor(z / 22) * 17 + 9) < 0.34) return 'lawn';
   return 'yard';
 }
 
@@ -163,6 +163,7 @@ export function buildWater(): { mesh: THREE.Mesh; update(dt: number): void } {
 
 export const groundMats = () => ({
   desert: surface('desert', 0xfffffe, { vertexColors: true }),
-  yard: surface('concrete', 0xfffffc, { vertexColors: true }),
+  // earth and grass, not pale concrete: the open ground between the blocks must never read as white
+  yard: surface('park', 0xfffffc, { vertexColors: true }),
   park: surface('park', 0xfffffd, { vertexColors: true })
 });

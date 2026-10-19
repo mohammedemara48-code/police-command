@@ -28,6 +28,8 @@ export interface Lot extends OBB {
   edge: number;
   /** +1 left of the street's direction, -1 right */
   side: number;
+  /** 0 on the street, 1 and 2 for the rows behind it */
+  row?: number;
   /** width along the street and depth away from it (full lengths) */
   w: number;
   d: number;
@@ -302,6 +304,38 @@ export class Lots {
             }
           }
           if (!placed) s += 2;
+        }
+      }
+    }
+    // courtyards and back rows: blocks are filled behind the street frontage (up to two more rows, with the odd gap left as a yard)
+    for (let row = 0; row < 2; row++) {
+      const fronts = this.lots.filter((l) => !l.reserved && l.edge >= 0 && (l.row ?? 0) === row);
+      for (const f of fronts) {
+        const r = rng(f.id * 131 + 7 + row);
+        if (r() < 0.14) continue;
+        const nx = Math.cos(f.yaw) * f.side,
+          nz = -Math.sin(f.yaw) * f.side;
+        for (const dep of [20 + r() * 8, 15, 11]) {
+          const off = f.hw + 0.9 + dep / 2;
+          const seed = ++id * 7 + f.edge;
+          const floors = Math.max(2, Math.round(f.h / FLOOR) - 1 - Math.floor(r() * 2));
+          const l: Lot = {
+            ...f,
+            id,
+            x: f.x + nx * off,
+            z: f.z + nz * off,
+            hw: dep / 2,
+            d: dep,
+            seed,
+            h: floors * FLOOR,
+            shop: false,
+            row: row + 1
+          };
+          if (this.tryPlace(l)) {
+            this.lots.push(l);
+            this.put(l);
+            break;
+          }
         }
       }
     }

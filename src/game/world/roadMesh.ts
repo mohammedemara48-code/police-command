@@ -57,8 +57,12 @@ function norm(x: number, z: number) {
 export interface Acc {
   asphalt: Soup;
   paving: Soup;
+  /** the pale stone kerb: its top strip and the face towards the road */
+  kerb?: Soup;
   paint: Soup;
 }
+/** Width of the kerb's top strip (m). */
+export const KERB_W = 0.34;
 
 /** Point `off` metres to the left of the centre line at segment i, fraction k. */
 function at(P: P[], i: number, k: number, off: number): V2 {
@@ -157,14 +161,19 @@ export function pourRoads(
         const nx = (P[i]!.nx + P[i + 1]!.nx) / 2,
           nz = (P[i]!.nz + P[i + 1]!.nz) / 2;
         const nl = Math.hypot(nx, nz) || 1;
-        acc.paving.wall(a0.x, a0.z, a1.x, a1.z, ya - 0.002, PAVE_Y, (-side * nx) / nl, (-side * nz) / nl);
+        (acc.kerb ?? acc.paving).wall(a0.x, a0.z, a1.x, a1.z, ya - 0.002, PAVE_Y, (-side * nx) / nl, (-side * nz) / nl);
+        if (acc.kerb) {
+          const c0 = at(P, i, k0, side * (h + KERB_W)),
+            c1 = at(P, i, k1, side * (h + KERB_W));
+          acc.kerb.flat(PAVE_Y + 0.004, [a0, c0, c1, a1]);
+        }
         acc.paving.wall(b0.x, b0.z, b1.x, b1.z, 0, PAVE_Y, (side * nx) / nl, (side * nz) / nl);
       });
     }
-    // lane marks
-    if (e.ring || e.cls === 'local' || e.len < 20) continue;
-    const m0 = Math.max(t.aL, t.aR) + 5,
-      m1 = e.len - Math.max(t.bL, t.bR) - 5;
+    // lane marks and edge lines
+    if (e.ring || e.len < 14) continue;
+    const m0 = Math.max(t.aL, t.aR) + (e.cls === 'local' ? 2.5 : 5),
+      m1 = e.len - Math.max(t.bL, t.bR) - (e.cls === 'local' ? 2.5 : 5);
     if (m1 - m0 < 4) continue;
     const line = (off: number, w: number, a: number, b: number, dash: number, gap: number) => {
       for (let s = a; s < b; s += dash + gap) {
@@ -179,7 +188,12 @@ export function pourRoads(
         });
       }
     };
-    if (e.cls === 'arterial') {
+    // solid edge lines a little inside each kerb, so the drivable asphalt ends visibly
+    line(h - 0.42, 0.14, m0, m1, m1 - m0, 1);
+    line(-(h - 0.42), 0.14, m0, m1, m1 - m0, 1);
+    if (e.cls === 'local') {
+      if (e.len >= 20) line(0, 0.13, m0, m1, 3, 5);
+    } else if (e.cls === 'arterial') {
       line(0.14, 0.12, m0, m1, m1 - m0, 1);
       line(-0.14, 0.12, m0, m1, m1 - m0, 1);
       line(h / 2, 0.12, m0, m1, 3, 5);
