@@ -4117,3 +4117,11 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
   font-weight: 400;
   margin-inline-end: 6px;
 }
+@media (max-height: 520px) {
+  #workshop-sheet .tx-card {
+    width: min(720px, 92vw);
+  }
+  #workshop-sheet .w-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}

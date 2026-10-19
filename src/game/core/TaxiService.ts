@@ -434,10 +434,14 @@ export class TaxiService {
 
     // rank markers bob; the objective arrow and the HUD refresh a few times a second
     const tt = performance.now() / 1000;
+    const here = this.host.state();
     for (const a of this.beams.values())
       if (a.visible) {
         a.position.y = (a.userData.baseY as number) + Math.sin(tt * 4) * 0.22;
         a.rotation.y += dt * 2;
+        // about the same size on screen: small when you are next to it, bigger far away so it can still be found
+        const d = Math.hypot(a.position.x - here.x, a.position.z - here.z) + 8;
+        a.scale.setScalar(((a.userData.base as number) ?? 1) * Math.max(0.4, Math.min(3, d / 22)));
       }
     this.hudT -= dt;
     if (this.hudT <= 0) {
@@ -563,7 +567,7 @@ export class TaxiService {
       arrow.visible = !!kind;
       if (kind) {
         (arrow.material as THREE.MeshBasicMaterial).color.setHex(MARK[kind].color);
-        arrow.scale.setScalar(MARK[kind].scale);
+        arrow.userData.base = MARK[kind].scale;
       }
     }
     const spot = t ? spotOf(t.stop) : null;
