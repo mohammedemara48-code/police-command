@@ -310,6 +310,15 @@ export class AudioManager {
     this.tone(110, 0.35, 'triangle', 0.1, 0.45);
   }
 
+  /** Coins into the pocket: two bright clinks and a little register ring. */
+  coin() {
+    if (!this.enabled) return;
+    this.resume();
+    this.tone(1568, 0.07, 'triangle', 0.09, 0);
+    this.tone(2093, 0.09, 'triangle', 0.08, 0.06);
+    this.tone(2637, 0.16, 'sine', 0.06, 0.13);
+  }
+
   click() {
     if (!this.enabled) return;
     this.resume();

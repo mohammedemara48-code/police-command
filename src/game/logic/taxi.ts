@@ -141,6 +141,8 @@ export interface Rider {
   crashes: number;
   /** meter fare for this party */
   fare: number;
+  /** what the party already paid getting in (a microbus seat is paid on boarding); undefined = pays at the drop */
+  prepaid?: number;
 }
 
 export interface Payout {
@@ -152,6 +154,8 @@ export interface Payout {
   /** 1..5 */
   stars: number;
   onTime: boolean;
+  /** paid earlier, on boarding (not part of fare/total here) */
+  prepaid: number;
 }
 
 export interface TaxiJob {
@@ -186,12 +190,32 @@ export function payout(r: Rider): Payout {
   const rule = PERSONA_RULES[r.persona];
   const comfort = comfortOf(r);
   const time = punctuality(r);
-  const fare = round05(r.fare * rule.pay * (0.75 + 0.25 * comfort) * (0.6 + 0.4 * time));
+  // a seat paid on boarding is paid: only the tip still depends on the ride
+  const fare = r.prepaid !== undefined ? 0 : round05(r.fare * rule.pay * (0.75 + 0.25 * comfort) * (0.6 + 0.4 * time));
   const early = r.elapsed < r.expected * 0.85 && r.persona === 'rush' ? 2 : 1;
   const tip = Math.round(r.fare * rule.tip * comfort * comfort * time * early);
   const score = comfort * 0.6 + time * 0.4;
   const stars = Math.max(1, Math.min(5, Math.round(1 + score * 4)));
-  return { rider: r, fare, tip, total: fare + tip, comfort, stars, onTime: r.elapsed <= r.expected };
+  return {
+    rider: r,
+    fare,
+    tip,
+    total: fare + tip,
+    comfort,
+    stars,
+    onTime: r.elapsed <= r.expected,
+    prepaid: r.prepaid ?? 0
+  };
+}
+
+/** The microbus is paid per seat as people get in ("الأجرة يا جماعة"), the tuk-tuk at the drop. */
+export const paysOnBoarding = (v: TaxiVehicle): boolean => TARIFF[v].perSeat;
+
+/** Take a party's seat fare now (the line's fixed fare, what the persona pays). Returns 0 if already paid. */
+export function collectFare(r: Rider): number {
+  if (r.prepaid !== undefined) return 0;
+  r.prepaid = round05(r.fare * PERSONA_RULES[r.persona].pay);
+  return r.prepaid;
 }
 
 /** A passenger counts as boarding: fixes the destination, fare and the time allowed. */
@@ -423,11 +447,11 @@ export const emptyBook = (): EarningsBook => ({ tuktuk: emptyEarnings(), microbu
 
 export function addPayout(e: Earnings, p: Payout): Earnings {
   return {
-    total: e.total + p.total,
+    total: e.total + p.total + p.prepaid,
     tips: e.tips + p.tip,
     trips: e.trips + 1,
     riders: e.riders + p.rider.size,
-    best: Math.max(e.best, p.total)
+    best: Math.max(e.best, p.total + p.prepaid)
   };
 }
 

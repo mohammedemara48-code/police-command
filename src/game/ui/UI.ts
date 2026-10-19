@@ -8,7 +8,7 @@ import { achHtml } from '../systems/Achievements';
 import { GameManager } from '../core/GameManager';
 import { CityScene } from '../core/CityScene';
 import { audio } from '../systems/AudioManager';
-import { LEVELS, levelById, progress, setMissionXpHook, setVehicle } from '../missions/Levels';
+import { LEVELS, levelById, progress, setMissionXpHook, setVehicle, wallet } from '../missions/Levels';
 import { VEHICLES, VEHICLE_IDS, sanitizeVehicle, modeOf, type VehicleId } from '../logic/vehicles';
 import { VEHICLE_ICON } from '../logic/vehicleIcons';
 setMissionXpHook(recordWeekly);
@@ -77,6 +77,7 @@ export class UI {
       screen === 'main'
         ? `<h1>عفاريت أسفلت القاهرة</h1>
           <p class="sub"><span dir="ltr">Cairo Asphalt Demons</span> — قاهرة واحدة، وعربيتك هي اللي بتحدد شغلك</p>
+          <p class="menu-wallet">💰 في جيبك: <b>${Math.round(wallet())} ج</b></p>
           <div class="menu-col">
             <button class="btn menu-big" data-m="play">${playLabel(cur.id, cur.title)}</button>
             <div class="menu-grid">

@@ -8,6 +8,8 @@ import {
   STOPS,
   addPayout,
   atSpot,
+  collectFare,
+  paysOnBoarding,
   boardAll,
   dropAt,
   emptyQueues,
@@ -31,6 +33,7 @@ import {
 } from '../logic/taxi';
 import {
   addBailed,
+  addFare,
   addDistance,
   addRepair,
   addTrip,
@@ -39,6 +42,7 @@ import {
   hourLabel,
   newShift,
   nightBonusOf,
+  shiftSoFar,
   type Shift,
   type ShiftRecord
 } from '../logic/shift';
@@ -47,6 +51,7 @@ import { patienceMul, rideMul, tipMul } from '../logic/workshop';
 import { sheet, type Sheet } from '../ui/Sheet';
 import { CHAT_TOPICS, PERSONA_LOOK, fill, pickTalk, type TalkId } from '../config/taxiTalk';
 import { streetNameSign } from '../world/Egypt';
+import { audio } from '../systems/AudioManager';
 import type { Speaker } from '../ui/Barks';
 import {
   progress,
@@ -122,6 +127,8 @@ const SKINS = [0xc99a73, 0xa87550, 0xe0b48e, 0x8d5e3c];
 const nightNow = (hour: number) => hour >= 20 || hour < 5;
 
 const money = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(1)} ج`;
+/** The driver's speech bubble. */
+const DRIVER_LOOK = { name: 'إنت', icon: '🧔', color: '#ffd23d' };
 
 export class TaxiService {
   vehicle: TaxiVehicle = 'tuktuk';
@@ -157,6 +164,8 @@ export class TaxiService {
   private cabSpeaker: Speaker | null = null;
   private active = false;
   private toast: { text: string; until: number } | null = null;
+  /** the wallet counter pulses while a coin lands in it */
+  private bumpUntil = 0;
   /** how many riders were handled last, for the HUD's feedback line */
   private feedback = '';
 
@@ -510,9 +519,26 @@ export class TaxiService {
           1200
         );
     }
+    if (paysOnBoarding(this.vehicle)) this.collectSeats(boarded);
     const dests = [...new Set(boarded.map((r) => this.nameOf(r.to).replace(/^موقف /, '')))].join(' و');
     this.host.status(`🙋 ركب ${boarded.reduce((n, r) => n + r.size, 0)} — رايحين ${dests}`);
     this.feedback = `ركب ${boarded.length} من ${this.nameOf(sp.stop.id)}`;
+  }
+
+  /** Microbus: "الأجرة يا جماعة" — every party that got in passes its seat fare forward, one coin after another. */
+  private collectSeats(boarded: Rider[]) {
+    const hour = this.host.hour();
+    this.driverSays(this.line('driverFare'), 600);
+    boarded.forEach((r, i) => {
+      const fare = collectFare(r);
+      if (fare <= 0) return;
+      const bonus = nightBonusOf(fare, hour);
+      this.shift = addFare(this.shift, fare, bonus);
+      addWallet(fare + bonus);
+      const at = 1500 + i * 700;
+      this.cab(r, this.line('microPay'), at);
+      this.coin(fare + bonus, at);
+    });
   }
 
   private dropOff(car: { x: number; z: number; speed: number }) {
@@ -533,7 +559,7 @@ export class TaxiService {
     const total = p.total + tipExtra + bonus;
     this.shift = addTrip(
       this.shift,
-      { fare: p.fare, tip: p.tip + tipExtra, stars: p.stars, size: p.rider.size },
+      { fare: p.fare, tip: p.tip + tipExtra, stars: p.stars, size: p.rider.size, prepaid: p.prepaid },
       bonus
     );
     bookEarnings(this.vehicle, (e) => addPayout(e, p));
@@ -541,12 +567,59 @@ export class TaxiService {
     const stars = '★'.repeat(p.stars) + '☆'.repeat(5 - p.stars);
     const id: TalkId = p.tip > 0 ? 'tipDrop' : p.rider.persona === 'cheap' ? 'cheapDrop' : 'drop';
     this.cab(p.rider, this.line(id), 0);
-    if (p.comfort > 0.85 && p.onTime) this.cab(p.rider, this.line('approve'), 1500);
+    // the money changes hands: "اتفضل يا اسطى", the coins fly into your pocket
+    if (total > 0) {
+      if (!p.prepaid) this.cab(p.rider, this.line('pay'), 1100);
+      this.coin(total, 1100);
+    }
+    if (p.comfort > 0.85 && p.onTime) this.cab(p.rider, this.line('approve'), 2600);
+    const paid = p.prepaid ? ` · الكرسي اتدفع ${money(p.prepaid)}` : '';
     this.host.status(
-      `💰 +${money(total)}${p.tip + tipExtra ? ` (بقشيش ${money(p.tip + tipExtra)})` : ''}${bonus ? ` · 🌙 +${money(bonus)}` : ''} · ${stars}${p.onTime ? '' : ' · اتأخرت'}`
+      total > 0
+        ? `💰 +${money(total)}${p.tip + tipExtra ? ` (بقشيش ${money(p.tip + tipExtra)})` : ''}${bonus ? ` · 🌙 +${money(bonus)}` : ''}${paid} · ${stars}${p.onTime ? '' : ' · اتأخرت'}`
+        : `👋 نزل${paid} · ${stars}${p.onTime ? '' : ' · اتأخرت'}`
     );
-    this.toast = { text: `+${money(total)}`, until: performance.now() + 2600 };
     this.feedback = `نزل ${PERSONA_LOOK[p.rider.persona].name} · ${stars}`;
+  }
+
+  /** The driver's own line (a microbus driver calls out over his shoulder). */
+  private driverSays(text: string, delay = 0) {
+    if (this.cabSpeaker) this.host.say(this.cabSpeaker, text, DRIVER_LOOK, delay);
+  }
+
+  /** "+12 ج": a coin pops up over the car, then flies into the "في جيبك" counter, with a cash-register clink. */
+  private coin(amount: number, delay = 0) {
+    window.setTimeout(() => {
+      const ui = this.host.uiRoot();
+      if (!ui || !this.active) return;
+      const el = document.createElement('div');
+      el.className = 'tx-coin';
+      el.innerHTML = `<i>🪙</i>+${money(amount)}`;
+      ui.appendChild(el);
+      const w = this.hud?.querySelector('.tx-wallet')?.getBoundingClientRect();
+      const box = ui.getBoundingClientRect();
+      const x0 = box.width / 2,
+        y0 = box.height * 0.55;
+      const x1 = w ? w.left + w.width / 2 - box.left : box.width - 60,
+        y1 = w ? w.top + w.height / 2 - box.top : 80;
+      el.style.left = `${x0}px`;
+      el.style.top = `${y0}px`;
+      audio.coin();
+      const fly = el.animate(
+        [
+          { transform: 'translate(-50%, -50%) scale(0.6)', opacity: 0 },
+          { transform: 'translate(-50%, -110%) scale(1.25)', opacity: 1, offset: 0.25 },
+          { transform: 'translate(-50%, -120%) scale(1.15)', opacity: 1, offset: 0.55 },
+          { transform: `translate(calc(-50% + ${x1 - x0}px), calc(-50% + ${y1 - y0}px)) scale(0.45)`, opacity: 0.85 }
+        ],
+        { duration: 1300, easing: 'cubic-bezier(.5,0,.6,1)', fill: 'forwards' }
+      );
+      fly.onfinish = () => {
+        el.remove();
+        this.bumpUntil = performance.now() + 500;
+        this.hudHtml = '';
+      };
+    }, delay);
   }
 
   // ---------- markers and HUD
@@ -617,7 +690,6 @@ export class TaxiService {
     const distTxt = dist >= 1000 ? `${(dist / 1000).toFixed(1)} كم` : `${Math.round(dist)} م`;
     const seats = TARIFF[this.vehicle].seats;
     const sh = this.shift;
-    const shiftTotal = sh.fares + sh.tips + sh.bonus;
     const riderRows = this.job.riders
       .map((r) => {
         const pct = Math.max(0, Math.min(100, Math.round(r.patience)));
@@ -634,7 +706,7 @@ export class TaxiService {
     const go = !this.onShift
       ? '<span class="tx-name">⏸ <b>بره الوردية</b></span>'
       : `<span class="tx-name">${this.job.riders.length ? '🏁' : mine ? '✅' : '🅿'} <b>${t ? short(t.stop) : this.zone === ALL_ZONES ? 'استنى شوية' : 'مفيش ركاب هنا'}</b></span>${t ? `<em>${distTxt}</em>` : ''}`;
-    const strip = `<div class="tx-strip"><button type="button" class="tx-bd" data-tx="${this.onShift ? 'board' : 'start'}" aria-label="${this.onShift ? 'الرحلات' : 'ابدأ وردية'}">${this.onShift ? '🧾' : '▶'}</button><span class="tx-go">${go}</span><span class="tx-fare">${money(shiftTotal)}</span><span class="tx-seats">${seatIcons}</span><span class="tx-more-btn" aria-hidden="true">▾</span></div>`;
+    const strip = `<div class="tx-strip"><button type="button" class="tx-bd" data-tx="${this.onShift ? 'board' : 'start'}" aria-label="${this.onShift ? 'الرحلات' : 'ابدأ وردية'}">${this.onShift ? '🧾' : '▶'}</button><span class="tx-go">${go}</span><span class="tx-seats">${seatIcons}</span><span class="tx-more-btn" aria-hidden="true">▾</span></div>`;
     const hour = this.host.hour();
     const state = !this.onShift
       ? 'اضغط ▶ عند أي موقف عشان تبدأ وردية جديدة.'
@@ -648,9 +720,12 @@ export class TaxiService {
     const more = `<div class="tx-more"><div class="tx-head"><span>${this.vehicle === 'tuktuk' ? '🛺 توكتوك' : '🚐 ميكروباص'} · ${sh.night ? '🌙 وردية ليلية' : '☀️ وردية نهارية'}</span><span class="tx-day">${hourLabel(hour)}</span></div>
       <div class="tx-state">${state}</div>
       ${riderRows ? `<ul class="tx-riders">${riderRows}</ul>` : ''}
-      <div class="tx-foot">${sh.trips} مشوار · ${sh.km.toFixed(1)} كم · بقشيش ${money(sh.tips)} · 📍 ${zoneName} · محفظتك ${money(Math.round(wallet()))}${nightNow(hour) ? ' · 🌙 +15%' : ''}${this.feedback ? `<br>${this.feedback}` : ''}</div>
+      <div class="tx-foot">${sh.trips} مشوار · ${sh.km.toFixed(1)} كم · بقشيش ${money(sh.tips)} · 📍 ${zoneName}${nightNow(hour) ? ' · 🌙 +15%' : ''}${this.feedback ? `<br>${this.feedback}` : ''}</div>
       <div class="tx-btns"><button type="button" data-tx="board">🧾 الرحلات</button><button type="button" data-tx="history">📒 الورديات</button>${this.onShift ? '<button type="button" data-tx="end" class="end">🏁 إنهاء الوردية</button>' : '<button type="button" data-tx="start" class="go">▶ ابدأ وردية</button>'}</div></div>`;
-    const html = `${strip}${more}${this.toast && performance.now() < this.toast.until ? `<div class="tx-toast">${this.toast.text}</div>` : ''}`;
+    const bump = performance.now() < this.bumpUntil ? ' bump' : '';
+    const so = shiftSoFar(sh);
+    const cash = `<div class="tx-cash"><span class="tx-wallet${bump}">💰 في جيبك: <b>${money(Math.round(wallet()))}</b></span><span class="tx-shift">${this.onShift ? `الوردية: <b>${so < 0 ? '−' : ''}${money(Math.abs(so))}</b>` : 'بره الوردية'}</span></div>`;
+    const html = `${strip}${cash}${more}${this.toast && performance.now() < this.toast.until ? `<div class="tx-toast">${this.toast.text}</div>` : ''}`;
     if (html !== this.hudHtml) {
       this.hud.innerHTML = html;
       this.hudHtml = html;

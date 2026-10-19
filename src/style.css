@@ -4125,3 +4125,70 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* taxi money: what is in your pocket and what this shift has made, always on show */
+#street-taxi .tx-cash {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+}
+#street-taxi .tx-cash > span {
+  flex: 1 1 auto;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(255, 210, 61, 0.12);
+  white-space: nowrap;
+  font-size: 11px;
+}
+#street-taxi .tx-cash b {
+  color: #ffd23d;
+  font-size: 14px;
+  font-weight: 900;
+}
+#street-taxi .tx-cash .tx-shift b {
+  color: #7dffb3;
+}
+#street-taxi .tx-wallet.bump {
+  animation: tx-bump 0.5s ease-out;
+  background: rgba(255, 210, 61, 0.35);
+}
+@keyframes tx-bump {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.tx-coin {
+  position: absolute;
+  z-index: 60;
+  pointer-events: none;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: linear-gradient(#ffe27a, #e7a91c);
+  color: #3b2600;
+  font-weight: 900;
+  font-size: 20px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+.tx-coin i {
+  font-style: normal;
+  margin-inline-end: 4px;
+}
+.menu-wallet {
+  margin: 4px 0 10px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.menu-wallet b {
+  color: #ffd23d;
+  font-size: 18px;
+}

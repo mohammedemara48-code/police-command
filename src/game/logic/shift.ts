@@ -63,8 +63,13 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 /** The extra a night fare pays. */
 export const nightBonusOf = (total: number, hour: number): number => (isNight(hour) ? r1(total * NIGHT_BONUS) : 0);
 
-export function addTrip(s: Shift, p: { fare: number; tip: number; stars: number; size: number }, bonus = 0): Shift {
-  const total = p.fare + p.tip + bonus;
+export function addTrip(
+  s: Shift,
+  p: { fare: number; tip: number; stars: number; size: number; prepaid?: number },
+  bonus = 0
+): Shift {
+  // a seat paid on boarding was counted then (addFare); it still makes this trip's size for "best trip"
+  const total = p.fare + p.tip + bonus + (p.prepaid ?? 0);
   return {
     ...s,
     trips: s.trips + 1,
@@ -77,6 +82,16 @@ export function addTrip(s: Shift, p: { fare: number; tip: number; stars: number;
     best: Math.max(s.best, r1(total))
   };
 }
+
+/** A fare taken on boarding (microbus seats): counted now, the trip itself is counted at the drop. */
+export const addFare = (s: Shift, fare: number, bonus = 0): Shift => ({
+  ...s,
+  fares: r1(s.fares + Math.max(0, fare)),
+  bonus: r1(s.bonus + Math.max(0, bonus))
+});
+
+/** Money made so far this shift (before fuel, after repairs): what the HUD shows as "الوردية". */
+export const shiftSoFar = (s: Shift): number => r1(s.fares + s.tips + s.bonus - s.repairs);
 
 /** Add metres driven (world metres). */
 export const addDistance = (s: Shift, metres: number): Shift => ({
