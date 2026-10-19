@@ -6,8 +6,7 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 
 - 3D models: Kenney — Car Kit, Mini Characters, City Kit Commercial (https://kenney.nl), CC0. Converted to self-contained .gltf.
 - Sound effects: Kenney — Interface Sounds, Impact Sounds, Sci-Fi Sounds, Music Jingles (https://kenney.nl), CC0.
-- Music: "Fast Fight / Battle Music (looped)" from OpenGameArt (https://opengameart.org/content/fast-fight-battle-music-looped), CC0.
-- Calm music: "Empty City" — OpenGameArt (https://opengameart.org/content/emptycity-background-music), CC0.
+- Music: none of it is recorded. The old CC0 loops ("Fast Fight / Battle Music" and "Empty City" from OpenGameArt) were removed; see "Music" below.
 - Siren: "Sirens and alarm noise" — OpenGameArt (https://opengameart.org/content/sirens-and-alarm-noise), CC0.
 - Gunshot: "Gunshots" (22 Pistol) — OpenGameArt (https://opengameart.org/content/gunshots), CC0.
 
@@ -72,3 +71,12 @@ All CC0. Textures were cropped, made seamless where needed, resized (1k, plus a 
 
 ## Cairo street plan
 - The open city's streets, Nile banks, islands, squares and bridges are our own hand-drawn longitude/latitude polylines (`src/game/logic/cairo.ts`). No OpenStreetMap or other map data is included, so no ODbL attribution applies. Sources used to place things are listed in `docs/DISTRICT_REFERENCE.md`.
+
+## Music (v2.2)
+
+All three tracks (menu, taxi / free driving, police missions) are **composed by the game's own code** and synthesised live with WebAudio. There are no samples, no recordings and no third-party tunes, so there is nothing to license:
+
+- `src/game/logic/maqam.ts`: the maqamat (hijaz, rast, bayati as semitone tables with quarter tones), the darbuka rhythms (maqsum, saidi, baladi, ayyub) and a seeded melody generator. Tested in `tests/maqam.test.ts`.
+- `src/game/systems/EgyptianMusic.ts`: the voices (oud, nay, mizmar, darbuka, tabla, drone) and the look-ahead scheduler.
+- Menu: hijaz on D, 76 BPM, soft maqsum on tabla, nay lead. Taxi: rast on C, 108 BPM, maqsum on darbuka, oud lead with a nay echo. Police: hijaz on A, 132 BPM, saidi, mizmar lead with an oud bass.
+- The scales and rhythms are traditional (public domain knowledge); the generated notes are original output of this code, released under the project licence.

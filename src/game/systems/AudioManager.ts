@@ -1,4 +1,6 @@
-/** WebAudio: recorded CC0 samples (Kenney, OpenGameArt) with synth fallback */
+/** WebAudio: recorded CC0 sound effects (Kenney, OpenGameArt) with synth fallback; the music is generated in code (EgyptianMusic) */
+import { EgyptianMusic } from './EgyptianMusic';
+import type { TrackId } from '../logic/maqam';
 
 const VOL_KEY = 'pc.vol.v1';
 export interface Volumes {
@@ -18,7 +20,7 @@ export class AudioManager {
   private musicGain: GainNode | null = null;
   private buffers = new Map<string, AudioBuffer>();
   private loading: Promise<void> | null = null;
-  private musicSrc: AudioBufferSourceNode | null = null;
+  private music: EgyptianMusic | null = null;
   private engineSrc: AudioBufferSourceNode | null = null;
   private engineGain: GainNode | null = null;
   vol: Volumes = (() => {
@@ -42,13 +44,15 @@ export class AudioManager {
     if (this.master) this.master.gain.value = 0.35 * this.vol.master;
     if (this.sfxGain) this.sfxGain.gain.value = this.vol.sfx;
     if (this.musicGain) this.musicGain.gain.value = 0.5 * this.vol.music;
+    // a muted slider also stops the generator, so it costs nothing
+    this.music?.setPaused(this.vol.music < 0.01 || this.vol.master < 0.01);
   }
 
   private loadSamples() {
     if (this.loading || !this.ctx) return this.loading;
     const ctx = this.ctx;
     this.loading = Promise.all(
-      ['/audio/sounds.json', '/audio/calm.json'].map((u) =>
+      ['/audio/sounds.json'].map((u) =>
         fetch(u)
           .then((r) => r.json() as Promise<Record<string, string>>)
           .catch(() => ({}))
@@ -69,9 +73,7 @@ export class AudioManager {
           })
         )
       )
-      .then(() => {
-        if (this.wantMusic) this.startMusic();
-      })
+      .then(() => undefined)
       .catch(() => undefined);
     return this.loading;
   }
@@ -93,20 +95,12 @@ export class AudioManager {
   }
 
   private wantMusic = false;
-  private track: 'music' | 'calm' = 'calm';
-  /** 'calm' for the command center, 'music' (action loop) for street patrol. */
-  setTrack(t: 'music' | 'calm') {
-    if (t === this.track && this.musicSrc) return;
+  private track: TrackId = 'menu';
+  /** 'menu' in the menus, 'taxi' for taxi and free driving, 'police' for police missions. */
+  setTrack(t: TrackId) {
     this.track = t;
-    if (this.musicSrc) {
-      try {
-        this.musicSrc.stop();
-      } catch {
-        /* ignore */
-      }
-      this.musicSrc = null;
-      this.startMusic();
-    }
+    if (this.music?.playing && this.music.current !== t) this.music.play(t);
+    else if (this.wantMusic) this.startMusic();
   }
 
   private sirenSrc: AudioBufferSourceNode | null = null;
@@ -138,24 +132,16 @@ export class AudioManager {
 
   startMusic() {
     this.wantMusic = true;
-    if (!this.enabled || this.musicSrc) return;
+    if (!this.enabled) return;
     this.ensure();
-    const buf = this.buffers.get(this.track);
-    if (!buf || !this.ctx || !this.musicGain) return;
-    this.musicSrc = this.ctx.createBufferSource();
-    this.musicSrc.buffer = buf;
-    this.musicSrc.loop = true;
-    this.musicSrc.connect(this.musicGain);
-    this.musicSrc.start();
+    if (!this.ctx || !this.musicGain) return;
+    this.music ??= new EgyptianMusic(this.ctx, this.musicGain);
+    this.music.setPaused(this.vol.music < 0.01 || this.vol.master < 0.01);
+    this.music.play(this.track);
   }
   stopMusic() {
     this.wantMusic = false;
-    try {
-      this.musicSrc?.stop();
-    } catch {
-      /* ignore */
-    }
-    this.musicSrc = null;
+    this.music?.stop();
   }
 
   /** Car engine loop; speed01 0..1 drives pitch and level. */
@@ -197,6 +183,12 @@ export class AudioManager {
     this.musicGain.connect(this.master);
     this.applyVol();
     void this.loadSamples();
+    // a hidden tab is silent (and the generator sleeps with the clock)
+    document.addEventListener('visibilitychange', () => {
+      if (!this.ctx) return;
+      if (document.hidden) void this.ctx.suspend();
+      else if (this.enabled) void this.ctx.resume();
+    });
   }
 
   resume() {
@@ -421,3 +413,6 @@ export class AudioManager {
 }
 
 export const audio = new AudioManager();
+// test hook for automated play-throughs (only with ?autotest)
+if (typeof location !== 'undefined' && location.search.includes('autotest'))
+  (window as unknown as { __audio: AudioManager }).__audio = audio;

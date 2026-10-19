@@ -993,7 +993,7 @@ export class StreetPlay {
       this.squad.spawn(spot.x, spot.z, specs, { cover: true, approachZ: this.vipPt.z });
       this.ambIdx++;
       this.ambLive = true;
-      audio.setTrack('music');
+      this.playMusic();
       this.radio([{ who: 'mona', text: `كمين قدام الموكب! ${specs.length} من رجالة العقرب — احمي العربية.` }], null);
       this.setStatus('💥 كمين! الموكب وقف. حيّد المهاجمين قبل ما يصيبوا العربية.');
     }
@@ -1695,7 +1695,7 @@ export class StreetPlay {
         const approachZ = prev && prev.t === 'goto' ? prev.z : this.player.position.z;
         this.squad.spawn(st.x, st.z, st.list, { cover: st.cover, hostage: st.hostage, approachZ });
         if (st.list.some((x) => x.b === 'fight')) {
-          audio.setTrack('music');
+          this.playMusic();
           this.setStatus('⚠ مسلحين! اتحامى واضرب.');
         }
         break;
@@ -2233,12 +2233,18 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     return g;
   }
 
+  /** Police missions have their own track; taxi work and free driving share the driving one. */
+  private playMusic() {
+    audio.setTrack(this.mode === 'police' ? 'police' : 'taxi');
+  }
+
   /** Police work, taxi work or free driving: switches what runs and what the HUD shows. */
   private setMode(next: GameMode) {
     const prev = this.mode;
     this.mode = next;
     const root = document.documentElement;
     root.dataset.mode = next;
+    if (this.active) this.playMusic();
     root.classList.remove('can-hub', 'can-order', 'can-cuff');
     this.gun.visible = next === 'police';
     this.firing = false;
@@ -2581,6 +2587,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (this.rain) this.rain.visible = false;
     delete document.body.dataset.play;
     delete document.documentElement.dataset.mode;
+    audio.setTrack('menu');
     document.documentElement.classList.remove('onfoot', 'armed');
     audio.engine(false);
     audio.sirenLoop(false);
@@ -2614,6 +2621,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (this.rain) this.rain.visible = true;
     document.body.dataset.play = 'street';
     document.documentElement.dataset.mode = this.mode;
+    this.playMusic();
     document.documentElement.classList.toggle('onfoot', !this.inCar);
     this.mountUi();
     window.addEventListener('keydown', this.boundKeyDown);
@@ -3131,7 +3139,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     );
     this.group.add(this.suspect);
     if (VEHICLES[this.vehicle].siren) audio.sirenLoop(true);
-    audio.setTrack('music');
+    this.playMusic();
     this.setStatus(this.inCar ? '🚨 مطاردة! الحق العربية السودا.' : '🚨 اركب الدورية بسرعة — العربية هربت!');
   }
 

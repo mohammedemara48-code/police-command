@@ -121,8 +121,7 @@ export class UI {
               <p class="credits">الضابط والمشاة وعربية الشرطة: Quaternius (CC0)<br>
               عربية Dodge Challenger: Grzybek عبر Poly Pizza (CC-BY 3.0)<br>
               مباني ومؤثرات صوتية: Kenney.nl (CC0)<br>
-              موسيقى المطاردة: Fast Fight Battle Music — OpenGameArt (CC0)<br>
-              موسيقى هادية: Empty City — OpenGameArt (CC0)<br>
+              الموسيقى (القائمة والتاكسي والشرطة): مؤلَّفة بالكود على مقامات حجاز ورست مع إيقاعات مقسوم وصعيدي، من غير أي تسجيلات<br>
               صفارة وطلقات: OpenGameArt (CC0)<br>محرك الرسوم: Three.js</p>
               <button class="btn ghost" data-m="main">رجوع</button>`;
     this.overlay.innerHTML = `<div class="start-screen"><div class="start-card glass menu-card">${body}</div></div>`;
@@ -146,6 +145,11 @@ export class UI {
       b.addEventListener('click', () => {
         audio.resume();
         audio.click();
+        // the first tap on the menu is also what lets the browser play sound: the menu music starts here
+        if (!this.launched) {
+          audio.setTrack('menu');
+          audio.startMusic();
+        }
         const m = b.dataset.m!;
         if (m === 'patrol') this.policeFirst();
         if ((m === 'play' || m === 'patrol') && needsCharacter())
@@ -221,7 +225,6 @@ export class UI {
       clearInterval(poll);
     }
     audio.resume();
-    audio.setTrack('music');
     audio.startAmbient();
     this.overlay.innerHTML = '';
     if (!this.launched) {
