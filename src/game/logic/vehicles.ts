@@ -114,6 +114,16 @@ export const featuresOf = (id: VehicleId): ModeFeatures => FEATURES[modeOf(id)];
 
 /** Base top speed (m/s) before the vehicle's own share: the patrol car also gets rank and garage bonuses and the chase boost. */
 export const CIVIL_BASE_SPEED = 18;
+/** The patrol car's base top speed (m/s) on patrol and in a chase (rank and engine upgrades add to it). */
+export const POLICE_PATROL_SPEED = 16;
+export const POLICE_CHASE_SPEED = 20;
+/** Top speed (m/s) of a vehicle before rank / engine bonuses. */
+export function baseTop(v: VehicleId, chasing = false): number {
+  return (
+    (v === 'police' ? (chasing ? POLICE_CHASE_SPEED : POLICE_PATROL_SPEED) : CIVIL_BASE_SPEED) *
+    VEHICLES[v].handling.top
+  );
+}
 
 /** Taxi vehicles and their seats. */
 export const SEATS: Partial<Record<VehicleId, number>> = { tuktuk: 2, microbus: 6 };

@@ -173,7 +173,7 @@ export function lanePose(l: Lane): Pose {
 
 /** Walkable pavement ground: not in a building, the river or the carriageway. */
 function fitForPeople(x: number, z: number) {
-  return !inRiver(x, z, 0.6) && !lots().blocked(x, z, 0.4) && !net().onRoad(x, z, 0.1);
+  return !inRiver(x, z, 0.2) && !lots().blocked(x, z, 0.4) && !net().onRoad(x, z, 0.1);
 }
 
 export interface PickOpts {

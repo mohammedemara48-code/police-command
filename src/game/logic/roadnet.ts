@@ -563,6 +563,7 @@ export class RoadNet {
   constructor(b: NetBuild = buildNet()) {
     this.nodes = b.nodes;
     this.edges = b.edges;
+    this.unhook();
     this.prune();
     this.index();
     // generated streets that cut across another road, or lie on top of it, are dropped (drawn ones are fixed in the data).
@@ -576,6 +577,38 @@ export class RoadNet {
       this.removeEdges(victims);
       this.prune();
       this.index();
+    }
+  }
+
+  /**
+   * Snapping a street onto a node can leave a short jog at its end (the line steps sideways and turns back): the car
+   * following the street would steer into the kerb there. Drop such end points so every edge leaves its node cleanly.
+   */
+  private unhook() {
+    const turn = (a: V2, b: V2, c: V2) => {
+      const t1 = Math.atan2(b.x - a.x, b.z - a.z),
+        t2 = Math.atan2(c.x - b.x, c.z - b.z);
+      return Math.abs(Math.atan2(Math.sin(t2 - t1), Math.cos(t2 - t1)));
+    };
+    for (const e of this.edges) {
+      const p = e.pts;
+      let changed = false;
+      while (p.length > 2 && dist(p[0]!, p[1]!) < 10 && turn(p[0]!, p[1]!, p[2]!) > 0.6) {
+        p.splice(1, 1);
+        changed = true;
+      }
+      while (
+        p.length > 2 &&
+        dist(p[p.length - 1]!, p[p.length - 2]!) < 10 &&
+        turn(p[p.length - 3]!, p[p.length - 2]!, p[p.length - 1]!) > 0.6
+      ) {
+        p.splice(p.length - 2, 1);
+        changed = true;
+      }
+      if (!changed) continue;
+      e.cum = [0];
+      for (let i = 1; i < p.length; i++) e.cum.push(e.cum[i - 1]! + dist(p[i - 1]!, p[i]!));
+      e.len = e.cum[e.cum.length - 1]!;
     }
   }
 

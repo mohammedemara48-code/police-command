@@ -114,6 +114,8 @@ import {
   VEHICLES,
   VEHICLE_IDS,
   CIVIL_BASE_SPEED,
+  POLICE_CHASE_SPEED,
+  POLICE_PATROL_SPEED,
   FEATURES,
   modeOf,
   sanitizeVehicle,
@@ -125,7 +127,7 @@ import { TaxiService } from './TaxiService';
 import { isTaxiVehicle, stopSpots, spotOf } from '../logic/taxi';
 import { POLICE_ONLY_BARKS } from '../config/barks';
 import { routeAim, roadDistance } from '../logic/routeAim';
-import { slideAlong, alignYaw, kerbCrashes } from '../logic/kerb';
+import { carMargins, moveCar, ROAD_QUERY, type CarBody } from '../logic/carMove';
 import { tunedHandling, damageMul, workshopSpots } from '../logic/workshop';
 
 import { newCall, type Kind } from '../missions/Dispatch';
@@ -407,6 +409,7 @@ export class StreetPlay {
   private chaseLock = 0;
   private chaseText = '';
   private camB = 7;
+  private carBody: CarBody = { x: 0, z: 0, speed: 0, yaw: 0, velYaw: 0 };
   private velYaw = 0;
   private siren = false;
   private damage = 0;
@@ -3687,15 +3690,14 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       const H = tunedHandling(this.vehicle, tuningOf(this.vehicle));
       const max =
         this.mode === 'police'
-          ? ((this.chasing ? 20 : 16) +
+          ? ((this.chasing ? POLICE_CHASE_SPEED : POLICE_PATROL_SPEED) +
               rank().car +
               engineBonus(progress.garage ?? { engine: 0, armor: 0, brakes: 0 })) *
             H.top
           : CIVIL_BASE_SPEED * H.top;
       // a tuk-tuk is narrow enough to cut over the pavement (slower there); everything else keeps to the carriageway
       // the car's centre stays half a metre inside the asphalt edge (so its wheels never climb the kerb); the nose may overhang a little
-      const rp = this.vehicle === 'tuktuk' ? 2 : -0.5;
-      const noseRp = this.vehicle === 'tuktuk' ? rp + 2 : rp + 1.2;
+      const rp = carMargins(this.vehicle).rp;
       if (
         this.vehicle === 'tuktuk' &&
         Math.abs(this.speed) > 7 &&
@@ -3737,68 +3739,27 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
             this.car.position.z - Math.cos(this.yaw) * 1.8 - Math.sin(this.yaw) * sd
           );
       }
-      const cmx = Math.sin(this.velYaw) * this.speed * dt,
-        cmz = Math.cos(this.velYaw) * this.speed * dt;
       const C0 = this.car.position;
-      // slide along kerbs/buildings instead of bouncing and getting stuck
-      // check the bumper too, not only the car centre, so the nose can't push into a building
-      const dir = Math.sign(this.speed) || 1;
-      const bump = VEHICLES[this.vehicle].hl - 0.15;
-      const nx = C0.x + cmx + Math.sin(this.yaw) * bump * dir,
-        nz = C0.z + cmz + Math.cos(this.yaw) * bump * dir;
-      if (!onRoad(C0.x + cmx, C0.z + cmz, rp) || !onRoad(nx, nz, noseRp)) {
-        // the edge of the asphalt: slide along it, ease back toward the middle and line up with the street
-        const N = net();
-        const rn = N.nearest(C0.x + cmx, C0.z + cmz, 30);
-        let moved = false;
-        if (rn) {
-          const mid = N.at(rn.e, rn.s);
-          const ix = mid.x - (C0.x + cmx),
-            iz = mid.z - (C0.z + cmz);
-          const il = Math.hypot(ix, iz) || 1;
-          const sl = slideAlong({ x: cmx, z: cmz }, { x: ix / il, z: iz / il }, dt);
-          const tx = C0.x + sl.move.x,
-            tz = C0.z + sl.move.z;
-          if (
-            onRoad(tx, tz, rp) &&
-            onRoad(tx + Math.sin(this.yaw) * bump * dir, tz + Math.cos(this.yaw) * bump * dir, noseRp)
-          ) {
-            C0.x = tx;
-            C0.z = tz;
-            this.speed *= sl.keep;
-            const dy = alignYaw(this.yaw, mid.yaw, sl.head, dt);
-            this.yaw = wrapAngle(this.yaw + dy);
-            this.velYaw = wrapAngle(this.velYaw + dy);
-            this.car.rotation.y = this.yaw;
-            if (sl.head > 0.5 && Math.abs(this.speed) > 8) this.wallHit(-Math.sign(ix), -Math.sign(iz));
-            moved = true;
-          } else if (kerbCrashes(this.speed, sl.head)) {
-            this.crash(Math.abs(this.speed) * 0.5);
-          }
-        }
-        if (!moved) {
-          // wedged: back off gently
-          this.speed *= -0.15;
-        }
-      } else {
-        C0.x += cmx;
-        C0.z += cmz;
-      }
+      // the edges of the road: slide along kerbs, never through them (same step the drive audit runs)
+      const body = this.carBody;
+      body.x = C0.x;
+      body.z = C0.z;
+      body.speed = this.speed;
+      body.yaw = this.yaw;
+      body.velYaw = this.velYaw;
+      const eh = moveCar(body, this.vehicle, dt, ROAD_QUERY);
+      C0.x = body.x;
+      C0.z = body.z;
+      this.speed = body.speed;
+      this.yaw = body.yaw;
+      this.velYaw = body.velYaw;
+      this.car.rotation.y = this.yaw;
+      if (eh.wall) this.wallHit(eh.wall.nx, eh.wall.nz);
+      if (eh.crash) this.crash(eh.crashV * 0.5);
       this.distAcc += Math.abs(this.speed) * dt;
       if (this.distAcc > 25) {
         addStat('distance', this.distAcc);
         this.distAcc = 0;
-      }
-      if (!onRoad(this.car.position.x, this.car.position.z, rp)) {
-        // still over the edge: ease back toward the middle of the road (no bounce)
-        const rn = net().nearest(this.car.position.x, this.car.position.z, 30);
-        if (rn) {
-          const mid = net().at(rn.e, rn.s);
-          const k = Math.min(1, dt * 4);
-          this.car.position.x += (mid.x - this.car.position.x) * k * 0.5;
-          this.car.position.z += (mid.z - this.car.position.z) * k * 0.5;
-        }
-        this.speed *= 1 - Math.min(0.5, dt * 1.5);
       }
       // never stay wedged off the road (pushed by traffic into a block): back to the nearest junction
       this.offRoadT = onRoad(this.car.position.x, this.car.position.z, rp) ? 0 : this.offRoadT + dt;

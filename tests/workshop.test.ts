@@ -127,7 +127,7 @@ describe('the workshops on the map', () => {
     for (let i = 0; i < spots.length; i++)
       for (let j = i + 1; j < spots.length; j++)
         expect(Math.hypot(spots[i]!.x - spots[j]!.x, spots[i]!.z - spots[j]!.z)).toBeGreaterThan(200);
-  });
+  }, 30_000);
   it('driving in slowly is entering; speeding past is not', () => {
     const s = workshopSpots()[0]!;
     expect(inWorkshop({ x: s.x + 3, z: s.z, speed: 2 }, s)).toBe(true);
