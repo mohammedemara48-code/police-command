@@ -2,56 +2,40 @@
  * Road surfaces of the open city: carriageway, kerb, pavement, corner fills at junctions, lane marks and zebra crossings.
  * Everything is poured per chunk (a segment belongs to the chunk holding its midpoint, so nothing is built twice).
  */
-import { PAVEMENT, type V2 } from '../logic/cairo';
+import { type V2 } from '../logic/cairo';
 import { net, type REdge } from '../logic/roadnet';
 import { junctionsOf } from '../logic/junctions';
 import { Soup } from './Soup';
+import {
+  clipHalf,
+  carrPolys,
+  TAPER_E,
+  clipSegToPoly,
+  fArea,
+  near,
+  shapeOf,
+  subtract,
+  area,
+  type FPoly,
+  type ProfPt
+} from '../logic/roadShape';
 
 const J = () => junctionsOf(net());
 
 export const ASPHALT_Y: Record<string, number> = { arterial: 0.05, collector: 0.046, local: 0.042 };
 export const PAVE_Y = 0.15;
 const PAINT_Y = 0.07;
+const FILLET_Y = 0.04;
+/** length of one yellow or black kerb stripe (m) */
+export const STRIPE = 1.1;
+const YELLOW: [number, number, number] = [0.93, 0.74, 0.12];
+const BLACK: [number, number, number] = [0.035, 0.035, 0.035];
+/** metres per pavement texture repeat (4 x 4 tiles of 0.5 m) */
+export const TILE_REPEAT = 2;
 
-interface P {
-  x: number;
-  z: number;
-  /** left normal (miter-scaled) */
-  nx: number;
-  nz: number;
-  s: number;
-}
-
-const profiles = new Map<number, P[]>();
+type P = ProfPt;
 function profile(e: REdge): P[] {
-  let p = profiles.get(e.id);
-  if (p) return p;
-  const pts = e.pts;
-  p = [];
-  let last = { x: 1, z: 0 };
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[Math.max(0, i - 1)]!,
-      b = pts[i]!,
-      c = pts[Math.min(pts.length - 1, i + 1)]!;
-    const d1 = norm(b.x - a.x, b.z - a.z) ?? norm(c.x - b.x, c.z - b.z) ?? last;
-    const d2 = norm(c.x - b.x, c.z - b.z) ?? d1;
-    last = d2;
-    const n1 = { x: -d1.z, z: d1.x },
-      n2 = { x: -d2.z, z: d2.x };
-    let mx = n1.x + n2.x,
-      mz = n1.z + n2.z;
-    const ml = Math.hypot(mx, mz) || 1;
-    mx /= ml;
-    mz /= ml;
-    const k = 1 / Math.max(0.55, mx * n1.x + mz * n1.z);
-    p.push({ x: b.x, z: b.z, nx: mx * k, nz: mz * k, s: e.cum[i]! });
-  }
-  profiles.set(e.id, p);
-  return p;
-}
-function norm(x: number, z: number) {
-  const l = Math.hypot(x, z);
-  return l < 1e-9 ? null : { x: x / l, z: z / l };
+  return shapeOf(net()).prof[e.id]!;
 }
 
 export interface Acc {
@@ -62,7 +46,7 @@ export interface Acc {
   paint: Soup;
 }
 /** Width of the kerb's top strip (m). */
-export const KERB_W = 0.34;
+export const KERB_W = 0.42;
 
 /** Point `off` metres to the left of the centre line at segment i, fraction k. */
 function at(P: P[], i: number, k: number, off: number): V2 {
@@ -138,37 +122,16 @@ export function pourRoads(
     const h = e.half;
     const ya = ASPHALT_Y[e.cls]!;
     const t = J().trims.get(e.id) ?? { aL: 0, aR: 0, bL: 0, bR: 0 };
-    // carriageway
-    each(e, 0, e.len, own, (i, k0, k1) => {
-      const l0 = at(P, i, k0, h),
-        r0 = at(P, i, k0, -h),
-        l1 = at(P, i, k1, h),
-        r1 = at(P, i, k1, -h);
-      acc.asphalt.flat(ya, [l0, r0, r1, l1]);
-    });
-    // pavements with their kerb faces and outer skirts
-    for (const side of [1, -1]) {
-      const s0 = side > 0 ? t.aL : t.aR,
-        s1 = e.len - (side > 0 ? t.bL : t.bR);
-      if (s1 - s0 < 0.3) continue;
-      each(e, s0, s1, own, (i, k0, k1) => {
-        const a0 = at(P, i, k0, side * h),
-          a1 = at(P, i, k1, side * h);
-        const b0 = at(P, i, k0, side * (h + PAVEMENT)),
-          b1 = at(P, i, k1, side * (h + PAVEMENT));
-        acc.paving.flat(PAVE_Y, [a0, b0, b1, a1]);
-        // kerb face (towards the road) and the outer skirt (towards the lots)
-        const nx = (P[i]!.nx + P[i + 1]!.nx) / 2,
-          nz = (P[i]!.nz + P[i + 1]!.nz) / 2;
-        const nl = Math.hypot(nx, nz) || 1;
-        (acc.kerb ?? acc.paving).wall(a0.x, a0.z, a1.x, a1.z, ya - 0.002, PAVE_Y, (-side * nx) / nl, (-side * nz) / nl);
-        if (acc.kerb) {
-          const c0 = at(P, i, k0, side * (h + KERB_W)),
-            c1 = at(P, i, k1, side * (h + KERB_W));
-          acc.kerb.flat(PAVE_Y + 0.004, [a0, c0, c1, a1]);
-        }
-        acc.paving.wall(b0.x, b0.z, b1.x, b1.z, 0, PAVE_Y, (side * nx) / nl, (side * nz) / nl);
-      });
+    // carriageway (the exact regions the car drives on)
+    for (const c of carrOf(e.id)) if (own(c.i)) acc.asphalt.flat(ya, c.poly.p);
+    // pavements: the band beside the kerb, less every carriageway and fillet it would cover and less the bands poured
+    // before it (so nothing overlaps and nothing is left bare), with kerbs wherever a piece meets asphalt
+    for (let i = 0; i + 1 < P.length; i++) {
+      if (P[i + 1]!.s - P[i]!.s < 1e-6 || !own(i)) continue;
+      for (const side of [1, -1] as const) {
+        const k = bandIndex(shapeOf(N)).get(`${e.id}:${i}:${side}`);
+        if (k !== undefined) pourBand(acc, k, ya);
+      }
     }
     // lane marks and edge lines
     if (e.ring || e.len < 14) continue;
@@ -200,29 +163,33 @@ export function pourRoads(
       line(-h / 2, 0.12, m0, m1, 3, 5);
     } else line(0, 0.13, m0, m1, 3, 5);
   }
-  // corner fills and zebra crossings at junctions
+  // round caps where a node leaves an open wedge, with their pavement rings
+  const SH = shapeOf(N);
+  SH.discs.forEach((d, k) => {
+    if (!inside(d.x, d.z)) return;
+    acc.asphalt.flat(FILLET_Y, d.poly.p);
+    const ring = bandIndex(SH).get(`${-1 - k}:0:1`)!;
+    for (let j = 0; j < d.poly.p.length; j++) pourBand(acc, ring + j, FILLET_Y);
+  });
+  // tapers where a street narrows, with the pavement beside them
+  SH.tapers.forEach((t, k) => {
+    const n = N.nodes[t.node]!;
+    if (!inside(n.x, n.z)) return;
+    acc.asphalt.flat(FILLET_Y, t.poly.p);
+    const bi = bandIndex(SH);
+    for (let j = 0; j < 2; j++) {
+      const b = bi.get(`${TAPER_E - k}:${j}:1`);
+      if (b !== undefined) pourBand(acc, b, FILLET_Y);
+    }
+  });
+  // rounded kerb fillets at junction corners (asphalt)
+  for (const f of shapeOf(N).fillets) {
+    if (!inside(f.P.x, f.P.z)) continue;
+    for (const t of f.tris) acc.asphalt.flat(FILLET_Y, t.p);
+  }
+  // zebra crossings at junctions
   for (const n of N.nodes) {
     if (n.edges.length < 3 || n.x < x0 - 30 || n.x >= x1 + 30 || n.z < z0 - 30 || n.z >= z1 + 30) continue;
-    for (const c of J().cornersByNode.get(n.id) ?? []) {
-      const cx = c.poly.reduce((s, p) => s + p.x, 0) / c.poly.length,
-        cz = c.poly.reduce((s, p) => s + p.z, 0) / c.poly.length;
-      if (!inside(cx, cz)) continue;
-      acc.paving.flat(PAVE_Y, c.poly);
-      // outer skirts of the corner
-      const [, oa, q, ob] = c.poly as [V2, V2, V2, V2, V2];
-      for (const [p, r] of [
-        [oa, q],
-        [q, ob]
-      ] as const) {
-        const dx = r.x - p.x,
-          dz = r.z - p.z;
-        const mx = (p.x + r.x) / 2 - (c.poly[0]!.x + c.poly[4]!.x) / 2,
-          mz = (p.z + r.z) / 2 - (c.poly[0]!.z + c.poly[4]!.z) / 2;
-        const sgn = -dz * mx + dx * mz > 0 ? 1 : -1;
-        void sgn;
-        acc.paving.wall(p.x, p.z, r.x, r.z, 0, PAVE_Y, mx, mz);
-      }
-    }
     for (const id of n.edges) {
       const e = N.edges[id]!;
       if (e.cls === 'local' && n.edges.length < 4) continue;
@@ -286,4 +253,149 @@ export function zebras(): Zebra[] {
     }
   }
   return out;
+}
+
+const carrIdx = new WeakMap<object, Map<number, ReturnType<typeof shapeOf>['carr']>>();
+function carrOf(e: number) {
+  const S = shapeOf(net());
+  let m = carrIdx.get(S);
+  if (!m) {
+    m = new Map();
+    for (const c of S.carr) {
+      const l = m.get(c.e);
+      if (l) l.push(c);
+      else m.set(c.e, [c]);
+    }
+    carrIdx.set(S, m);
+  }
+  return m.get(e) ?? [];
+}
+
+const bandIdx = new WeakMap<object, Map<string, number>>();
+function bandIndex(S: ReturnType<typeof shapeOf>) {
+  let m = bandIdx.get(S);
+  if (!m) {
+    m = new Map();
+    S.bands.forEach((q, k) => m!.set(`${q.e}:${q.i}:${q.side}`, k));
+    bandIdx.set(S, m);
+  }
+  return m;
+}
+
+/** The pieces of a pavement band region left after every carriageway, fillet, cap and earlier band is cut out. */
+export function bandPieces(self: number): FPoly[] {
+  const S = shapeOf(net());
+  const band = S.bands[self]!;
+  let pieces: FPoly[] = [{ p: band.f.p, t: band.f.t }];
+  const { x0, z0, x1, z1 } = band.poly;
+  for (const v of near(S.gridC, x0, z0, x1, z1)) {
+    const c = v >= 0 ? S.carr[v]! : null;
+    if (c && c.e === band.e && c.i === band.i) continue;
+    const polys = carrPolys(S, v);
+    for (const cp of polys) pieces = pieces.flatMap((q) => subtract(q, cp, true));
+    if (!pieces.length) return pieces;
+  }
+  for (const v of near(S.gridB, x0, z0, x1, z1)) {
+    if (v >= self) continue;
+    pieces = pieces.flatMap((q) => subtract(q, S.bands[v]!.poly, false));
+    if (!pieces.length) return pieces;
+  }
+  return pieces;
+}
+
+/** Pour one pavement band region (a street segment's side, or a sector of a node ring) after clipping it. */
+function pourBand(acc: Acc, self: number, ya: number) {
+  const N = net();
+  const S = shapeOf(N);
+  const band = S.bands[self]!;
+  const pieces = bandPieces(self);
+  if (!pieces.length) return;
+  // texture frame: along the segment and across from the centre line (node rings: the world grid)
+  let uv = (v: V2): [number, number] => [v.x / TILE_REPEAT, v.z / TILE_REPEAT];
+  if (band.e >= 0) {
+    const P = S.prof[band.e]!;
+    const a = P[band.i]!,
+      b = P[band.i + 1]!;
+    const dx = b.x - a.x,
+      dz = b.z - a.z;
+    const L = Math.hypot(dx, dz) || 1;
+    const ux = dx / L,
+      uz = dz / L;
+    uv = (v: V2): [number, number] => {
+      const rx = v.x - a.x,
+        rz = v.z - a.z;
+      return [(a.s + rx * ux + rz * uz) / TILE_REPEAT, (rx * -uz + rz * ux) / TILE_REPEAT];
+    };
+  }
+  for (const q of pieces) {
+    if (q.p.length < 3 || fArea(q.p) < 1e-5) continue;
+    acc.paving.flatUV(PAVE_Y, q.p, q.p.map(uv));
+    const cx = q.p.reduce((s, v) => s + v.x, 0) / q.p.length,
+      cz = q.p.reduce((s, v) => s + v.z, 0) / q.p.length;
+    for (let k = 0; k < q.p.length; k++) {
+      const t = q.t[k]!;
+      if (t === 'end' || t === 'cut' || t === 'side') continue;
+      const v0 = q.p[k]!,
+        v1 = q.p[(k + 1) % q.p.length]!;
+      if (Math.hypot(v1.x - v0.x, v1.z - v0.z) < 1e-3) continue;
+      if (t === 'outer') {
+        const [nx, nz] = outward(v0, v1, cx, cz);
+        acc.paving.wall(v0.x, v0.z, v1.x, v1.z, 0, PAVE_Y, nx, nz);
+        continue;
+      }
+      let w0 = v0,
+        w1 = v1;
+      if (t !== 'inner') {
+        const sg = clipSegToPoly(v0, v1, t.c, t.j);
+        if (!sg) continue;
+        [w0, w1] = sg;
+      }
+      kerbEdge(acc, q, w0, w1, cx, cz, t === 'inner' ? ya - 0.002 : 0.035);
+    }
+  }
+}
+
+function outward(v0: V2, v1: V2, cx: number, cz: number): [number, number] {
+  const dx = v1.x - v0.x,
+    dz = v1.z - v0.z;
+  const l = Math.hypot(dx, dz) || 1;
+  let nx = -dz / l,
+    nz = dx / l;
+  if (nx * ((v0.x + v1.x) / 2 - cx) + nz * ((v0.z + v1.z) / 2 - cz) < 0) {
+    nx = -nx;
+    nz = -nz;
+  }
+  return [nx, nz];
+}
+
+/** A kerb along w0-w1 of a pavement piece: the face down to the road and the striped top strip (clipped to the piece). */
+function kerbEdge(acc: Acc, q: FPoly, w0: V2, w1: V2, cx: number, cz: number, y0: number) {
+  const K = acc.kerb ?? acc.paving;
+  const [nx, nz] = outward(w0, w1, cx, cz);
+  const dx = w1.x - w0.x,
+    dz = w1.z - w0.z;
+  const len = Math.hypot(dx, dz);
+  const ux = dx / len,
+    uz = dz / len;
+  // stripes on a world grid along the kerb's direction, so neighbouring pieces of one kerb line up
+  const p0 = w0.x * ux + w0.z * uz;
+  let s = 0;
+  while (s < len - 1e-4) {
+    const g = Math.floor((p0 + s) / STRIPE + 1e-6);
+    const e = Math.min(len, (g + 1) * STRIPE - p0);
+    const c = acc.kerb ? (g & 1 ? BLACK : YELLOW) : undefined;
+    const a0 = { x: w0.x + ux * s, z: w0.z + uz * s },
+      a1 = { x: w0.x + ux * e, z: w0.z + uz * e };
+    K.wall(a0.x, a0.z, a1.x, a1.z, y0, PAVE_Y, nx, nz, c);
+    if (acc.kerb) {
+      let r: FPoly = {
+        p: [a0, a1, { x: a1.x - nx * KERB_W, z: a1.z - nz * KERB_W }, { x: a0.x - nx * KERB_W, z: a0.z - nz * KERB_W }],
+        t: ['cut', 'cut', 'cut', 'cut']
+      };
+      if (area(r.p) < 0) r = { p: r.p.slice().reverse(), t: r.t };
+      for (let k = 0; k < q.p.length && r.p.length >= 3; k++) r = clipHalf(r, q.p[k]!, q.p[(k + 1) % q.p.length]!, true, 'cut');
+      if (r.p.length >= 3 && fArea(r.p) > 1e-5) acc.kerb.flat(PAVE_Y + 0.004, r.p, c);
+    }
+    s = e;
+  }
 }

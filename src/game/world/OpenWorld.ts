@@ -64,15 +64,58 @@ function materials() {
   mats = {
     asphalt: po(surface('asphalt', Q.hdri ? 0x9a9a9a : 0xb8b8b8).clone(), -1),
     // pavements read as light grey paving and the kerb as a paler stone edge, so road / kerb / pavement / ground are four clear tones
-    paving: po(new THREE.MeshStandardMaterial({ color: 0x95928d, roughness: 0.96 }), -1),
-    kerb: po(new THREE.MeshStandardMaterial({ color: 0xcfcbc2, roughness: 0.9 }), -2),
-    paint: po(M.paint.clone(), -3),
+    // light beige 50 cm paving tiles with grout lines, and the Egyptian kerb painted in yellow and black stripes
+    paving: po(new THREE.MeshStandardMaterial({ color: 0xffffff, map: tileTexture(), roughness: 0.92 }), -1),
+    kerb: po(new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.75 }), -2),
+    paint: po(crisp(M.paint.clone()), -3),
     stone: surface('stone', 0xcfc4ae),
     concrete: surface('concrete', 0xcfcac2),
     awning: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }),
     light: [new THREE.MeshBasicMaterial({ color: 0x33ff66 }), new THREE.MeshBasicMaterial({ color: 0xff3030 })]
   };
   return mats;
+}
+
+/** Road paint (lane lines, zebras): crisp white. */
+function crisp(m: THREE.MeshStandardMaterial) {
+  m.color.set(0xf3f2ec);
+  m.roughness = 0.62;
+  return m;
+}
+
+/** Procedural paving: 4 x 4 square tiles per texture repeat (TILE_REPEAT metres), each a slightly different beige. */
+function tileTexture(): THREE.Texture | null {
+  if (typeof document === 'undefined') return null;
+  const S = 256,
+    T = S / 4;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#8f8573';
+  g.fillRect(0, 0, S, S);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 4; i++)
+    for (let j = 0; j < 4; j++) {
+      const v = 0.94 + rnd() * 0.08;
+      const r = Math.round(218 * v),
+        gg = Math.round(203 * v),
+        b = Math.round(174 * v);
+      g.fillStyle = `rgb(${r},${gg},${b})`;
+      g.fillRect(i * T + 2, j * T + 2, T - 4, T - 4);
+      // a little speckle so the tiles read as stone
+      for (let k = 0; k < 60; k++) {
+        const d = rnd() < 0.5 ? -10 : 8;
+        g.fillStyle = `rgba(${r + d},${gg + d},${b + d},0.5)`;
+        g.fillRect(i * T + 2 + rnd() * (T - 6), j * T + 2 + rnd() * (T - 6), 2, 2);
+      }
+    }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = Q.shadows ? 8 : 4;
+  t.generateMipmaps = true;
+  return t;
 }
 
 /** Where the road network leaves the world: closed by a barrier arm and a guard hut. */
@@ -272,7 +315,7 @@ export class OpenWorld {
     const edges = inWorld ? edgesIn(x0, z0, x1, z1) : [];
     if (inWorld) {
       // roads
-      const acc = { asphalt: new Soup(5), paving: new Soup(2.2), kerb: new Soup(1.6), paint: new Soup(4) };
+      const acc = { asphalt: new Soup(5), paving: new Soup(2.2), kerb: new Soup(1.6, true), paint: new Soup(4) };
       pourRoads(x0, z0, x1, z1, acc, edges);
       out(acc.asphalt, m.asphalt);
       out(acc.paving, m.paving);

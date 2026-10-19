@@ -51,6 +51,21 @@ export class Soup {
     }
   }
 
+  /** A flat convex polygon facing up with given texture coordinates (already in repeats). */
+  flatUV(y: number, pts: readonly { x: number; z: number }[], uvs: readonly (readonly [number, number])[], c?: readonly [number, number, number]) {
+    if (pts.length < 3) return;
+    const a = pts[0]!,
+      b = pts[1]!,
+      d = pts[2]!;
+    const up = (b.z - a.z) * (d.x - a.x) - (b.x - a.x) * (d.z - a.z) > 0;
+    const base = this.pos.length / 3;
+    pts.forEach((p, k) => this.vert(p.x, y, p.z, 0, 1, 0, uvs[k]![0], uvs[k]![1], c));
+    for (let k = 1; k < pts.length - 1; k++) {
+      if (up) this.idx.push(base, base + k, base + k + 1);
+      else this.idx.push(base, base + k + 1, base + k);
+    }
+  }
+
   /** A strip between two polylines (same length) at height y, facing up. */
   strip(
     y: number,

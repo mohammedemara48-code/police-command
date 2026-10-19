@@ -4,6 +4,7 @@
  */
 import { resetJunctions } from './junctions';
 import { roadConflicts } from './netcheck';
+import { inCarriage, resetShape } from './roadShape';
 import {
   ANCHORS,
   BANK_EAST,
@@ -580,6 +581,7 @@ export class RoadNet {
 
   private index() {
     resetJunctions(this);
+    resetShape(this);
     this.hash = new Hash<{ e: number; i: number }>(32);
     for (const e of this.edges)
       for (let i = 0; i + 1 < e.pts.length; i++) {
@@ -688,12 +690,8 @@ export class RoadNet {
 
   /** On a carriageway (pad = extra margin, e.g. the pavement for people on foot). */
   onRoad(x: number, z: number, pad = 0): boolean {
-    const p = { x, z };
-    for (const h of this.hash.near(x, z, 0.1, this.tmp)) {
-      const e = this.edges[h.e]!;
-      if (distToSeg(p, e.pts[h.i]!, e.pts[h.i + 1]!).d <= e.half + pad) return true;
-    }
-    return false;
+    // the exact drawn carriageway quads (mitred, flat ends) and the rounded corner fillets
+    return inCarriage(this, x, z, pad);
   }
 
   /** Distance to the nearest carriageway edge over all roads except `skip` (for placing buildings). */
