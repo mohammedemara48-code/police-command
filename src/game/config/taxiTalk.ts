@@ -206,8 +206,8 @@ export const PERSONA_LOOK: Record<Persona, { name: string; icon: string; color: 
 
 export function fill(line: string, vars: { to?: string; from?: string }): string {
   return line
-    .replace('{to}', (vars.to ?? '').replace(/^موقف /, ''))
-    .replace('{from}', (vars.from ?? '').replace(/^موقف /, ''));
+    .replaceAll('{to}', (vars.to ?? '').replace(/^موقف /, ''))
+    .replaceAll('{from}', (vars.from ?? '').replace(/^موقف /, ''));
 }
 
 /** Chat topics a passenger may bring up on the way, by personality. */

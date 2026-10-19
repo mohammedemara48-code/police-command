@@ -364,3 +364,13 @@ describe('distance by road', () => {
     expect(roadDistance(route, { x: 100, z: 100 }, { x: 100, z: 100 })).toBe(0);
   });
 });
+
+import { fill as fillTalk } from '../src/game/config/taxiTalk';
+import { describe as d2, expect as e2, it as i2 } from 'vitest';
+d2('taxi talk placeholders', () => {
+  i2('replaces every occurrence of a placeholder', () => {
+    e2(fillTalk('{to} لا لا، قصدي {to} و{from}', { to: 'موقف الدقي', from: 'موقف الهرم' })).toBe(
+      'الدقي لا لا، قصدي الدقي والهرم'
+    );
+  });
+});
