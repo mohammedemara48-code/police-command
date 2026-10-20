@@ -1,3 +1,5 @@
+import { ZONES, zoneById } from '../logic/zones';
+import { setZone } from '../missions/Levels';
 import { reducedMotion } from '../config/Motion';
 import { stepLoco, followCamYaw, wrapAngle } from '../logic/locomotion';
 import {
@@ -2334,10 +2336,41 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.clearMission();
     this.closeMap();
     this.msText = '';
-    if (this.mode === 'taxi' && isTaxiVehicle(this.vehicle)) this.taxi.start(this.vehicle);
-    // the shift starts AT a rank: the car pulls up at the kerb of the first rank with its people waiting, and they board straight away
+    // a taxi shift waits for the district pick (showZonePicker) before anyone boards
+    this.placeAtRank(['dokki', 'mohandessin', 'zamalek', 'ramses', 'tahrir', 'giza'].sort(() => Math.random() - 0.5));
+    this.damage = 0;
+    if (this.mode === 'taxi' && isTaxiVehicle(this.vehicle)) this.showZonePicker();
+  }
+
+  /** The shift's first choice: which district to work. The car then waits at that district's rank. */
+  private zonePickEl: HTMLElement | null = null;
+  private showZonePicker() {
+    this.zonePickEl?.remove();
+    const el = document.createElement('div');
+    el.className = 'zone-pick';
+    el.innerHTML = `<div class="zp-card"><h3>هتشتغل فين النهارده؟</h3><div class="zp-list">${ZONES.map(
+      (z) => `<button type="button" data-zone="${z.id}">${z.name}</button>`
+    ).join('')}</div></div>`;
+    el.querySelectorAll<HTMLElement>('[data-zone]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const z = zoneById(b.dataset.zone ?? '');
+        el.remove();
+        this.zonePickEl = null;
+        if (!z || !isTaxiVehicle(this.vehicle)) return;
+        this.taxi.start(this.vehicle);
+        this.taxi.zone = z.id;
+        setZone(z.id);
+        this.placeAtRank([...z.stops]);
+        this.setStatus(`ورديتك في ${z.name}. الركاب مستنيين في الموقف.`);
+      })
+    );
+    (this.ui ?? document.body).appendChild(el);
+    this.zonePickEl = el;
+  }
+
+  /** The car pulls up at the kerb of the first usable rank of `ids`, facing along the street, its people waiting. */
+  private placeAtRank(ids: string[]) {
     const N = net();
-    const ids = ['dokki', 'mohandessin', 'zamalek', 'ramses', 'tahrir', 'giza'].sort(() => Math.random() - 0.5);
     let cx = 0,
       cz = 0,
       yaw = 0,
@@ -2374,7 +2407,6 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.speed = 0;
     this.player.position.set(cx - Math.cos(yaw) * 2, 0, cz + Math.sin(yaw) * 2);
     if (!this.inCar) this.toggleCar();
-    this.damage = 0;
     this.snapCamera(1);
   }
 

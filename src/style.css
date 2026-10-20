@@ -4210,3 +4210,11 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
   color: #ffd23d;
   font-size: 18px;
 }
+
+/* shift start: pick the district to work */
+.zone-pick { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 40; pointer-events: auto; background: rgba(0, 0, 0, 0.25); }
+.zone-pick .zp-card { direction: rtl; background: rgba(18, 22, 30, 0.92); color: #fff; border-radius: 14px; padding: 14px 16px; max-width: 340px; width: 86%; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); }
+.zone-pick h3 { margin: 0 0 10px; font-size: 17px; text-align: center; }
+.zone-pick .zp-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.zone-pick button { padding: 10px 6px; border: 1px solid #f2d14b; background: transparent; color: #f2d14b; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
+.zone-pick button:active { background: #f2d14b; color: #111; }
