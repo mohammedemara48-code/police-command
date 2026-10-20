@@ -381,10 +381,15 @@ function filletTris(S: ReturnType<typeof shapeOf>) {
  */
 function filletKerb(acc: Acc, f: Fillet) {
   const N = net();
-  const S = shapeOf(N);
-  const own = new Set<object>(f.tris);
   const K = acc.kerb ?? acc.paving;
-  const a = f.arc;
+  // carry the arc a little past each end along its tangent, so it overlaps the straight kerbs instead of leaving a
+  // wedge of bare slab where the two meet
+  const a0 = f.arc;
+  const ext = (p: V2, q: V2): V2 => {
+    const l = Math.hypot(p.x - q.x, p.z - q.z) || 1;
+    return { x: p.x + ((p.x - q.x) / l) * 0.35, z: p.z + ((p.z - q.z) / l) * 0.35 };
+  };
+  const a = a0.length >= 2 ? [ext(a0[0]!, a0[1]!), ...a0, ext(a0[a0.length - 1]!, a0[a0.length - 2]!)] : a0;
   const tot: number[] = [0];
   for (let k = 1; k < a.length; k++) tot.push(tot[k - 1]! + Math.hypot(a[k]!.x - a[k - 1]!.x, a[k]!.z - a[k - 1]!.z));
   const L = tot[tot.length - 1]!;
@@ -404,17 +409,16 @@ function filletKerb(acc: Acc, f: Fillet) {
     const c = acc.kerb ? (g & 1 ? BLACK : YELLOW) : undefined;
     const [nx, nz] = outward(v0, v1, f.c.x, f.c.z);
     // where another street runs into the corner the arc is not a kerb there
-    const mid = { x: (v0.x + v1.x) / 2 - nx * 0.05, z: (v0.z + v1.z) / 2 - nz * 0.05 };
-    if (N.onRoad(mid.x, mid.z, 0)) continue;
+    // (probed across the whole strip: a corner of a straight carriageway poking just past the arc is not a street)
+    const deep = (d: number) => N.onRoad((v0.x + v1.x) / 2 - nx * d, (v0.z + v1.z) / 2 - nz * d, 0);
+    if (deep(0.05)) continue;
     K.wall(v0.x, v0.z, v1.x, v1.z, FILLET_Y - 0.005, PAVE_Y, nx, nz, c);
     if (acc.kerb) {
       const q = [v0, v1, inward(v1), inward(v0)];
-      let pieces: FPoly[] = [{ p: area(q) < 0 ? q.reverse() : q, t: ['cut', 'cut', 'cut', 'cut'] }];
-      const xs = q.map((v) => v.x),
-        zs = q.map((v) => v.z);
-      for (const v of near(S.gridC, Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)))
-        for (const cp of carrPolys(S, v)) if (!own.has(cp)) pieces = pieces.flatMap((r) => subtract(r, cp, false));
-      for (const r of pieces) if (r.p.length >= 3 && fArea(r.p) > 1e-5) acc.kerb.flat(PAVE_Y + 0.004, r.p, c);
+      // the strip lies on the pavement side of the arc by construction: drawn whole (clipping it against the
+      // neighbouring carriageways, which overlap the corner slab, left it ragged and let bare slab show through)
+      const pieces: FPoly[] = [{ p: area(q) < 0 ? q.reverse() : q, t: ['cut', 'cut', 'cut', 'cut'] }];
+      for (const r of pieces) if (r.p.length >= 3 && fArea(r.p) > 1e-5) acc.kerb.flat(PAVE_Y + 0.009, r.p, c);
     }
   }
 }
