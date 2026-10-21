@@ -1559,7 +1559,8 @@ export class StreetPlay {
       const aim = has ? this.routeAim(pos) : this.msTarget;
       const v = this.tmpV.set(aim.x, 1.5, aim.z).project(this.camera);
       const on = Math.abs(v.x) < 0.9 && Math.abs(v.y) < 0.85 && v.z < 1;
-      this.dirEl.style.display = has && dist > 4 ? 'block' : 'none';
+      // on screen the painted route line guides; the chevron only shows at the edge when the target is out of view
+      this.dirEl.style.display = has && dist > 15 && !on && !this.zonePickEl ? 'block' : 'none';
       this.dirEl.classList.toggle('onscreen', on);
       if (on) {
         this.dirEl.style.left = `${(v.x * 0.5 + 0.5) * 100}%`;
@@ -1572,10 +1573,70 @@ export class StreetPlay {
         const reach = this.camera.aspect > 1.3 ? 31 : 38;
         this.dirEl.style.left = `${50 + Math.cos(ang) * reach}%`;
         this.dirEl.style.top = `${50 - Math.sin(ang) * 30}%`;
-        this.dirEl.style.transform = `translate(-50%,-50%) rotate(${-ang}rad)`;
+        this.dirEl.style.transform = 'translate(-50%,-50%)';
+        // only the chevron turns: the distance under it stays upright
+        this.dirEl.style.setProperty('--a', `${-ang}rad`);
       }
     }
     if (this.mode === 'police') this.renderHud();
+  }
+
+  /** GPS line painted on the road: a translucent ribbon along the next ~220 m of the route. */
+  private routeLine: THREE.Mesh | null = null;
+  private drawRouteLine(me: { x: number; z: number }) {
+    if (!this.routeLine) {
+      this.routeLine = new THREE.Mesh(
+        new THREE.BufferGeometry(),
+        new THREE.MeshBasicMaterial({
+          color: 0x3da5ff,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.7,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -4,
+          polygonOffsetUnits: -4,
+          fog: false
+        })
+      );
+      this.routeLine.userData.dynamic = true;
+      this.routeLine.renderOrder = 3;
+      this.group.add(this.routeLine);
+    }
+    const pts: { x: number; z: number }[] = [{ x: me.x, z: me.z }, ...this.route];
+    // keep the stretch ahead, resampled every 2 m
+    const out: { x: number; z: number }[] = [];
+    let run = 0;
+    for (let i = 0; i + 1 < pts.length && run < 220; i++) {
+      const a = pts[i]!,
+        b = pts[i + 1]!;
+      const L = Math.hypot(b.x - a.x, b.z - a.z);
+      const n = Math.max(1, Math.ceil(L / 2));
+      for (let k = 0; k < n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, z: a.z + ((b.z - a.z) * k) / n });
+      run += L;
+    }
+    const last = pts[pts.length - 1];
+    if (last) out.push(last);
+    const pos: number[] = [];
+    const W = 0.55;
+    for (let i = 3; i + 1 < out.length; i++) {
+      const a = out[i]!,
+        b = out[i + 1]!;
+      const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+      const nx = (-(b.z - a.z) / L) * W,
+        nz = ((b.x - a.x) / L) * W;
+      const y = this.surfaceY(a.x, a.z),
+        y2 = this.surfaceY(b.x, b.z);
+      pos.push(a.x + nx, y, a.z + nz, a.x - nx, y, a.z - nz, b.x + nx, y2, b.z + nz);
+      pos.push(a.x - nx, y, a.z - nz, b.x - nx, y2, b.z - nz, b.x + nx, y2, b.z + nz);
+    }
+    const g = this.routeLine.geometry;
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.computeBoundingSphere();
+    this.routeLine.visible = this.msHasTarget && pos.length > 0;
+  }
+  private surfaceY(x: number, z: number) {
+    return onRoad(x, z, 0) ? 0.2 : 0.24;
   }
 
   /** A point on the road route to the objective, about `ahead` metres further along from where we are. */
@@ -3592,6 +3653,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       C.set(r ? r.x : STATION.parking.x, 0, r ? r.z : STATION.parking.z);
       P.set(C.x + 2, 0, C.z);
     }
+    // the shift's district card is up: the street waits for the choice
+    if (this.zonePickEl) return;
     const input = this.wants();
     this.stepActor(dt, input);
     this.crowd?.update(dt, this.inCar ? this.car.position : this.player.position, this.camera, this.world.time, {
@@ -3630,6 +3693,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       this.routeT = 0.5;
       const me = this.inCar ? this.car.position : this.player.position;
       this.route = this.msHasTarget ? findPath(me.x, me.z, this.msTarget.x, this.msTarget.z) : [];
+      this.drawRouteLine(me);
     }
     this.tickRadio(dt);
     if (F.policeHud) {

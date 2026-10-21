@@ -2167,6 +2167,12 @@ html.armed .street-actions button[data-act='shoot'] {
   border-radius: 6px;
   white-space: nowrap;
 }
+#street-dir i {
+  display: inline-block;
+  color: #ffd23d;
+  text-shadow: 0 0 4px #000;
+  transform: rotate(var(--a, 0));
+}
 #street-dir.onscreen i {
   display: inline-block;
   transform: rotate(90deg);
