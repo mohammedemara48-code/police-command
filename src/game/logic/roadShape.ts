@@ -81,7 +81,7 @@ export interface Shape {
 }
 
 /** Fillet radius at junction corners (m). */
-export const FILLET_R = 2.4;
+export const FILLET_R = 3.6;
 const CELL = 16;
 const key = (i: number, j: number) => i * 65536 + j;
 

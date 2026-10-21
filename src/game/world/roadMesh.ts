@@ -387,7 +387,7 @@ function filletKerb(acc: Acc, f: Fillet) {
   const a0 = f.arc;
   const ext = (p: V2, q: V2): V2 => {
     const l = Math.hypot(p.x - q.x, p.z - q.z) || 1;
-    return { x: p.x + ((p.x - q.x) / l) * 0.35, z: p.z + ((p.z - q.z) / l) * 0.35 };
+    return { x: p.x + ((p.x - q.x) / l) * 0.15, z: p.z + ((p.z - q.z) / l) * 0.15 };
   };
   const a = a0.length >= 2 ? [ext(a0[0]!, a0[1]!), ...a0, ext(a0[a0.length - 1]!, a0[a0.length - 2]!)] : a0;
   const tot: number[] = [0];
