@@ -4294,19 +4294,59 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       dots.push({ x: this.vip.position.x, z: this.vip.position.z, c: '#ffc93c', r: 4.5 });
     }
 
-    dots.push({ x: pos.x, z: pos.z, c: '#ffffff', r: 4 });
     const m = drawMiniMap(ctx, c.width, c.height, pos.x, pos.z, dots);
+    // district names, small, so the map says where you are
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    for (const p of places()) {
+      const x = m.sx(p.x),
+        y = m.sz(p.z);
+      if (x < 8 || y < 8 || x > c.width - 8 || y > c.height - 8) continue;
+      if (Math.hypot(x - m.sx(pos.x), y - m.sz(pos.z)) < 22) continue;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000c';
+      ctx.strokeText(p.name, x, y - 7);
+      ctx.fillStyle = '#e8eef7';
+      ctx.fillText(p.name, x, y - 7);
+    }
+    // the route in the same blue as the line painted on the road, solid with a dark edge
     if (this.route.length > 1) {
-      ctx.strokeStyle = '#ffd23d';
-      ctx.lineWidth = 2.5;
-      ctx.setLineDash([5, 3]);
-      ctx.beginPath();
-      ctx.moveTo(m.sx(pos.x), m.sz(pos.z));
-      for (const w of this.route) ctx.lineTo(m.sx(w.x), m.sz(w.z));
-      ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.lineCap = ctx.lineJoin = 'round';
+      for (const [w, col] of [
+        [5, '#0b2340'],
+        [3, '#3da5ff']
+      ] as const) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(m.sx(pos.x), m.sz(pos.z));
+        for (const q of this.route) ctx.lineTo(m.sx(q.x), m.sz(q.z));
+        ctx.stroke();
+      }
       ctx.lineWidth = 1;
     }
+    // you: an arrow pointing where you face
+    const yaw = this.inCar ? this.yaw : this.player.rotation.y;
+    const px = m.sx(pos.x),
+      pz = m.sz(pos.z);
+    const fx = m.sx(pos.x + Math.sin(yaw) * 50) - px,
+      fz = m.sz(pos.z + Math.cos(yaw) * 50) - pz;
+    const ang = Math.atan2(fz, fx);
+    ctx.save();
+    ctx.translate(px, pz);
+    ctx.rotate(ang);
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-5, -5.5);
+    ctx.lineTo(-2.5, 0);
+    ctx.lineTo(-5, 5.5);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
