@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@vercel/analytics": "^1.6.1",
+    "clipper2-js": "^1.2.4",
     "three": "^0.170.0"
   },
   "devDependencies": {

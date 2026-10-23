@@ -6,19 +6,8 @@ import { type V2 } from '../logic/cairo';
 import { net, type REdge } from '../logic/roadnet';
 import { junctionsOf } from '../logic/junctions';
 import { Soup } from './Soup';
-import {
-  clipHalf,
-  carrPolys,
-  TAPER_E,
-  fArea,
-  near,
-  shapeOf,
-  subtract,
-  area,
-  type FPoly,
-  type Fillet,
-  type ProfPt
-} from '../logic/roadShape';
+import { inFill, inPoly, paveRegion, triangulate, type PaveRegion } from './pavement';
+import { shapeOf, type ProfPt } from '../logic/roadShape';
 
 const J = () => junctionsOf(net());
 
@@ -124,15 +113,6 @@ export function pourRoads(
     const t = J().trims.get(e.id) ?? { aL: 0, aR: 0, bL: 0, bR: 0 };
     // carriageway (the exact regions the car drives on)
     for (const c of carrOf(e.id)) if (own(c.i)) acc.asphalt.flat(ya, c.poly.p);
-    // pavements: the band beside the kerb, less every carriageway and fillet it would cover and less the bands poured
-    // before it (so nothing overlaps and nothing is left bare), with kerbs wherever a piece meets asphalt
-    for (let i = 0; i + 1 < P.length; i++) {
-      if (P[i + 1]!.s - P[i]!.s < 1e-6 || !own(i)) continue;
-      for (const side of [1, -1] as const) {
-        const k = bandIndex(shapeOf(N)).get(`${e.id}:${i}:${side}`);
-        if (k !== undefined) pourBand(acc, k, ya);
-      }
-    }
     // lane marks and edge lines
     if (e.ring || e.len < 14) continue;
     const m0 = Math.max(t.aL, t.aR) + (e.cls === 'local' ? 2.5 : 5),
@@ -167,27 +147,24 @@ export function pourRoads(
   const SH = shapeOf(N);
   SH.discs.forEach((d, k) => {
     if (!inside(d.x, d.z)) return;
+    void k;
     acc.asphalt.flat(FILLET_Y, d.poly.p);
-    const ring = bandIndex(SH).get(`${-1 - k}:0:1`)!;
-    for (let j = 0; j < d.poly.p.length; j++) pourBand(acc, ring + j, FILLET_Y);
   });
   // tapers where a street narrows, with the pavement beside them
   SH.tapers.forEach((t, k) => {
     const n = N.nodes[t.node]!;
     if (!inside(n.x, n.z)) return;
+    void k;
     acc.asphalt.flat(FILLET_Y, t.poly.p);
-    const bi = bandIndex(SH);
-    for (let j = 0; j < 2; j++) {
-      const b = bi.get(`${TAPER_E - k}:${j}:1`);
-      if (b !== undefined) pourBand(acc, b, FILLET_Y);
-    }
   });
   // rounded kerb fillets at junction corners (asphalt)
   for (const f of shapeOf(N).fillets) {
     if (!inside(f.P.x, f.P.z)) continue;
     for (const t of f.tris) acc.asphalt.flat(FILLET_Y, t.p);
-    filletKerb(acc, f);
   }
+  // pavements, kerbs and the asphalt poured where a thin tip or crumb of pavement was taken out
+  const reg = paveRegion(x0, z0, x1, z1);
+  pourPavement(acc, reg, x0, z0, x1, z1);
   // zebra crossings at junctions
   for (const n of N.nodes) {
     if (n.edges.length < 3 || n.x < x0 - 30 || n.x >= x1 + 30 || n.z < z0 - 30 || n.z >= z1 + 30) continue;
@@ -201,7 +178,7 @@ export function pourRoads(
       const sc = atA ? tr + 1.2 : e.len - tr - 1.2 - 3;
       const P = profile(e);
       const mid = N.at(e, sc + 1.5);
-      if (!inside(mid.x, mid.z)) continue;
+      if (!inside(mid.x, mid.z) || !zebraKeys().has(`${n.id}:${e.id}`)) continue;
       crossings++;
       const h = e.half - 0.7;
       for (let o = -h; o <= h; o += 1.15) {
@@ -212,12 +189,10 @@ export function pourRoads(
           sc + 3,
           () => true,
           (i, k0, k1) => {
-            acc.paint.flat(PAINT_Y, [
-              at(P, i, k0, o - 0.25),
-              at(P, i, k0, o + 0.25),
-              at(P, i, k1, o + 0.25),
-              at(P, i, k1, o - 0.25)
-            ]);
+            const q = [at(P, i, k0, o - 0.25), at(P, i, k0, o + 0.25), at(P, i, k1, o + 0.25), at(P, i, k1, o - 0.25)];
+            // never paint a stripe onto an island or a pavement corner
+            if (q.some((v) => onPave(v.x, v.z))) return;
+            acc.paint.flat(PAINT_Y, q);
           }
         );
       }
@@ -250,10 +225,57 @@ export function zebras(): Zebra[] {
       const tr = t ? Math.max(atA ? t.aL : t.bL, atA ? t.aR : t.bR) : 0;
       const sc = atA ? tr + 1.2 : e.len - tr - 1.2 - 3;
       const m = N.at(e, sc + 1.5);
-      out.push({ node: n.id, edge: e.id, x: m.x, z: m.z, yaw: m.yaw, half: e.half });
+      const z: Zebra = { node: n.id, edge: e.id, x: m.x, z: m.z, yaw: m.yaw, half: e.half };
+      // a crossing that would lie over another one (short arms at a busy junction) is left out
+      if (out.some((o) => zebraOverlap(o, z))) continue;
+      out.push(z);
     }
   }
   return out;
+}
+
+/** Do two crossings' stripe rectangles (3 m along the street, the carriageway across) overlap? */
+function zebraOverlap(a: Zebra, b: Zebra): boolean {
+  if (Math.hypot(a.x - b.x, a.z - b.z) > a.half + b.half + 4) return false;
+  const corners = (z: Zebra) => {
+    const fx = Math.sin(z.yaw),
+      fz = Math.cos(z.yaw),
+      rx = fz,
+      rz = -fx;
+    const h = z.half - 0.4;
+    return [
+      [-1.6, -h],
+      [1.6, -h],
+      [1.6, h],
+      [-1.6, h]
+    ].map(([f, r]) => ({ x: z.x + fx * f! + rx * r!, z: z.z + fz * f! + rz * r! }));
+  };
+  const A = corners(a),
+    B = corners(b);
+  for (const poly of [A, B])
+    for (let k = 0; k < 4; k++) {
+      const p = poly[k]!,
+        q = poly[(k + 1) % 4]!;
+      const nx = -(q.z - p.z),
+        nz = q.x - p.x;
+      const pa = A.map((v) => v.x * nx + v.z * nz),
+        pb = B.map((v) => v.x * nx + v.z * nz);
+      if (Math.max(...pa) < Math.min(...pb) || Math.max(...pb) < Math.min(...pa)) return false;
+    }
+  return true;
+}
+
+let zk: Set<string> | null = null;
+const zebraKeys = () => (zk ??= new Set(zebras().map((z) => `${z.node}:${z.edge}`)));
+
+const CH = 128;
+/** On the final pavement (in whichever chunk holds the point)? */
+export function onPave(x: number, z: number): boolean {
+  const i = Math.floor(x / CH),
+    j = Math.floor(z / CH);
+  const r = paveRegion(i * CH, j * CH, (i + 1) * CH, (j + 1) * CH);
+  for (const g of r.pave) if (inPoly(g.outer, x, z) && !g.holes.some((h) => inPoly(h, x, z))) return true;
+  return false;
 }
 
 const carrIdx = new WeakMap<object, Map<number, ReturnType<typeof shapeOf>['carr']>>();
@@ -272,362 +294,150 @@ function carrOf(e: number) {
   return m.get(e) ?? [];
 }
 
-const bandIdx = new WeakMap<object, Map<string, number>>();
-function bandIndex(S: ReturnType<typeof shapeOf>) {
-  let m = bandIdx.get(S);
-  if (!m) {
-    m = new Map();
-    S.bands.forEach((q, k) => m!.set(`${q.e}:${q.i}:${q.side}`, k));
-    bandIdx.set(S, m);
-  }
-  return m;
-}
-
-/** The pieces of a pavement band region left after every carriageway, fillet, cap and earlier band is cut out. */
-export function bandPieces(self: number): FPoly[] {
-  const S = shapeOf(net());
-  const band = S.bands[self]!;
-  let pieces: FPoly[] = [{ p: band.f.p, t: band.f.t }];
-  const { x0, z0, x1, z1 } = band.poly;
-  for (const v of near(S.gridC, x0, z0, x1, z1)) {
-    const c = v >= 0 ? S.carr[v]! : null;
-    if (c && c.e === band.e && c.i === band.i) continue;
-    const polys = carrPolys(S, v);
-    for (const cp of polys) pieces = pieces.flatMap((q) => subtract(q, cp, true));
-    if (!pieces.length) return pieces;
-  }
-  for (const v of near(S.gridB, x0, z0, x1, z1)) {
-    if (v >= self) continue;
-    pieces = pieces.flatMap((q) => subtract(q, S.bands[v]!.poly, false));
-    if (!pieces.length) return pieces;
-  }
-  return pieces;
-}
-
-/** Pour one pavement band region (a street segment's side, or a sector of a node ring) after clipping it. */
-function pourBand(acc: Acc, self: number, ya: number) {
-  const N = net();
-  const S = shapeOf(N);
-  const band = S.bands[self]!;
-  const pieces = bandPieces(self);
-  if (!pieces.length) return;
-  // texture frame: along the segment and across from the centre line (node rings: the world grid)
-  let uv = (v: V2): [number, number] => [v.x / TILE_REPEAT, v.z / TILE_REPEAT];
-  if (band.e >= 0) {
-    const P = S.prof[band.e]!;
-    const a = P[band.i]!,
-      b = P[band.i + 1]!;
-    const dx = b.x - a.x,
-      dz = b.z - a.z;
-    const L = Math.hypot(dx, dz) || 1;
-    const ux = dx / L,
-      uz = dz / L;
-    uv = (v: V2): [number, number] => {
-      const rx = v.x - a.x,
-        rz = v.z - a.z;
-      return [(a.s + rx * ux + rz * uz) / TILE_REPEAT, (rx * -uz + rz * ux) / TILE_REPEAT];
-    };
-  }
-  for (const q of pieces) {
-    if (q.p.length < 3 || fArea(q.p) < 1e-5) continue;
-    // the tip of a wedge between two streets at a fork, too thin to be a pavement: asphalt instead (no kerb strips
-    // lying in the road)
-    if (narrow(q)) {
-      acc.asphalt.flat(ya - 0.002, q.p);
-      tips.add(q.p);
-      continue;
-    }
-    acc.paving.flatUV(PAVE_Y, q.p, q.p.map(uv));
-    const cx = q.p.reduce((s, v) => s + v.x, 0) / q.p.length,
-      cz = q.p.reduce((s, v) => s + v.z, 0) / q.p.length;
-    for (let k = 0; k < q.p.length; k++) {
-      const t = q.t[k]!;
-      if (t === 'end' || t === 'cut' || t === 'side') continue;
-      const v0 = q.p[k]!,
-        v1 = q.p[(k + 1) % q.p.length]!;
-      if (Math.hypot(v1.x - v0.x, v1.z - v0.z) < 1e-3) continue;
-      if (t === 'outer') {
-        const [nx, nz] = outward(v0, v1, cx, cz);
-        acc.paving.wall(v0.x, v0.z, v1.x, v1.z, 0, PAVE_Y, nx, nz);
-        continue;
-      }
-      if (t === 'inner') {
-        kerbEdge(acc, q, v0, v1, cx, cz, ya - 0.002);
-        continue;
-      }
-      // the rounded corner draws its own kerb along the whole arc (see filletKerb)
-      if (typeof t !== 'string' && filletTris(S).has(t.c)) continue;
-      // any other edge gets a kerb exactly where drivable asphalt lies just outside it
-      for (const [w0, w1] of asphaltRuns(v0, v1, cx, cz)) kerbEdge(acc, q, w0, w1, cx, cz, 0.035);
-    }
-    for (let k = 0; k < q.p.length; k++) {
-      const t = q.t[k]!;
-      if (t !== 'end' && t !== 'cut' && t !== 'side') continue;
-      const v0 = q.p[k]!,
-        v1 = q.p[(k + 1) % q.p.length]!;
-      if (Math.hypot(v1.x - v0.x, v1.z - v0.z) < 1e-3) continue;
-      for (const [w0, w1] of asphaltRuns(v0, v1, cx, cz)) kerbEdge(acc, q, w0, w1, cx, cz, 0.035);
-    }
-  }
-}
-
-const filletSet = new WeakMap<object, Set<object>>();
-function filletTris(S: ReturnType<typeof shapeOf>) {
-  let m = filletSet.get(S);
-  if (!m) {
-    m = new Set();
-    for (const f of S.fillets) for (const t of f.tris) m.add(t);
-    filletSet.set(S, m);
-  }
-  return m;
-}
 
 /**
- * The kerb round a junction corner, drawn once along the arc: one face, one top strip of constant width and stripes by
- * arc length (per-piece kerbs on the short chords came out ragged, each chord with its own stripe phase).
+ * Pour the chunk's pavement region: the slab (triangulated with its holes), the asphalt in place of what was taken
+ * out, and along the boundary either the striped kerb (where carriageway lies right outside) or a plain edge face.
  */
-function filletKerb(acc: Acc, f: Fillet) {
+function pourPavement(acc: Acc, reg: PaveRegion, x0: number, z0: number, x1: number, z1: number) {
   const N = net();
-  const K = acc.kerb ?? acc.paving;
-  // carry the arc a little past each end along its tangent, so it overlaps the straight kerbs instead of leaving a
-  // wedge of bare slab where the two meet
-  const a0 = f.arc;
-  const ext = (p: V2, q: V2): V2 => {
-    const l = Math.hypot(p.x - q.x, p.z - q.z) || 1;
-    return { x: p.x + ((p.x - q.x) / l) * 0.15, z: p.z + ((p.z - q.z) / l) * 0.15 };
-  };
-  const a = a0.length >= 2 ? [ext(a0[0]!, a0[1]!), ...a0, ext(a0[a0.length - 1]!, a0[a0.length - 2]!)] : a0;
-  const tot: number[] = [0];
-  for (let k = 1; k < a.length; k++) tot.push(tot[k - 1]! + Math.hypot(a[k]!.x - a[k - 1]!.x, a[k]!.z - a[k - 1]!.z));
-  const L = tot[tot.length - 1]!;
-  // whole stripes, so the corner starts and ends on a stripe edge
-  // short stripes round the corner (at least yellow-black-yellow), so the bend always reads as a striped kerb
-  const n = Math.max(3, Math.round(L / (STRIPE * 0.6)) | 1);
-  const inward = (v: V2): V2 => {
-    const dx = f.c.x - v.x,
-      dz = f.c.z - v.z;
-    const l = Math.hypot(dx, dz) || 1;
-    return { x: v.x + (dx / l) * KERB_W, z: v.z + (dz / l) * KERB_W };
-  };
-  for (let k = 0; k + 1 < a.length; k++) {
-    const v0 = a[k]!,
-      v1 = a[k + 1]!;
-    const g = Math.floor((((tot[k]! + tot[k + 1]!) / 2) * n) / L);
-    const c = acc.kerb ? (g & 1 ? BLACK : YELLOW) : undefined;
-    const [nx, nz] = outward(v0, v1, f.c.x, f.c.z);
-    // where another street runs into the corner the arc is not a kerb there
-    // (probed across the whole strip: a corner of a straight carriageway poking just past the arc is not a street)
-    const deep = (d: number) => N.onRoad((v0.x + v1.x) / 2 - nx * d, (v0.z + v1.z) / 2 - nz * d, 0);
-    if (deep(0.05)) continue;
-    K.wall(v0.x, v0.z, v1.x, v1.z, FILLET_Y - 0.005, PAVE_Y, nx, nz, c);
-    if (acc.kerb) {
-      const q = [v0, v1, inward(v1), inward(v0)];
-      // the strip lies on the pavement side of the arc by construction: drawn whole (clipping it against the
-      // neighbouring carriageways, which overlap the corner slab, left it ragged and let bare slab show through)
-      const pieces: FPoly[] = [{ p: area(q) < 0 ? q.reverse() : q, t: ['cut', 'cut', 'cut', 'cut'] }];
-      for (const r of pieces) if (r.p.length >= 3 && fArea(r.p) > 1e-5) acc.kerb.flat(PAVE_Y + 0.009, r.p, c);
-    }
+  for (const f of reg.fill) {
+    const pts = [...f.outer, ...f.holes.flat()];
+    for (const t of triangulate(f.outer, f.holes)) upTri(acc.asphalt, FILLET_Y - 0.003, pts, t, 5);
   }
-}
-
-/**
- * The stretches of a pavement piece's edge v0-v1 that have drivable asphalt right outside them (a kerb belongs
- * there), found by sampling every 20 cm and refining each end by bisection.
- */
-function asphaltRuns(v0: V2, v1: V2, cx: number, cz: number): [V2, V2][] {
-  const N = net();
-  const [nx, nz] = outward(v0, v1, cx, cz);
-  const L = Math.hypot(v1.x - v0.x, v1.z - v0.z);
-  const at = (f: number): V2 => ({ x: v0.x + (v1.x - v0.x) * f, z: v0.z + (v1.z - v0.z) * f });
-  const road = (f: number) => {
-    const p = at(f);
-    const x = p.x + nx * 0.08,
-      z = p.z + nz * 0.08;
-    // a rounded corner's asphalt gets its kerb from filletKerb, along the arc
-    // (a fork's wedge tip is poured as asphalt too, so the pavement beside it gets a kerb there)
-    return N.onRoad(x, z, 0) && !inFillet(x, z, 0);
+  const onBox = (a: V2, b: V2) => {
+    const e = 1e-3;
+    return (
+      (Math.abs(a.x - x0) < e && Math.abs(b.x - x0) < e) ||
+      (Math.abs(a.x - x1) < e && Math.abs(b.x - x1) < e) ||
+      (Math.abs(a.z - z0) < e && Math.abs(b.z - z0) < e) ||
+      (Math.abs(a.z - z1) < e && Math.abs(b.z - z1) < e)
+    );
   };
-  const n = Math.max(2, Math.ceil(L / 0.2));
-  const on: boolean[] = [];
-  for (let i = 0; i <= n; i++) on.push(road(i / n));
-  const edge = (a: number, b: number) => {
-    // a is on one side, b on the other: find the switch point
-    const ra = road(a);
-    for (let k = 0; k < 7; k++) {
-      const m = (a + b) / 2;
-      if (road(m) === ra) a = m;
-      else b = m;
-    }
-    return (a + b) / 2;
-  };
-  const out: [V2, V2][] = [];
-  let i = 0;
-  while (i <= n) {
-    if (!on[i]) {
-      i++;
-      continue;
-    }
-    let j = i;
-    while (j + 1 <= n && on[j + 1]) j++;
-    const f0 = i === 0 ? 0 : edge((i - 1) / n, i / n),
-      f1 = j === n ? 1 : edge(j / n, (j + 1) / n);
-    if ((f1 - f0) * L > 0.02) out.push([at(f0), at(f1)]);
-    i = j + 1;
-  }
-  return out;
-}
-
-function outward(v0: V2, v1: V2, cx: number, cz: number): [number, number] {
-  const dx = v1.x - v0.x,
-    dz = v1.z - v0.z;
-  const l = Math.hypot(dx, dz) || 1;
-  let nx = -dz / l,
-    nz = dx / l;
-  if (nx * ((v0.x + v1.x) / 2 - cx) + nz * ((v0.z + v1.z) / 2 - cz) < 0) {
-    nx = -nx;
-    nz = -nz;
-  }
-  return [nx, nz];
-}
-
-/** A kerb along w0-w1 of a pavement piece: the face down to the road and the striped top strip (clipped to the piece). */
-function kerbEdge(acc: Acc, _q: FPoly, w0: V2, w1: V2, cx: number, cz: number, y0: number) {
-  const K = acc.kerb ?? acc.paving;
-  const [nx, nz] = outward(w0, w1, cx, cz);
-  const dx = w1.x - w0.x,
-    dz = w1.z - w0.z;
-  const len = Math.hypot(dx, dz);
-  const ux = dx / len,
-    uz = dz / len;
-  // stripes on a world grid along the kerb's direction, so neighbouring pieces of one kerb line up
-  const p0 = w0.x * ux + w0.z * uz;
-  let s = 0;
-  while (s < len - 1e-4) {
-    const g = Math.floor((p0 + s) / STRIPE + 1e-6);
-    const e = Math.min(len, (g + 1) * STRIPE - p0);
-    const c = acc.kerb ? (g & 1 ? BLACK : YELLOW) : undefined;
-    const a0 = { x: w0.x + ux * s, z: w0.z + uz * s },
-      a1 = { x: w0.x + ux * e, z: w0.z + uz * e };
-    K.wall(a0.x, a0.z, a1.x, a1.z, y0, PAVE_Y, nx, nz, c);
-    if (acc.kerb) {
-      let r: FPoly = {
-        p: [a0, a1, { x: a1.x - nx * KERB_W, z: a1.z - nz * KERB_W }, { x: a0.x - nx * KERB_W, z: a0.z - nz * KERB_W }],
-        t: ['cut', 'cut', 'cut', 'cut']
+  const asphaltAt = (x: number, z: number) => N.onRoad(x, z, 0) || inFill(x, z);
+  for (const g of reg.pave) {
+    const pts = [...g.outer, ...g.holes.flat()];
+    for (const t of triangulate(g.outer, g.holes)) upTri(acc.paving, PAVE_Y, pts, t, TILE_REPEAT);
+    for (const ring of [g.outer, ...g.holes]) {
+      // split the ring into short pieces, each tagged kerb / edge / chunk border
+      const pcs: { a: V2; b: V2; kind: 0 | 1 | 2 }[] = [];
+      for (let k = 0; k < ring.length; k++) {
+        const a = ring[k]!,
+          b = ring[(k + 1) % ring.length]!;
+        const L = Math.hypot(b.x - a.x, b.z - a.z);
+        if (L < 1e-4) continue;
+        if (onBox(a, b)) {
+          pcs.push({ a, b, kind: 2 });
+          continue;
+        }
+        // the slab lies on the left of each ring piece (outers CCW, holes CW): outward is the right-hand normal
+        const nx = (b.z - a.z) / L,
+          nz = -(b.x - a.x) / L;
+        const n = Math.max(1, Math.ceil(L / 0.3));
+        for (let i = 0; i < n; i++) {
+          const p = { x: a.x + ((b.x - a.x) * i) / n, z: a.z + ((b.z - a.z) * i) / n },
+            q = { x: a.x + ((b.x - a.x) * (i + 1)) / n, z: a.z + ((b.z - a.z) * (i + 1)) / n };
+          const mx = (p.x + q.x) / 2,
+            mz = (p.z + q.z) / 2;
+          pcs.push({ a: p, b: q, kind: asphaltAt(mx + nx * 0.12, mz + nz * 0.12) ? 1 : 0 });
+        }
+      }
+      if (!pcs.length) continue;
+      // start the walk at a change of kind so runs do not wrap
+      let s0 = pcs.findIndex((p, i) => p.kind !== pcs[(i + pcs.length - 1) % pcs.length]!.kind);
+      if (s0 < 0) s0 = 0;
+      let run: V2[] = [];
+      const flush = () => {
+        if (run.length >= 2) kerbRun(acc, run, run.length === pcs.length + 1 && s0 === 0);
+        run = [];
       };
-      if (area(r.p) < 0) r = { p: r.p.slice().reverse(), t: r.t };
-      // the full strip width, minus any carriageway it would cover (clipping it to its own piece left it a sliver
-      // wherever a thin piece runs along the kerb)
-      for (const piece of offCarriage(r)) acc.kerb.flat(PAVE_Y + 0.004, piece.p, c);
-    }
-    s = e;
-  }
-  // round the strip's ends: where the kerb line turns, the next run's strip starts at an angle and would leave a
-  // little wedge of bare slab between the two (the cap stays on the pavement side and off the carriageways)
-  if (acc.kerb && len > 0.05) {
-    const colAt = (d: number) => (Math.floor((p0 + d) / STRIPE + 1e-6) & 1 ? BLACK : YELLOW);
-    for (const [v, d] of [
-      [w0, 0.01],
-      [w1, len - 0.01]
-    ] as const)
-      // (not where the run meets a rounded corner: the arc's own strip carries on there)
-      if (!inFillet(v.x, v.z, KERB_W + 0.1)) kerbCap(acc.kerb, v, nx, nz, colAt(d));
-  }
-}
-
-/** Is (x, z) on a rounded corner's asphalt, or within `pad` of its arc? */
-function inFillet(x: number, z: number, pad: number): boolean {
-  const S = shapeOf(net());
-  const nf = S.fillets.length;
-  for (const id of near(S.gridC, x - pad, z - pad, x + pad, z + pad)) {
-    if (id >= 0 || -1 - id >= nf) continue;
-    const f = S.fillets[-1 - id]!;
-    if (pad > 0) {
-      for (const v of f.arc) if (Math.hypot(v.x - x, v.z - z) < pad) return true;
-      continue;
-    }
-    for (const t of f.tris) {
-      const p = t.p;
-      let sg = 0;
-      for (let k = 0; k < p.length; k++) {
-        const a = p[k]!,
-          b = p[(k + 1) % p.length]!;
-        const c = (b.x - a.x) * (z - a.z) - (b.z - a.z) * (x - a.x);
-        if (c > 1e-9) sg |= 1;
-        if (c < -1e-9) sg |= 2;
+      for (let k = 0; k < pcs.length; k++) {
+        const pc = pcs[(s0 + k) % pcs.length]!;
+        if (pc.kind === 1) {
+          if (!run.length) run.push(pc.a);
+          run.push(pc.b);
+          continue;
+        }
+        flush();
+        if (pc.kind === 0) {
+          const L = Math.hypot(pc.b.x - pc.a.x, pc.b.z - pc.a.z);
+          acc.paving.wall(pc.a.x, pc.a.z, pc.b.x, pc.b.z, 0, PAVE_Y, (pc.b.z - pc.a.z) / L, -(pc.b.x - pc.a.x) / L);
+        }
       }
-      if (sg !== 3) return true;
+      flush();
     }
   }
-  return false;
 }
 
-/** A disc of kerb-strip radius at a run end, on the pavement side of the run, minus any carriageway it touches. */
-function kerbCap(K: Soup, v: V2, nx: number, nz: number, c: [number, number, number]) {
-  const p: V2[] = [];
-  for (let k = 0; k < 10; k++) {
-    const a = (k / 10) * Math.PI * 2;
-    p.push({ x: v.x + Math.cos(a) * KERB_W, z: v.z + Math.sin(a) * KERB_W });
-  }
-  let r: FPoly = { p, t: p.map(() => 'cut' as const) };
-  if (area(r.p) < 0) r = { p: r.p.slice().reverse(), t: r.t };
-  // keep the side away from the road: the line through v along the run, normal (nx, nz) pointing at the road
-  r = clipHalf(r, v, { x: v.x - nz, z: v.z + nx }, true, 'cut');
-  if (r.p.length >= 3) for (const q of offCarriage(r)) K.flat(PAVE_Y + 0.003, q.p, c);
+/** One up-facing triangle of a polygon (planar texture, `size` m per repeat). */
+function upTri(S: Soup, y: number, pts: V2[], t: number[], size: number) {
+  const a = pts[t[0]!]!,
+    b = pts[t[1]!]!,
+    c = pts[t[2]!]!;
+  const base = S.pos.length / 3;
+  for (const v of [a, b, c]) S.vert(v.x, y, v.z, 0, 1, 0, v.x / size, v.z / size);
+  // counter-clockwise seen from above (+y): (b-a) x (c-a) has a positive y component
+  const up = (b.z - a.z) * (c.x - a.x) - (b.x - a.x) * (c.z - a.z) > 0;
+  if (up) S.idx.push(base, base + 1, base + 2);
+  else S.idx.push(base, base + 2, base + 1);
 }
 
-/** A convex polygon less every carriageway (and fillet, cap, taper) it touches. */
-function offCarriage(r: FPoly): FPoly[] {
-  const S = shapeOf(net());
-  let x0 = Infinity,
-    z0 = Infinity,
-    x1 = -Infinity,
-    z1 = -Infinity;
-  for (const v of r.p) {
-    x0 = Math.min(x0, v.x);
-    x1 = Math.max(x1, v.x);
-    z0 = Math.min(z0, v.z);
-    z1 = Math.max(z1, v.z);
-  }
-  let pieces: FPoly[] = [r];
-  for (const id of near(S.gridC, x0, z0, x1, z1))
-    for (const cp of carrPolys(S, id)) pieces = pieces.flatMap((q) => subtract(q, cp, false));
-  return pieces.filter((q) => q.p.length >= 3 && fArea(q.p) > 1e-5);
-}
-
-/** Fork wedge tips poured as asphalt (for the edge audit). */
-export const tips = new Set<V2[]>();
-export function inTip(x: number, z: number): boolean {
-  for (const p of tips) {
-    let inside = false;
-    for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
-      const a = p[i]!,
-        b = p[j]!;
-      if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+/**
+ * The striped kerb along a polyline of the pavement boundary (slab on its left): the face down to the road and the
+ * top strip, mitred at the bends so it runs on without wedges, with whole stripes along its length.
+ */
+function kerbRun(acc: Acc, pl: V2[], closed: boolean) {
+  const K = acc.kerb ?? acc.paving;
+  const n = pl.length;
+  // inward (left) normal per piece and the mitred inner line
+  const nrm = (i: number) => {
+    const a = pl[i]!,
+      b = pl[i + 1]!;
+    const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    return { x: -(b.z - a.z) / L, z: (b.x - a.x) / L };
+  };
+  const inner: V2[] = [];
+  for (let i = 0; i < n; i++) {
+    const n0 = i > 0 ? nrm(i - 1) : closed ? nrm(n - 2) : nrm(0);
+    const n1 = i < n - 1 ? nrm(i) : closed ? nrm(0) : nrm(n - 2);
+    let mx = n0.x + n1.x,
+      mz = n0.z + n1.z;
+    const ml = Math.hypot(mx, mz);
+    if (ml < 1e-6) {
+      mx = n1.x;
+      mz = n1.z;
+    } else {
+      mx /= ml;
+      mz /= ml;
     }
-    if (inside) return true;
+    const cos = Math.max(0.5, mx * n1.x + mz * n1.z);
+    inner.push({ x: pl[i]!.x + (mx * KERB_W) / cos, z: pl[i]!.z + (mz * KERB_W) / cos });
   }
-  return false;
-}
-
-/** Thinner than ~1.4 m between carriageways: carriageway lies within 0.7 m on two opposite sides of (x, z). */
-const NARROW = 0.7;
-export function wedgeTip(x: number, z: number, r = NARROW): boolean {
-  const N = net();
-  for (let k = 0; k < 8; k++) {
-    const a = (k / 16) * Math.PI * 2;
-    const dx = Math.cos(a) * r,
-      dz = Math.sin(a) * r;
-    if (N.onRoad(x + dx, z + dz, 0) && N.onRoad(x - dx, z - dz, 0)) return true;
+  const cum: number[] = [0];
+  for (let i = 1; i < n; i++) cum.push(cum[i - 1]! + Math.hypot(pl[i]!.x - pl[i - 1]!.x, pl[i]!.z - pl[i - 1]!.z));
+  const L = cum[n - 1]!;
+  const stripes = Math.max(1, Math.round(L / STRIPE));
+  const len = L / stripes;
+  const lerp = (p: V2, q: V2, k: number): V2 => ({ x: p.x + (q.x - p.x) * k, z: p.z + (q.z - p.z) * k });
+  for (let i = 0; i + 1 < n; i++) {
+    const a = pl[i]!,
+      b = pl[i + 1]!;
+    const seg = cum[i + 1]! - cum[i]!;
+    if (seg < 1e-5) continue;
+    const o = nrm(i);
+    // cut the piece at stripe boundaries
+    const cuts = [0];
+    for (let g = Math.floor(cum[i]! / len) + 1; g * len < cum[i + 1]! - 1e-6; g++) cuts.push((g * len - cum[i]!) / seg);
+    cuts.push(1);
+    for (let c = 0; c + 1 < cuts.length; c++) {
+      const k0 = cuts[c]!,
+        k1 = cuts[c + 1]!;
+      const g = Math.floor((cum[i]! + ((k0 + k1) / 2) * seg) / len);
+      const col = acc.kerb ? (g & 1 ? BLACK : YELLOW) : undefined;
+      const p0 = lerp(a, b, k0),
+        p1 = lerp(a, b, k1);
+      K.wall(p0.x, p0.z, p1.x, p1.z, 0.035, PAVE_Y, -o.x, -o.z, col);
+      if (acc.kerb) acc.kerb.flat(PAVE_Y + 0.004, [p0, p1, lerp(inner[i]!, inner[i + 1]!, k1), lerp(inner[i]!, inner[i + 1]!, k0)], col);
+    }
   }
-  return false;
-}
-function narrow(q: FPoly): boolean {
-  const n = q.p.length;
-  let cx = 0,
-    cz = 0;
-  for (const v of q.p) {
-    cx += v.x / n;
-    cz += v.z / n;
-  }
-  return wedgeTip(cx, cz);
 }

@@ -15,7 +15,8 @@
  */
 import { PAVEMENT, SQUARES, WORLD_BOX, toWorld, type V2 } from '../logic/cairo';
 import { inRiver, net, type REdge } from '../logic/roadnet';
-import { pourRoads, edgesIn, inTip, wedgeTip } from './roadMesh';
+import { pourRoads, edgesIn } from './roadMesh';
+import { inFill } from './pavement';
 import { shapeOf } from '../logic/roadShape';
 import { Soup } from './Soup';
 
@@ -202,10 +203,10 @@ export function auditEdges(step = 0.6): EdgeReport {
     if (drive && pave) flag('sliver', x, z, edge);
     if (drive && !asph && !pave) flag('hidden', x, z, edge);
     // (fork wedge tips too thin for a pavement are filled with asphalt on purpose)
-    if (asph && !pave && !driveLoose && !inTip(x, z)) flag('phantom', x, z, edge);
+    if (asph && !pave && !driveLoose && !inFill(x, z)) flag('phantom', x, z, edge);
     if (!asph && !pave && near(x, z, 0.3)) flag('gap', x, z, edge);
     // within 0.25 m of the asphalt on the pavement side: that is the kerb's top strip
-    if (pave && !N.onRoad(x, z, 0) && N.onRoad(x, z, 0.25) && !S.kerb.has(x, z) && !wedgeTip(x, z, 1.6))
+    if (pave && !N.onRoad(x, z, 0) && N.onRoad(x, z, 0.25) && !S.kerb.has(x, z))
       flag('bare', x, z, edge);
   };
   for (const e of N.edges) {
