@@ -78,13 +78,13 @@ const unpack = (ps: Poly[]) =>
   ps.map((rs) => {
     const ring = (r: Ring) => {
       const o: V2[] = [];
-      for (let i = 0; i < r.length; i += 2) o.push({ x: r[i]! / 100, z: r[i + 1]! / 100 });
+      for (let i = 0; i < r.length; i += 2) o.push({ x: r[i]! / SC, z: r[i + 1]! / SC });
       return o;
     };
     return { outer: ring(rs[0]!), holes: rs.slice(1).map(ring) };
   });
 export const packRegion = (r: PaveRegion): [Poly[], Poly[]] => {
-  const pk = (gs: PaveRegion['pave']) => gs.map((g) => [g.outer, ...g.holes].map((rg) => rg.flatMap((v) => [Math.round(v.x * 100), Math.round(v.z * 100)])));
+  const pk = (gs: PaveRegion['pave']) => gs.map((g) => [g.outer, ...g.holes].map((rg) => rg.flatMap((v) => [Math.round(v.x * SC), Math.round(v.z * SC)])));
   return [pk(r.pave), pk(r.fill)];
 };
 
@@ -131,6 +131,27 @@ function group(paths: Paths64): { outer: Path64; holes: Path64[] }[] {
   };
   walk(tree);
   return out;
+}
+
+/** Does earcut triangulate this polygon with holes correctly (every triangle inside, areas adding up)? */
+function earcutOk(g: { outer: Path64; holes: Path64[] }): boolean {
+  const o = toV2(g.outer),
+    hs = g.holes.map(toV2);
+  const pts = [o, ...hs].flat();
+  let sum = 0;
+  for (const t of triangulate(o, hs)) {
+    const a = pts[t[0]!]!,
+      b = pts[t[1]!]!,
+      c = pts[t[2]!]!;
+    const ar = Math.abs((b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z)) / 2;
+    sum += ar;
+    if (ar < 1e-6) continue;
+    const mx = (a.x + b.x + c.x) / 3,
+      mz = (a.z + b.z + c.z) / 3;
+    if (!inPoly(o, mx, mz) || hs.some((h) => inPoly(h, mx, mz))) return false;
+  }
+  const want = (Math.abs(Clipper.area(g.outer)) - g.holes.reduce((s, h) => s + Math.abs(Clipper.area(h)), 0)) / (SC * SC);
+  return Math.abs(sum - want) < 1e-3 * Math.max(1, want);
 }
 
 /** Union of many small polygons, a few at a time and then pairwise (much faster than one big union). */
@@ -225,13 +246,15 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
     { x: x0, z: z1 }
   ]);
   const boxes = [box];
-  // a last clean (2 cm) takes out the hair-thin spikes the booleans can leave where edges nearly coincide
+  // a last clean (2 cm, before the chunk cut so the border stays exact) takes out the hair-thin spikes the booleans can leave where edges nearly coincide
   const tidy = (ps: Paths64) => Clipper.Union(Clipper.clean(ps, 20));
-  const pave = tidy(Clipper.Intersect(kept, boxes));
+  // and a 2 cm opening takes off hairline spikes the clean cannot see (long, thin, zero-area fingers)
+  const K2 = tidy(Clipper.inflate(Clipper.inflate(tidy(kept), -0.02 * SC, 4), 0.02 * SC, 4));
+  const pave = Clipper.Intersect(K2, boxes);
   // everything of the band that is not slab (thin tips, crumbs, and the hairlines the cleaning took off) is asphalt
   // (it reaches 5 cm under the slab's edge and onto the road, so no hairline of bare ground is left between the two)
   const G = 0.05 * SC;
-  const fill = tidy(Clipper.Intersect(Clipper.Difference(Clipper.Intersect(Clipper.inflate(D, G, 2), U), Clipper.inflate(pave, -G, 2)), boxes));
+  const fill = Clipper.Intersect(tidy(Clipper.Difference(Clipper.Intersect(Clipper.inflate(D, G, 2), Clipper.Union([...U, ...Clipper.inflate(C, G, 2)])), Clipper.inflate(K2, -G, 2))), boxes);
   // outers counter-clockwise in (x, z), holes clockwise: the slab is always on the left of a ring
   const wind = (r: V2[], ccw: boolean) => {
     let a = 0;
@@ -242,9 +265,15 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
   // simple rings only (with holes it can lay a triangle across a hole)
   const unholed = (ps: Paths64) => {
     const out: { outer: Path64; holes: Path64[] }[] = [];
-    for (const g of group(Clipper.clean(ps, 20))) {
-      if (!g.holes.length) {
+    for (const g of group(Clipper.clean(ps, 5))) {
+      if (!g.holes.length || earcutOk(g)) {
         out.push(g);
+        continue;
+      }
+      // earcut trips on near-touching rings: a coarser clean (2 cm) of just this polygon usually settles it
+      const g2 = group(Clipper.clean([g.outer, ...g.holes], 20));
+      if (g2.every((q) => !q.holes.length || earcutOk(q))) {
+        out.push(...g2);
         continue;
       }
       const xs = g.holes.map((h) => (Math.min(...h.map((q) => q.X)) + Math.max(...h.map((q) => q.X))) / 2).sort((a, b) => a - b);
@@ -261,7 +290,7 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
           { X: cuts[i + 1]!, Y: y1 },
           { X: cuts[i]!, Y: y1 }
         ];
-        out.push(...group(Clipper.clean(Clipper.Intersect([g.outer, ...g.holes], [strip]), 20)));
+        out.push(...group(Clipper.clean(Clipper.Intersect([g.outer, ...g.holes], [strip]), 5)));
       }
     }
     return out;

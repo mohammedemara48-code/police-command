@@ -315,27 +315,22 @@ function pourPavement(acc: Acc, reg: PaveRegion, x0: number, z0: number, x1: num
     );
   };
   const asphaltAt = (x: number, z: number) => N.onRoad(x, z, 0) || inFill(x, z);
-  // slab test by even-odd over every ring of the chunk: independent of how rings were grouped into outers and holes
-  const rings: { r: V2[]; x0: number; z0: number; x1: number; z1: number }[] = [];
-  for (const g of reg.pave)
-    for (const r of [g.outer, ...g.holes]) {
-      let rx0 = Infinity,
-        rz0 = Infinity,
-        rx1 = -Infinity,
-        rz1 = -Infinity;
-      for (const v of r) {
-        rx0 = Math.min(rx0, v.x);
-        rx1 = Math.max(rx1, v.x);
-        rz0 = Math.min(rz0, v.z);
-        rz1 = Math.max(rz1, v.z);
-      }
-      rings.push({ r, x0: rx0, z0: rz0, x1: rx1, z1: rz1 });
+  // slab test over the pieces of the chunk (inside an outer and none of its holes), independent of ring winding
+  const pieces = reg.pave.map((g) => {
+    let rx0 = Infinity,
+      rz0 = Infinity,
+      rx1 = -Infinity,
+      rz1 = -Infinity;
+    for (const v of g.outer) {
+      rx0 = Math.min(rx0, v.x);
+      rx1 = Math.max(rx1, v.x);
+      rz0 = Math.min(rz0, v.z);
+      rz1 = Math.max(rz1, v.z);
     }
-  const slabAt = (x: number, z: number) => {
-    let n = 0;
-    for (const q of rings) if (x >= q.x0 && x <= q.x1 && z >= q.z0 && z <= q.z1 && inPoly(q.r, x, z)) n++;
-    return (n & 1) === 1;
-  };
+    return { g, x0: rx0, z0: rz0, x1: rx1, z1: rz1 };
+  });
+  const slabAt = (x: number, z: number) =>
+    pieces.some((q) => x >= q.x0 && x <= q.x1 && z >= q.z0 && z <= q.z1 && inPoly(q.g.outer, x, z) && !q.g.holes.some((h) => inPoly(h, x, z)));
   for (const g of reg.pave) {
     const pts = [...g.outer, ...g.holes.flat()];
     for (const t of triangulate(g.outer, g.holes)) upTri(acc.paving, PAVE_Y, pts, t, TILE_REPEAT);
@@ -378,7 +373,20 @@ function pourPavement(acc: Acc, reg: PaveRegion, x0: number, z0: number, x1: num
       if (s0 < 0) s0 = 0;
       let run: V2[] = [];
       const flush = () => {
-        if (run.length >= 2) kerbRun(acc, rev ? run.reverse() : run, !rev && run.length === pcs.length + 1 && s0 === 0);
+        if (run.length >= 2) {
+          const r = rev ? run.reverse() : run;
+          const closed = !rev && run.length === pcs.length + 1 && s0 === 0;
+          // an open run runs on 2 cm at each end, so it meets the next run (or the next chunk's) without a crack
+          const ext = (v: V2, w: V2) => {
+            const L = Math.hypot(v.x - w.x, v.z - w.z) || 1;
+            return { x: v.x + ((v.x - w.x) / L) * 0.02, z: v.z + ((v.z - w.z) / L) * 0.02 };
+          };
+          if (!closed) {
+            r[0] = ext(r[0]!, r[1]!);
+            r[r.length - 1] = ext(r[r.length - 1]!, r[r.length - 2]!);
+          }
+          kerbRun(acc, r, closed);
+        }
         run = [];
       };
       // kind 3 pieces are reversed (slab on the right of the ring here): they run backwards along the ring
