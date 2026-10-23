@@ -420,19 +420,27 @@ export class OpenWorld {
     const shops = new Soup(1, false);
     const awn = new Soup(1, true);
     const col = new THREE.Color();
+    const roof: THREE.BufferGeometry[] = [];
     for (const l of L) {
       if (l.reserved || l.x < x0 || l.x >= x1 || l.z < z0 || l.z >= z1) continue;
       const look = blockLook(l.district, l.seed);
       const g = wallGeo(l.hw * 2, l.h, l.hl * 2, l.seed);
       const nrm = g.attributes.normal,
-        c = g.attributes.color as THREE.BufferAttribute;
-      col.setHex(look.style === 'brick' ? 0xffffff : look.tint);
+        c = g.attributes.color as THREE.BufferAttribute,
+        uvs = g.attributes.uv as THREE.BufferAttribute;
+      // the facade photos carry their own paint: the district tint only shades them a little
+      col.setHex(look.style === 'brick' ? 0xffffff : look.tint).lerp(WHITE, 0.55);
       for (let v = 0; v < nrm.count; v++) {
-        if (nrm.getY(v) > 0.5) c.setXYZ(v, 0.42, 0.41, 0.4);
+        if (nrm.getY(v) > 0.5) {
+          // flat roof: one plain-wall texel, so the facade windows do not show up on top
+          c.setXYZ(v, 0.42, 0.41, 0.4);
+          uvs.setXY(v, 0.002, 0.45);
+        }
         else c.setXYZ(v, c.getX(v) * col.r, c.getY(v) * col.g, c.getZ(v) * col.b);
       }
       g.rotateY(l.yaw);
       g.translate(l.x, l.h / 2, l.z);
+      roofClutter(roof, l.x, l.z, l.yaw, l.hw, l.hl, l.h, l.seed);
       const mat = facadeMaterial(look.style, 0xffffff, l.seed);
       const a = byMat.get(mat);
       if (a) a.push(g);
@@ -520,6 +528,15 @@ export class OpenWorld {
       const mesh = new THREE.Mesh(merged, mat);
       mesh.castShadow = Q.shadows;
       mesh.receiveShadow = Q.shadows;
+      chunk.group.add(mesh);
+    }
+    const rg = roof.length ? mergeGeometries(roof, false) : null;
+    roof.forEach((g) => g.dispose());
+    if (rg) {
+      rg.computeBoundingSphere();
+      chunk.geos.push(rg);
+      const mesh = new THREE.Mesh(rg, roofMat());
+      mesh.castShadow = Q.shadows;
       chunk.group.add(mesh);
     }
     const sg = shops.geometry();
@@ -686,5 +703,58 @@ export class OpenWorld {
   /** Lists for the minimap or debug: where the chunks are. */
   chunkList() {
     return [...this.chunks.values()].map((c) => [c.i, c.j]);
+  }
+}
+
+const WHITE = new THREE.Color(0xffffff);
+let roofM: THREE.MeshStandardMaterial | null = null;
+const roofMat = () =>
+  (roofM ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.1 }));
+const TANK = new THREE.CylinderGeometry(0.5, 0.5, 1.1, 8, 1);
+const DISH = new THREE.CylinderGeometry(0.5, 0.08, 0.22, 8, 1, true);
+const HUT = new THREE.BoxGeometry(2.4, 2.4, 2.6);
+const POLE = new THREE.BoxGeometry(0.08, 0.9, 0.08);
+
+/** Roof-top life of a Cairo block: black and white water tanks, satellite dishes and the stair hut, in one coloured soup. */
+function roofClutter(
+  out: THREE.BufferGeometry[],
+  x: number,
+  z: number,
+  yaw: number,
+  hw: number,
+  hl: number,
+  h: number,
+  seed: number
+) {
+  const r = (k: number) => hash01(seed * 31 + k * 7);
+  const put = (src: THREE.BufferGeometry, lx: number, ly: number, lz: number, color: number, tilt = 0, spin = 0) => {
+    const g = src.clone();
+    if (tilt) g.rotateX(tilt);
+    g.rotateY(spin);
+    g.translate(lx, ly, lz);
+    g.rotateY(yaw);
+    g.translate(x, h, z);
+    const c = new THREE.Color(color);
+    const n = g.attributes.position!.count;
+    const a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+    if (g.index) out.push(g.toNonIndexed());
+    else out.push(g);
+    g.dispose();
+  };
+  const ix = Math.max(0.6, hw - 1.2),
+    iz = Math.max(0.6, hl - 1.2);
+  if (r(1) < 0.7) put(HUT, (r(2) - 0.5) * ix, 1.2, (r(3) - 0.5) * iz, 0xb9ab95);
+  const tanks = 1 + Math.floor(r(4) * 3);
+  for (let i = 0; i < tanks; i++)
+    put(TANK, (r(10 + i) * 2 - 1) * ix, 0.55, (r(20 + i) * 2 - 1) * iz, r(30 + i) < 0.6 ? 0x1e1e22 : 0xd8d4cc);
+  const dishes = Math.floor(r(5) * 4);
+  for (let i = 0; i < dishes; i++) {
+    const dx = (r(40 + i) * 2 - 1) * ix,
+      dz = (r(50 + i) * 2 - 1) * iz;
+    put(POLE, dx, 0.45, dz, 0x77777a);
+    // all dishes look the same way, south-ish, the way Nilesat dishes do
+    put(DISH, dx, 0.95, dz, 0xe4e2dc, -0.9, -yaw + Math.PI * 0.85);
   }
 }

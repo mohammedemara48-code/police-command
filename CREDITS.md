@@ -43,6 +43,11 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 
 - `public/models/tuktuk.glb`: a Bajaj RE-style Egyptian tuk-tuk, generated for this project with Higgsfield (Tripo text-to-3D) from a written description. It is not based on any third-party model. Reduced to about 13k triangles with 1024 px textures and meshopt compression (gltf-transform). If it fails to load, the game falls back to the hand-built procedural tuk-tuk.
 
+## Building facades
+
+- `public/textures/facade_brick.webp`, `facade_informal.webp`, `facade_khedival.webp`, `facade_modern.webp`: one-storey facade tiles (red brick with a concrete frame, beige plaster with balconies, laundry and AC units, ochre khedival with green shutters, 1970s ribbon windows with dishes). Generated for this project with Higgsfield (Z Image), then cropped to tile and compressed to WebP. The older hand-painted canvas facades (on Poly Haven CC0 wall photos) stay as the fallback.
+- Roof tanks, satellite dishes and stair huts are built procedurally in code.
+
 ## Environment
 
 - Kerbs and corniche wall `Concrete034` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).

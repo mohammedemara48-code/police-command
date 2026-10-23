@@ -383,19 +383,65 @@ function facadeTexture(style: FacadeStyle, seed: number) {
   return tex;
 }
 
-/** Facade material for a style, tint and seed. The photo is near-neutral, so `tint` is the paint colour. */
+/**
+ * Photo facade tiles (one storey each, generated with Higgsfield for this game): width / height of the tile, so the
+ * texture keeps its proportions on the 3 m bay x 3 m floor UVs of `wallGeo`.
+ */
+const PHOTO: Record<FacadeStyle, number> = { brick: 1.009, informal: 1.873, khedival: 1.224, modern: 1.758 };
+const BAY_M = 3;
+const FLOOR_M = 3;
+const photoCache = new Map<string, THREE.Texture>();
+
+function photoTexture(style: FacadeStyle, flip: boolean, onLoad: (t: THREE.Texture) => void) {
+  const key = `${style}:${flip}`;
+  const hit = photoCache.get(key);
+  if (hit) {
+    if (hit.image) onLoad(hit);
+    else hit.userData.waiting = [...((hit.userData.waiting as ((t: THREE.Texture) => void)[]) ?? []), onLoad];
+    return;
+  }
+  const t = new THREE.Texture();
+  t.userData.waiting = [onLoad];
+  photoCache.set(key, t);
+  if (typeof Image === 'undefined') return;
+  const im = new Image();
+  im.onload = () => {
+    t.image = im;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = Q.shadows ? 8 : 2;
+    // u runs one bay per unit, v one floor per unit: stretch so the tile keeps its own aspect ratio
+    t.repeat.set(((flip ? -1 : 1) * BAY_M) / (PHOTO[style] * FLOOR_M), 1);
+    t.needsUpdate = true;
+    for (const f of t.userData.waiting as ((t: THREE.Texture) => void)[]) f(t);
+    t.userData.waiting = [];
+  };
+  im.src = `${BASE}facade_${style}.webp`;
+}
+
+/**
+ * Facade material for a style, tint and seed. It starts with the hand-painted canvas bay and switches to the photo tile
+ * once that has loaded, so a failed download still leaves a painted building.
+ */
 export function facadeMaterial(style: FacadeStyle, tint: number, seed = 0) {
   loadWalls();
-  const key = `${style}:${style === 'brick' ? 0 : tint}:${seed % 3}`;
+  const flip = seed % 2 === 1;
+  const key = `${style}:${style === 'brick' ? 0 : tint}:${flip ? 1 : 0}`;
   let m = cache.get(key);
   if (!m) {
-    m = new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       map: facadeTexture(style, seed % 3),
       color: style === 'brick' ? 0xffffff : tint,
       roughness: 0.94,
       metalness: 0,
       vertexColors: true
     });
+    photoTexture(style, flip, (t) => {
+      mat.map = t;
+      mat.color.setHex(0xffffff);
+      mat.needsUpdate = true;
+    });
+    m = mat;
     cache.set(key, m);
   }
   return m;
