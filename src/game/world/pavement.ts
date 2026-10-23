@@ -27,10 +27,10 @@ const Clipper = {
   Union: (a: Paths64) => run(CL.ClipType.ctUnion, a),
   Difference: (a: Paths64, b: Paths64) => run(CL.ClipType.ctDifference, a, b),
   Intersect: (a: Paths64, b: Paths64) => run(CL.ClipType.ctIntersection, a, b),
-  /** mitred offset of closed polygons */
-  inflate: (a: Paths64, d: number, miter: number) => {
-    const o = new CL.ClipperOffset(miter);
-    o.AddPaths(a, CL.JoinType.jtMiter, CL.EndType.etClosedPolygon);
+  /** offset of closed polygons (mitred, or round) */
+  inflate: (a: Paths64, d: number, miter: number, round = false) => {
+    const o = new CL.ClipperOffset(miter, 0.03 * SC);
+    o.AddPaths(a, round ? CL.JoinType.jtRound : CL.JoinType.jtMiter, CL.EndType.etClosedPolygon);
     const out: Paths64 = [];
     o.Execute(out, d);
     return out;
@@ -90,7 +90,7 @@ export const packRegion = (r: PaveRegion): [Poly[], Poly[]] => {
 
 const SC = 1000;
 /** half the thinnest pavement kept (m) */
-export const OPEN = 0.6;
+export const OPEN = 1.0;
 /** smallest pavement piece kept (m²) */
 export const MIN_AREA = 3;
 const MARGIN = 6;
@@ -219,10 +219,11 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
   // cleaned (eps, in mm): drops near-duplicate vertices and micro-edges before the offset
   const D = Clipper.Difference(U, C);
   const P = eps ? Clipper.clean(D, eps) : D;
-  // opening: shrink then grow back (mitred, so ordinary corners come back square and only thin tips are lost)
+  // opening: shrink, then grow back round: thin tips are lost and sharp corners come back rounded (radius OPEN), so
+  // no corner is narrower than the two kerbs that meet in it
   const E0 = Clipper.inflate(P, -OPEN * SC, 2);
   const E = eps ? Clipper.clean(E0, eps) : E0;
-  const O = Clipper.inflate(E, OPEN * SC, 4);
+  const O = Clipper.inflate(E, OPEN * SC, 4, true);
   // what the opening took off: the thin tips (and rounding dust along every edge, which is ignored)
   const cut: Paths64 = [];
   for (const g of group(Clipper.Difference(P, O))) {
