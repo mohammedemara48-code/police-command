@@ -122,7 +122,7 @@ export class UI {
               <p class="credits">الضابط والمشاة وعربية الشرطة: Quaternius (CC0)<br>
               عربية Dodge Challenger: Grzybek عبر Poly Pizza (CC-BY 3.0)<br>
               مباني ومؤثرات صوتية: Kenney.nl (CC0)<br>
-              موسيقى السواقة الأساسية: مقدَّمة ومرخَّصة من صاحب اللعبة<br>
+              تراكين السواقة الأساسيين: مقدَّمين ومرخَّصين من صاحب اللعبة<br>
               "Ibn Al-Noor" و"Desert City" و"Curse of the Scarab" و"Balzan Groove": Kevin MacLeod (incompetech.com)، رخصة CC BY 3.0<br>
               Arabic / Eastern Electronic Synth: agent178 (CC0)<br>
               صفارة وطلقات: OpenGameArt (CC0)<br>محرك الرسوم: Three.js</p>

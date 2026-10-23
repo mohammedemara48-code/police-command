@@ -27,5 +27,6 @@ describe('recorded music', () => {
   it("plays the owner's track first while driving", () => {
     expect(MUSIC.taxi.files[0]!.file).toBe('taxi-user-main');
     expect(MUSIC.free.files[0]!.file).toBe('taxi-user-main');
+    expect(MUSIC.taxi.files[1]!.file).toBe('taxi-user-main2');
   });
 });

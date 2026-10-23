@@ -94,7 +94,7 @@ All three tracks (menu, taxi / free driving, police missions) are **composed by 
 - The scales and rhythms are traditional (public domain knowledge); the generated notes are original output of this code, released under the project licence.
 
 ## Music
-- `taxi-user-main` (the default taxi and free-drive track): supplied and licensed by the game owner. Not covered by the other licences here.
+- `taxi-user-main` and `taxi-user-main2` (the main taxi and free-drive tracks, played first in rotation): supplied and licensed by the game owner. Not covered by the other licences here.
 
 Background music in `public/music/` (trimmed, crossfaded into a loop and loudness-normalised to -14 LUFS; .m4a and .ogg):
 - "Ibn Al-Noor", "Desert City", "Curse of the Scarab", "Balzan Groove" — **Kevin MacLeod** (incompetech.com),
