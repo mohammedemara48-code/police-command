@@ -586,6 +586,8 @@ class ModelLib {
       if (want !== a.cur && a.actions[want]) {
         const next = a.actions[want];
         next.reset().play();
+        // start each person's walk cycle at its own step, so a crowd does not march in step
+        if (want === 'walk') next.time = Math.random() * next.getClip().duration;
         a.actions[a.cur]?.crossFadeTo(next, LOCO_CROSSFADE, false);
         a.cur = want;
       }

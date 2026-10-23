@@ -330,6 +330,13 @@ function pourBand(acc: Acc, self: number, ya: number) {
   }
   for (const q of pieces) {
     if (q.p.length < 3 || fArea(q.p) < 1e-5) continue;
+    // the tip of a wedge between two streets at a fork, too thin to be a pavement: asphalt instead (no kerb strips
+    // lying in the road)
+    if (narrow(q)) {
+      acc.asphalt.flat(ya - 0.002, q.p);
+      tips.add(q.p);
+      continue;
+    }
     acc.paving.flatUV(PAVE_Y, q.p, q.p.map(uv));
     const cx = q.p.reduce((s, v) => s + v.x, 0) / q.p.length,
       cz = q.p.reduce((s, v) => s + v.z, 0) / q.p.length;
@@ -437,6 +444,7 @@ function asphaltRuns(v0: V2, v1: V2, cx: number, cz: number): [V2, V2][] {
     const x = p.x + nx * 0.08,
       z = p.z + nz * 0.08;
     // a rounded corner's asphalt gets its kerb from filletKerb, along the arc
+    // (a fork's wedge tip is poured as asphalt too, so the pavement beside it gets a kerb there)
     return N.onRoad(x, z, 0) && !inFillet(x, z, 0);
   };
   const n = Math.max(2, Math.ceil(L / 0.2));
@@ -584,4 +592,42 @@ function offCarriage(r: FPoly): FPoly[] {
   for (const id of near(S.gridC, x0, z0, x1, z1))
     for (const cp of carrPolys(S, id)) pieces = pieces.flatMap((q) => subtract(q, cp, false));
   return pieces.filter((q) => q.p.length >= 3 && fArea(q.p) > 1e-5);
+}
+
+/** Fork wedge tips poured as asphalt (for the edge audit). */
+export const tips = new Set<V2[]>();
+export function inTip(x: number, z: number): boolean {
+  for (const p of tips) {
+    let inside = false;
+    for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+      const a = p[i]!,
+        b = p[j]!;
+      if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+    }
+    if (inside) return true;
+  }
+  return false;
+}
+
+/** Thinner than ~1.4 m between carriageways: carriageway lies within 0.7 m on two opposite sides of (x, z). */
+const NARROW = 0.7;
+export function wedgeTip(x: number, z: number, r = NARROW): boolean {
+  const N = net();
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 16) * Math.PI * 2;
+    const dx = Math.cos(a) * r,
+      dz = Math.sin(a) * r;
+    if (N.onRoad(x + dx, z + dz, 0) && N.onRoad(x - dx, z - dz, 0)) return true;
+  }
+  return false;
+}
+function narrow(q: FPoly): boolean {
+  const n = q.p.length;
+  let cx = 0,
+    cz = 0;
+  for (const v of q.p) {
+    cx += v.x / n;
+    cz += v.z / n;
+  }
+  return wedgeTip(cx, cz);
 }

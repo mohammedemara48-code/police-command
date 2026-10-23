@@ -19,8 +19,12 @@ import {
   type CrowdQuality,
   type CrowdSpec,
   type Lane,
-  type ShopSpot
+  type ShopSpot,
+  separate,
+  KERB_CLEAR,
+  type Walker
 } from '../logic/crowd';
+import { PAVEMENT } from '../logic/cairo';
 import { armAxis, axisGreen, signalNodes } from '../logic/signals';
 import { net } from '../logic/roadnet';
 import { rng } from '../logic/roadnet';
@@ -55,6 +59,12 @@ interface Person {
   lx: number;
   lz: number;
   dodge: number;
+  /** sideways step to keep clear of other people (separation steering) and the walk's own frame this frame */
+  sep: number;
+  lag: number;
+  walking: boolean;
+  rx: number;
+  rz: number;
 }
 
 const HAIRS = [0x16100c, 0x2a1a10, 0x0e0e0e, 0x4a2f1c];
@@ -164,7 +174,12 @@ export class Crowd {
       tcDir: 1,
       lx: 0,
       lz: 0,
-      dodge: 0
+      dodge: 0,
+      sep: 0,
+      lag: 0,
+      walking: false,
+      rx: 0,
+      rz: 0
     };
     if (spec.kind === 'ahwa') {
       models.setClip(g, 'drive');
@@ -246,8 +261,10 @@ export class Crowd {
     for (const p of cand) {
       if (!p.g.visible) p.g.visible = true;
       this.lod(p);
+      p.walking = false;
       this.step(p, dt, me, clock, panic);
     }
+    this.keepApart(cand, dt);
     for (const st of this.sets.values()) {
       const lead = st.people[0]!;
       st.prop.visible = lead.state !== 'away' && lead.d2 < R2 * 1.1;
@@ -351,7 +368,7 @@ export class Crowd {
       });
     } else if (k === 'ahwa' || k === 'vendor') {
       const st = this.sets.get(p.spec.set)!;
-      const lane = pickLane(me, this.rnd, { ...o, off: k === 'ahwa' ? 2.0 : 0.95, dense: true });
+      const lane = pickLane(me, this.rnd, { ...o, off: k === 'ahwa' ? 2.0 : 1.1, dense: true });
       if (!lane) return void st.people.forEach((m) => (m.state = 'away'));
       const q = lanePose(lane);
       const nx = Math.cos(q.yaw) * lane.rel,
@@ -467,6 +484,45 @@ export class Crowd {
     pos.x = q.x + p.lx + rx * p.dodge;
     pos.z = q.z + p.lz + rz * p.dodge;
     p.g.rotation.y = q.yaw;
+    p.walking = true;
+    p.rx = rx;
+    p.rz = rz;
+  }
+
+  /**
+   * Separation steering for the drawn people: walkers step sideways (inside the pavement, a metre clear of the kerb)
+   * so nobody comes within PERSONAL of anybody else; standing people hold their spot and walkers go round them.
+   */
+  private keepApart(list: Person[], dt: number) {
+    const ws: Walker[] = [];
+    for (const p of list) {
+      const pos = p.g.position;
+      if (!p.walking || !p.lane) {
+        ws.push({ x: pos.x, z: pos.z, rx: 1, rz: 0, right: 0, left: 0 });
+        continue;
+      }
+      // right of the walking direction is towards the kerb when rel < 0
+      const toKerb = Math.max(0, p.lane.off - KERB_CLEAR - Math.max(0, -p.dodge * p.lane.rel));
+      const toWall = Math.max(0, PAVEMENT - 0.5 - p.lane.off);
+      const right = p.lane.rel > 0 ? toWall : toKerb,
+        left = p.lane.rel > 0 ? toKerb : toWall;
+      // (step() has just put the walker back on its lane line: the sideways step goes on top)
+      ws.push({ x: pos.x, z: pos.z, rx: p.rx, rz: p.rz, right, left });
+    }
+    const off = separate(ws);
+    const k = Math.min(1, dt * 4);
+    list.forEach((p, i) => {
+      if (!p.walking) {
+        p.sep = p.lag = 0;
+        return;
+      }
+      const w = ws[i]!;
+      p.sep += (off.side[i]! - p.sep) * k;
+      p.sep = Math.max(-w.left, Math.min(w.right, p.sep));
+      p.lag += (Math.max(-1.2, Math.min(1.2, off.along[i]!)) - p.lag) * k;
+      p.g.position.x = w.x + p.rx * p.sep - p.rz * p.lag;
+      p.g.position.z = w.z + p.rz * p.sep + p.rx * p.lag;
+    });
   }
 
   /** On-screen test in normalised device coordinates. */

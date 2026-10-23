@@ -5,7 +5,8 @@
  *   gap        a point that should be road or pavement (within a road's carriageway + pavement band, junction corners
  *              included) where nothing is drawn, so bare ground shows between asphalt and pavement
  *   sliver     a raised pavement / kerb slab drawn on the drivable carriageway
- *   phantom    asphalt drawn where the car may not drive (an invisible wall on a visible road)
+ *   phantom    asphalt drawn where the car may not drive (an invisible wall on a visible road), except the filled
+ *              tips of fork wedges
  *   hidden     drivable carriageway that is not drawn as asphalt (the car drives over pavement or ground)
  *   bare       pavement right at the asphalt edge with no kerb on it (the slab's raw edge shows as a dark wedge, and
  *              the striped kerb is missing there)
@@ -14,7 +15,7 @@
  */
 import { PAVEMENT, SQUARES, WORLD_BOX, toWorld, type V2 } from '../logic/cairo';
 import { inRiver, net, type REdge } from '../logic/roadnet';
-import { pourRoads, edgesIn } from './roadMesh';
+import { pourRoads, edgesIn, inTip, wedgeTip } from './roadMesh';
 import { shapeOf } from '../logic/roadShape';
 import { Soup } from './Soup';
 
@@ -93,7 +94,7 @@ function upTris(s: Soup, out: number[]) {
   }
 }
 
-let poured: { asphalt: TriGrid; paving: TriGrid; kerb: TriGrid } | null = null;
+let poured: { asphalt: TriGrid; paving: TriGrid; kerb: TriGrid; rawPave: number[]; rawKerb: number[] } | null = null;
 /** Pour every chunk of the world (cached). */
 export function pouredSurfaces() {
   if (poured) return poured;
@@ -112,7 +113,13 @@ export function pouredSurfaces() {
       upTris(acc.kerb, paving);
       upTris(acc.kerb, kerb);
     }
-  poured = { asphalt: new TriGrid(asphalt), paving: new TriGrid(paving), kerb: new TriGrid(kerb) };
+  poured = {
+    asphalt: new TriGrid(asphalt),
+    paving: new TriGrid(paving),
+    kerb: new TriGrid(kerb),
+    rawPave: paving,
+    rawKerb: kerb
+  };
   return poured;
 }
 export function resetEdgeAudit() {
@@ -194,10 +201,12 @@ export function auditEdges(step = 0.6): EdgeReport {
     const pave = S.paving.has(x, z);
     if (drive && pave) flag('sliver', x, z, edge);
     if (drive && !asph && !pave) flag('hidden', x, z, edge);
-    if (asph && !pave && !driveLoose) flag('phantom', x, z, edge);
+    // (fork wedge tips too thin for a pavement are filled with asphalt on purpose)
+    if (asph && !pave && !driveLoose && !inTip(x, z)) flag('phantom', x, z, edge);
     if (!asph && !pave && near(x, z, 0.3)) flag('gap', x, z, edge);
     // within 0.25 m of the asphalt on the pavement side: that is the kerb's top strip
-    if (pave && !N.onRoad(x, z, 0) && N.onRoad(x, z, 0.25) && !S.kerb.has(x, z)) flag('bare', x, z, edge);
+    if (pave && !N.onRoad(x, z, 0) && N.onRoad(x, z, 0.25) && !S.kerb.has(x, z) && !wedgeTip(x, z, 1.6))
+      flag('bare', x, z, edge);
   };
   for (const e of N.edges) {
     const h = e.half;
@@ -233,4 +242,112 @@ export function auditEdges(step = 0.6): EdgeReport {
     }
   }
   return { counts, spots: spots.sort((a, b) => b.n - a.n), samples };
+}
+
+export interface IslandSpot {
+  kind: 'crumb' | 'stray';
+  x: number;
+  z: number;
+  /** area of the piece (m²) */
+  area: number;
+}
+
+const NB = [1, -1, 65536, -65536, 65537, -65537, 65535, -65535];
+
+/**
+ * Stray pavement and kerb audit: rasterises every poured pavement + kerb triangle on a 0.4 m grid and splits it into
+ * connected pieces. A piece smaller than `minArea` (a crumb of slab or a lone bit of kerb) is an error, and so is any
+ * kerb that has carriageway on both sides of it (a strip lying in the road).
+ */
+export function auditIslands(minArea = 3): { counts: { crumb: number; stray: number }; spots: IslandSpot[] } {
+  const N = net();
+  const S = pouredSurfaces();
+  const C = 0.4;
+  const key = (i: number, j: number) => (i + 32768) * 65536 + (j + 32768);
+  const cx0 = (k: number) => (Math.floor(k / 65536) - 32768 + 0.5) * C;
+  const cz0 = (k: number) => ((k % 65536) - 32768 + 0.5) * C;
+  const raster = (T: number[]) => {
+    const cells = new Set<number>();
+    for (let t = 0; t < T.length; t += 6) {
+      const ax = T[t]!,
+        az = T[t + 1]!,
+        bx = T[t + 2]!,
+        bz = T[t + 3]!,
+        cx = T[t + 4]!,
+        cz = T[t + 5]!;
+      if (Math.abs((bx - ax) * (cz - az) - (cx - ax) * (bz - az)) < 1e-6) continue;
+      const i0 = Math.floor(Math.min(ax, bx, cx) / C),
+        i1 = Math.floor(Math.max(ax, bx, cx) / C);
+      const j0 = Math.floor(Math.min(az, bz, cz) / C),
+        j1 = Math.floor(Math.max(az, bz, cz) / C);
+      for (let i = i0; i <= i1; i++)
+        for (let j = j0; j <= j1; j++) {
+          const x = (i + 0.5) * C,
+            z = (j + 0.5) * C;
+          const d1 = (x - bx) * (az - bz) - (ax - bx) * (z - bz);
+          const d2 = (x - cx) * (bz - cz) - (bx - cx) * (z - cz);
+          const d3 = (x - ax) * (cz - az) - (cx - ax) * (z - az);
+          const neg = d1 < 0 || d2 < 0 || d3 < 0,
+            pos = d1 > 0 || d2 > 0 || d3 > 0;
+          if (!(neg && pos)) cells.add(key(i, j));
+        }
+    }
+    return cells;
+  };
+  const pave = raster(S.rawPave);
+  const kerb = raster(S.rawKerb);
+  const spots: IslandSpot[] = [];
+  const counts = { crumb: 0, stray: 0 };
+  const seen = new Set<number>();
+  for (const k0 of pave) {
+    if (seen.has(k0)) continue;
+    const comp: number[] = [k0];
+    seen.add(k0);
+    for (let h = 0; h < comp.length; h++)
+      for (const d of NB) {
+        const n = comp[h]! + d;
+        if (pave.has(n) && !seen.has(n)) {
+          seen.add(n);
+          comp.push(n);
+        }
+      }
+    const area = comp.length * C * C;
+    if (area >= minArea) continue;
+    let x = 0,
+      z = 0;
+    for (const k of comp) {
+      x += cx0(k);
+      z += cz0(k);
+    }
+    counts.crumb++;
+    spots.push({ kind: 'crumb', x: x / comp.length, z: z / comp.length, area });
+  }
+  const strayAt = new Set<string>();
+  const d = 0.9,
+    e = d * 0.7;
+  for (const k of kerb) {
+    const x = cx0(k),
+      z = cz0(k);
+    // a kerb belongs to a pavement: some slab (not kerb) must lie within a step of it on one side
+    const slab = (dx: number, dz: number) => S.paving.has(x + dx, z + dz) && !S.kerb.has(x + dx, z + dz);
+    if (!N.onRoad(x + d, z, 0) && !N.onRoad(x - d, z, 0) && !N.onRoad(x, z + d, 0) && !N.onRoad(x, z - d, 0)) continue;
+    if (
+      !slab(d, 0) &&
+      !slab(-d, 0) &&
+      !slab(0, d) &&
+      !slab(0, -d) &&
+      !slab(e, e) &&
+      !slab(-e, -e) &&
+      !slab(e, -e) &&
+      !slab(-e, e)
+    ) {
+      counts.stray++;
+      const g = `${Math.round(x / 4)}:${Math.round(z / 4)}`;
+      if (!strayAt.has(g)) {
+        strayAt.add(g);
+        spots.push({ kind: 'stray', x, z, area: 0 });
+      }
+    }
+  }
+  return { counts, spots };
 }

@@ -183,7 +183,7 @@ export interface PickOpts {
   ahead?: { x: number; z: number };
   /** only streets whose id starts with this (the corniche promenade) */
   sid?: string;
-  /** offset across the pavement (default random in 0.8..2.4) */
+  /** offset across the pavement (default random in 1.0..2.3, at least a metre in from the kerb) */
   off?: number;
   /** keep the district density: busy districts accept more picks */
   dense?: boolean;
@@ -207,7 +207,7 @@ export function pickLane(me: { x: number; z: number }, rnd: () => number, o: Pic
       s: 0,
       dir: rnd() < 0.5 ? 1 : -1,
       rel: rnd() < 0.5 ? 1 : -1,
-      off: o.off ?? 0.8 + rnd() * 1.6
+      off: o.off ?? KERB_CLEAR + rnd() * 1.3
     };
     if (e.oneway) lane.dir = 1;
     // only where this side of the street really has a pavement (junctions cut it back)
@@ -302,7 +302,76 @@ export function advanceLane(
 
 /** How far a walker may step sideways towards the carriageway and still be on the pavement. */
 export function dodgeRoom(l: Lane): number {
-  return Math.max(0, l.off - 0.35);
+  return Math.max(0, l.off - KERB_CLEAR * 0.8);
+}
+
+/** Walkers keep this far in from the kerb edge (m). */
+export const KERB_CLEAR = 1.0;
+/** Nobody walks closer than this to anybody else (m). */
+export const PERSONAL = 0.6;
+
+export interface Walker {
+  x: number;
+  z: number;
+  /** right-hand vector of the walking direction */
+  rx: number;
+  rz: number;
+  /** how far the walker may step right (+) and left (-) and stay on the pavement, away from the kerb */
+  right: number;
+  left: number;
+}
+
+/**
+ * Separation steering: how far each walker steps sideways (along its right-hand vector, clamped to the pavement) and,
+ * where the pavement is too narrow to pass abreast, falls back or presses on along its way, so that no two people are
+ * closer than PERSONAL. Relaxed over a few rounds.
+ */
+export function separate(ws: readonly Walker[], rounds = 6, min = PERSONAL): { side: number[]; along: number[] } {
+  const side = ws.map(() => 0);
+  const along = ws.map(() => 0);
+  const want = min + 0.08;
+  const px = (w: Walker, i: number) => w.x + w.rx * side[i]! - w.rz * along[i]!;
+  const pz = (w: Walker, i: number) => w.z + w.rz * side[i]! + w.rx * along[i]!;
+  for (let r = 0; r < rounds; r++) {
+    for (let i = 0; i < ws.length; i++)
+      for (let j = i + 1; j < ws.length; j++) {
+        const a = ws[i]!,
+          b = ws[j]!;
+        let dx = px(b, j) - px(a, i),
+          dz = pz(b, j) - pz(a, i);
+        let d = Math.hypot(dx, dz);
+        if (d >= want) continue;
+        if (d < 1e-4) {
+          // on the same spot: split them across the pavement
+          dx = a.rx;
+          dz = a.rz;
+          d = 1e-4;
+        }
+        const ux = dx / d,
+          uz = dz / d;
+        const push = (want - Math.min(d, want)) / 2;
+        for (const [w, k, sg] of [
+          [a, i, -1],
+          [b, j, 1]
+        ] as const) {
+          const mx = ux * sg * push,
+            mz = uz * sg * push;
+          // sideways part, clamped to the pavement; what is left over goes along the walk
+          const sd = mx * w.rx + mz * w.rz;
+          const s0 = side[k]!;
+          side[k] = Math.max(-w.left, Math.min(w.right, s0 + sd * 1.2));
+          const used = (side[k]! - s0) / 1.2;
+          const fx = -w.rz,
+            fz = w.rx;
+          const rest = (mx - w.rx * used) * fx + (mz - w.rz * used) * fz;
+          along[k] =
+            along[k]! +
+            rest +
+            (Math.abs(sd - used) > 1e-6 ? Math.sign(mx * fx + mz * fz || sg) * Math.abs(sd - used) : 0);
+        }
+      }
+  }
+  return { side, along };
 }
 
 /** The lane a walker takes when it reaches the end of its edge: through the junction on a random street. */
