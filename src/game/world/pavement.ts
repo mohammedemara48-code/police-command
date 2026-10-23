@@ -110,47 +110,27 @@ const toPath = (p: readonly V2[]): Path64 => {
 };
 const toV2 = (p: Path64): V2[] => p.map((q) => ({ x: q.X / SC, z: q.Y / SC }));
 
-/**
- * Group clipper output into outers with their holes. A hole goes to the smallest outer that holds most of its
- * vertices (a vote, because holes often touch their outer at a vertex, where a single point-in-polygon test is a toss-up).
- */
+/** Group clipper output into outers with their holes (nesting from Clipper's poly tree). */
 function group(paths: Paths64): { outer: Path64; holes: Path64[] }[] {
-  const outs: { outer: Path64; holes: Path64[]; a: number; v: V2[]; bb: number[] }[] = [];
-  const holes: Path64[] = [];
-  const bbox = (p: Path64) => {
-    let x0 = Infinity,
-      y0 = Infinity,
-      x1 = -Infinity,
-      y1 = -Infinity;
-    for (const q of p) {
-      x0 = Math.min(x0, q.X);
-      x1 = Math.max(x1, q.X);
-      y0 = Math.min(y0, q.Y);
-      y1 = Math.max(y1, q.Y);
-    }
-    return [x0, y0, x1, y1];
-  };
-  for (const p of paths) {
-    if (p.length < 3) continue;
-    const a = Clipper.area(p);
-    if (a > 0) outs.push({ outer: p, holes: [], a, v: toV2(p), bb: bbox(p) });
-    else if (a < 0) holes.push(p);
-  }
-  outs.sort((x, y) => x.a - y.a);
-  for (const h of holes) {
-    const hb = bbox(h);
-    const hv = toV2(h);
-    for (const o of outs) {
-      if (hb[0]! < o.bb[0]! || hb[1]! < o.bb[1]! || hb[2]! > o.bb[2]! || hb[3]! > o.bb[3]!) continue;
-      let n = 0;
-      for (const q of hv) if (inPoly(o.v, q.x, q.z)) n++;
-      if (n * 2 >= hv.length) {
-        o.holes.push(h);
-        break;
+  const out: { outer: Path64; holes: Path64[] }[] = [];
+  if (!paths.length) return out;
+  const c = new CL.Clipper();
+  c.StrictlySimple = true;
+  c.AddPaths(paths, CL.PolyType.ptSubject, true);
+  const tree = new CL.PolyTree();
+  c.Execute(CL.ClipType.ctUnion, tree, CL.PolyFillType.pftNonZero, CL.PolyFillType.pftNonZero);
+  const walk = (n: ClipperLib.PolyNode) => {
+    for (const o of n.Childs()) {
+      const holes: Path64[] = [];
+      for (const h of o.Childs()) {
+        holes.push(h.Contour());
+        walk(h);
       }
+      out.push({ outer: o.Contour(), holes });
     }
-  }
-  return outs.map(({ outer, holes: hs }) => ({ outer, holes: hs }));
+  };
+  walk(tree);
+  return out;
 }
 
 /** Union of many small polygons, a few at a time and then pairwise (much faster than one big union). */
@@ -245,8 +225,10 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
     { x: x0, z: z1 }
   ]);
   const boxes = [box];
-  const pave = Clipper.Intersect(kept, boxes);
-  const fill = Clipper.Intersect(Clipper.Difference(P, kept), boxes);
+  // a last clean (2 cm) takes out the hair-thin spikes the booleans can leave where edges nearly coincide
+  const tidy = (ps: Paths64) => Clipper.Union(Clipper.clean(ps, 20));
+  const pave = tidy(Clipper.Intersect(kept, boxes));
+  const fill = tidy(Clipper.Intersect(Clipper.Difference(P, kept), boxes));
   // outers counter-clockwise in (x, z), holes clockwise: the slab is always on the left of a ring
   const wind = (r: V2[], ccw: boolean) => {
     let a = 0;
