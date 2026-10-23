@@ -14,7 +14,8 @@
     "format": "prettier --write \"src/game/logic/**\" tests",
     "format:check": "prettier --check \"src/game/logic/**\" tests",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build"
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build",
+    "bake:pave": "esbuild scripts/bake-pave.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/bake-pave.mjs --log-level=warning && node node_modules/.cache/bake-pave.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^1.6.1",

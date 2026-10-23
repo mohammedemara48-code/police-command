@@ -10,6 +10,53 @@ import { Clipper, EndType, FillRule, JoinType, type Path64, type Paths64 } from 
 import { type V2 } from '../logic/cairo';
 import { net } from '../logic/roadnet';
 import { carrPolys, near, shapeOf } from '../logic/roadShape';
+import baked from './paveBake.json';
+
+/** Chunk size the bake is keyed on (OpenWorld CHUNK). */
+export const BAKE_CHUNK = 128;
+type Ring = number[];
+type Poly = Ring[];
+interface Bake {
+  hash: string;
+  chunks: Record<string, [Poly[], Poly[]]>;
+}
+
+/** Fingerprint of everything the pavement is built from, so a stale bake is never used. */
+export function shapeHash(): string {
+  const S = shapeOf(net());
+  let h = 2166136261 >>> 0;
+  const mix = (n: number) => {
+    h = Math.imul(h ^ (n | 0), 16777619) >>> 0;
+  };
+  for (const b of S.bands) for (const v of b.poly.p) (mix(Math.round(v.x * 100)), mix(Math.round(v.z * 100)));
+  for (let c = 0; c < S.carr.length; c++) for (const q of carrPolys(S, c)) for (const v of q.p) (mix(Math.round(v.x * 100)), mix(Math.round(v.z * 100)));
+  mix(OPEN * 1000);
+  mix(MIN_AREA * 1000);
+  return (h >>> 0).toString(16) + ':' + S.bands.length + ':' + S.carr.length;
+}
+
+let bake: Bake | null | undefined;
+function bakeOk(): Bake | null {
+  if (bake === undefined) {
+    const b = baked as unknown as Bake;
+    bake = b && b.hash === shapeHash() ? b : null;
+    if (!bake) console.warn('paveBake.json is stale: run npm run bake:pave');
+  }
+  return bake;
+}
+const unpack = (ps: Poly[]) =>
+  ps.map((rs) => {
+    const ring = (r: Ring) => {
+      const o: V2[] = [];
+      for (let i = 0; i < r.length; i += 2) o.push({ x: r[i]! / 100, z: r[i + 1]! / 100 });
+      return o;
+    };
+    return { outer: ring(rs[0]!), holes: rs.slice(1).map(ring) };
+  });
+export const packRegion = (r: PaveRegion): [Poly[], Poly[]] => {
+  const pk = (gs: PaveRegion['pave']) => gs.map((g) => [g.outer, ...g.holes].map((rg) => rg.flatMap((v) => [Math.round(v.x * 100), Math.round(v.z * 100)])));
+  return [pk(r.pave), pk(r.fill)];
+};
 
 const SC = 1000;
 /** half the thinnest pavement kept (m) */
@@ -47,6 +94,16 @@ function group(paths: Paths64): { outer: Path64; holes: Path64[] }[] {
   return outs.map(({ outer, holes: hs }) => ({ outer, holes: hs }));
 }
 
+/**
+ * Union of many small polygons, a few at a time and then pairwise: much faster than one big union, and it avoids a
+ * case where clipper2-js never returns on one large batch of overlapping carriageway quads.
+ */
+function treeUnion(ps: Paths64): Paths64 {
+  if (ps.length <= 8) return Clipper.Union(ps, undefined, FillRule.NonZero);
+  const m = ps.length >> 1;
+  return Clipper.Union([...treeUnion(ps.slice(0, m) as Paths64), ...treeUnion(ps.slice(m) as Paths64)] as Paths64, undefined, FillRule.NonZero);
+}
+
 const cache = new Map<string, PaveRegion>();
 /** Every fill polygon built so far, for the edge audit. */
 const fills = new Map<number, { x0: number; z0: number; x1: number; z1: number; outer: V2[] }[]>();
@@ -57,6 +114,41 @@ export function paveRegion(x0: number, z0: number, x1: number, z1: number): Pave
   const k = `${x0}:${z0}:${x1}:${z1}`;
   const hit = cache.get(k);
   if (hit) return hit;
+  let r: PaveRegion;
+  const C0 = BAKE_CHUNK;
+  if (x1 - x0 === C0 && z1 - z0 === C0 && x0 % C0 === 0 && z0 % C0 === 0 && bakeOk()) {
+    const e = bake!.chunks[`${x0}:${z0}`];
+    r = e ? { pave: unpack(e[0]), fill: unpack(e[1]) } : { pave: [], fill: [] };
+  } else r = computeRegion(x0, z0, x1, z1);
+  register(r);
+  cache.set(k, r);
+  return r;
+}
+
+function register(r: PaveRegion) {
+  for (const f of r.fill) {
+    let fx0 = Infinity,
+      fz0 = Infinity,
+      fx1 = -Infinity,
+      fz1 = -Infinity;
+    for (const v of f.outer) {
+      fx0 = Math.min(fx0, v.x);
+      fx1 = Math.max(fx1, v.x);
+      fz0 = Math.min(fz0, v.z);
+      fz1 = Math.max(fz1, v.z);
+    }
+    const it = { x0: fx0, z0: fz0, x1: fx1, z1: fz1, outer: f.outer };
+    for (let i = Math.floor(fx0 / FC); i <= Math.floor(fx1 / FC); i++)
+      for (let j = Math.floor(fz0 / FC); j <= Math.floor(fz1 / FC); j++) {
+        const l = fills.get(fkey(i, j));
+        if (l) l.push(it);
+        else fills.set(fkey(i, j), [it]);
+      }
+  }
+}
+
+/** Build one region from the road shape (slow: used by the bake and for boxes the bake does not cover). */
+export function computeRegion(x0: number, z0: number, x1: number, z1: number, eps = 5): PaveRegion {
   const S = shapeOf(net());
   const bx0 = x0 - MARGIN,
     bz0 = z0 - MARGIN,
@@ -66,11 +158,14 @@ export function paveRegion(x0: number, z0: number, x1: number, z1: number): Pave
   for (const b of near(S.gridB, bx0, bz0, bx1, bz1)) bands.push(toPath(S.bands[b]!.poly.p));
   const carr: Paths64 = [] as unknown as Paths64;
   for (const c of near(S.gridC, bx0, bz0, bx1, bz1)) for (const p of carrPolys(S, c)) carr.push(toPath(p.p));
-  const U = Clipper.Union(bands, undefined, FillRule.NonZero);
-  const C = Clipper.Union(carr, undefined, FillRule.NonZero);
-  const P = Clipper.Difference(U, C, FillRule.NonZero);
+  const U = treeUnion(bands);
+  const C = treeUnion(carr);
+  // simplified (5 mm): near-collinear micro-edges otherwise send clipper2-js's offsetter into an endless loop
+  const D = Clipper.Difference(U, C, FillRule.NonZero);
+  const P = eps ? Clipper.simplifyPaths(D, eps) : D;
   // opening: shrink then grow back (mitred, so ordinary corners come back square and only thin tips are lost)
-  const E = Clipper.InflatePaths(P, -OPEN * SC, JoinType.Miter, EndType.Polygon, 2);
+  const E0 = Clipper.InflatePaths(P, -OPEN * SC, JoinType.Miter, EndType.Polygon, 2);
+  const E = eps ? Clipper.simplifyPaths(E0, eps) : E0;
   const O = Clipper.Intersect(Clipper.InflatePaths(E, OPEN * SC, JoinType.Miter, EndType.Polygon, 4), P, FillRule.NonZero);
   // what the opening took off: the thin tips (and rounding dust along every edge, which is ignored)
   const cut: Paths64 = [] as unknown as Paths64;
@@ -96,28 +191,7 @@ export function paveRegion(x0: number, z0: number, x1: number, z1: number): Pave
   const pave = Clipper.Intersect(kept, boxes, FillRule.NonZero);
   const fill = Clipper.Intersect(Clipper.Difference(P, kept, FillRule.NonZero), boxes, FillRule.NonZero);
   const conv = (ps: Paths64) => group(ps).map((g) => ({ outer: toV2(g.outer), holes: g.holes.map(toV2) }));
-  const r: PaveRegion = { pave: conv(pave), fill: conv(fill) };
-  for (const f of r.fill) {
-    let fx0 = Infinity,
-      fz0 = Infinity,
-      fx1 = -Infinity,
-      fz1 = -Infinity;
-    for (const v of f.outer) {
-      fx0 = Math.min(fx0, v.x);
-      fx1 = Math.max(fx1, v.x);
-      fz0 = Math.min(fz0, v.z);
-      fz1 = Math.max(fz1, v.z);
-    }
-    const it = { x0: fx0, z0: fz0, x1: fx1, z1: fz1, outer: f.outer };
-    for (let i = Math.floor(fx0 / FC); i <= Math.floor(fx1 / FC); i++)
-      for (let j = Math.floor(fz0 / FC); j <= Math.floor(fz1 / FC); j++) {
-        const l = fills.get(fkey(i, j));
-        if (l) l.push(it);
-        else fills.set(fkey(i, j), [it]);
-      }
-  }
-  cache.set(k, r);
-  return r;
+  return { pave: conv(pave), fill: conv(fill) };
 }
 
 export function resetPave() {
