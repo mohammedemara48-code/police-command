@@ -315,12 +315,33 @@ function pourPavement(acc: Acc, reg: PaveRegion, x0: number, z0: number, x1: num
     );
   };
   const asphaltAt = (x: number, z: number) => N.onRoad(x, z, 0) || inFill(x, z);
+  // slab test by even-odd over every ring of the chunk: independent of how rings were grouped into outers and holes
+  const rings: { r: V2[]; x0: number; z0: number; x1: number; z1: number }[] = [];
+  for (const g of reg.pave)
+    for (const r of [g.outer, ...g.holes]) {
+      let rx0 = Infinity,
+        rz0 = Infinity,
+        rx1 = -Infinity,
+        rz1 = -Infinity;
+      for (const v of r) {
+        rx0 = Math.min(rx0, v.x);
+        rx1 = Math.max(rx1, v.x);
+        rz0 = Math.min(rz0, v.z);
+        rz1 = Math.max(rz1, v.z);
+      }
+      rings.push({ r, x0: rx0, z0: rz0, x1: rx1, z1: rz1 });
+    }
+  const slabAt = (x: number, z: number) => {
+    let n = 0;
+    for (const q of rings) if (x >= q.x0 && x <= q.x1 && z >= q.z0 && z <= q.z1 && inPoly(q.r, x, z)) n++;
+    return (n & 1) === 1;
+  };
   for (const g of reg.pave) {
     const pts = [...g.outer, ...g.holes.flat()];
     for (const t of triangulate(g.outer, g.holes)) upTri(acc.paving, PAVE_Y, pts, t, TILE_REPEAT);
     for (const ring of [g.outer, ...g.holes]) {
       // split the ring into short pieces, each tagged kerb / edge / chunk border
-      const pcs: { a: V2; b: V2; kind: 0 | 1 | 2 }[] = [];
+      const pcs: { a: V2; b: V2; kind: 0 | 1 | 2 | 3 | 4 }[] = [];
       for (let k = 0; k < ring.length; k++) {
         const a = ring[k]!,
           b = ring[(k + 1) % ring.length]!;
@@ -339,7 +360,14 @@ function pourPavement(acc: Acc, reg: PaveRegion, x0: number, z0: number, x1: num
             q = { x: a.x + ((b.x - a.x) * (i + 1)) / n, z: a.z + ((b.z - a.z) * (i + 1)) / n };
           const mx = (p.x + q.x) / 2,
             mz = (p.z + q.z) / 2;
-          pcs.push({ a: p, b: q, kind: asphaltAt(mx + nx * 0.12, mz + nz * 0.12) ? 1 : 0 });
+          // the kerb goes on the side away from the slab, wherever asphalt is right outside
+          const rgt = { x: mx + nx * 0.12, z: mz + nz * 0.12 },
+            lft = { x: mx - nx * 0.12, z: mz - nz * 0.12 };
+          const sl = slabAt(lft.x, lft.z),
+            sr = slabAt(rgt.x, rgt.z);
+          if (sl && !sr) pcs.push({ a: p, b: q, kind: asphaltAt(rgt.x, rgt.z) ? 1 : 0 });
+          else if (sr && !sl) pcs.push({ a: q, b: p, kind: asphaltAt(lft.x, lft.z) ? 3 : 4 });
+          else pcs.push({ a: p, b: q, kind: 2 });
         }
       }
       if (!pcs.length) continue;
@@ -348,18 +376,27 @@ function pourPavement(acc: Acc, reg: PaveRegion, x0: number, z0: number, x1: num
       if (s0 < 0) s0 = 0;
       let run: V2[] = [];
       const flush = () => {
-        if (run.length >= 2) kerbRun(acc, run, run.length === pcs.length + 1 && s0 === 0);
+        if (run.length >= 2) kerbRun(acc, rev ? run.reverse() : run, !rev && run.length === pcs.length + 1 && s0 === 0);
         run = [];
       };
+      // kind 3 pieces are reversed (slab on the right of the ring here): they run backwards along the ring
+      let rev = false;
       for (let k = 0; k < pcs.length; k++) {
         const pc = pcs[(s0 + k) % pcs.length]!;
-        if (pc.kind === 1) {
-          if (!run.length) run.push(pc.a);
-          run.push(pc.b);
+        if (pc.kind === 1 || pc.kind === 3) {
+          if (run.length && rev !== (pc.kind === 3)) flush();
+          rev = pc.kind === 3;
+          if (rev) {
+            if (!run.length) run.push(pc.b);
+            run.push(pc.a);
+          } else {
+            if (!run.length) run.push(pc.a);
+            run.push(pc.b);
+          }
           continue;
         }
         flush();
-        if (pc.kind === 0) {
+        if (pc.kind === 0 || pc.kind === 4) {
           const L = Math.hypot(pc.b.x - pc.a.x, pc.b.z - pc.a.z);
           acc.paving.wall(pc.a.x, pc.a.z, pc.b.x, pc.b.z, 0, PAVE_Y, (pc.b.z - pc.a.z) / L, -(pc.b.x - pc.a.x) / L);
         }

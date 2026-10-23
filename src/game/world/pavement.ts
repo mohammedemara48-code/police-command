@@ -13,6 +13,8 @@ type Paths64 = Path64[];
 const CL = ClipperLib;
 const run = (type: ClipperLib.ClipType, a: Paths64, b?: Paths64): Paths64 => {
   const c = new CL.Clipper();
+  // strictly simple output: no ring touches itself or another, so every ring has one clear inside (and earcut copes)
+  c.StrictlySimple = true;
   c.AddPaths(a, CL.PolyType.ptSubject, true);
   if (b) c.AddPaths(b, CL.PolyType.ptClip, true);
   const out: Paths64 = [];
@@ -244,7 +246,13 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
   const boxes = [box];
   const pave = Clipper.Intersect(kept, boxes);
   const fill = Clipper.Intersect(Clipper.Difference(P, kept), boxes);
-  const conv = (ps: Paths64) => group(ps).map((g) => ({ outer: toV2(g.outer), holes: g.holes.map(toV2) }));
+  // outers counter-clockwise in (x, z), holes clockwise: the slab is always on the left of a ring
+  const wind = (r: V2[], ccw: boolean) => {
+    let a = 0;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j]!.x - r[i]!.x) * (r[j]!.z + r[i]!.z);
+    return a > 0 === ccw ? r : r.reverse();
+  };
+  const conv = (ps: Paths64) => group(ps).map((g) => ({ outer: wind(toV2(g.outer), true), holes: g.holes.map((h) => wind(toV2(h), false)) }));
   return { pave: conv(pave), fill: conv(fill) };
 }
 
