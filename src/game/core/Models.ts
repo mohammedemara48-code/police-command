@@ -4,6 +4,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { wear } from './Outfits';
+import type { Outfit } from '../logic/outfits';
 import { humanMatRole, shouldBrightenRecolor, LOCO_CROSSFADE, LOCO_SPEED_EMA } from '../logic/humanMaterials';
 
 /**
@@ -96,6 +98,8 @@ export interface Fit {
   tint?: number;
   noShadow?: boolean;
   recolor?: Record<string, number>;
+  /** Cairo street clothes for a MakeHuman person */
+  outfit?: Outfit;
 }
 interface Actor {
   obj: THREE.Object3D;
@@ -240,6 +244,7 @@ class ModelLib {
       });
     }
     if (kind.startsWith('cop_')) this.policeGear(model);
+    if (fit.outfit) wear(model, fit.outfit, this.shadows && !fit.noShadow);
     group.add(holder);
     if (LOD.has(kind)) {
       // these models ship each wheel as its own node (wheel_*), pivoting on the axle

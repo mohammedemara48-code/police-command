@@ -24,6 +24,7 @@ import {
   KERB_CLEAR,
   type Walker
 } from '../logic/crowd';
+import { outfitFor } from '../logic/outfits';
 import { PAVEMENT } from '../logic/cairo';
 import { armAxis, axisGreen, signalNodes } from '../logic/signals';
 import { net } from '../logic/roadnet';
@@ -67,7 +68,6 @@ interface Person {
   rz: number;
 }
 
-const HAIRS = [0x16100c, 0x2a1a10, 0x0e0e0e, 0x4a2f1c];
 /** height a seated customer is lifted by (the drive clip sits the hips low) */
 const SEAT_Y = 0.02;
 
@@ -150,10 +150,9 @@ export class Crowd {
     const g = new THREE.Group();
     const pool = spec.female ? WOMEN : MEN;
     const kind = pool[(spec.id * 7 + (spec.top >> 4)) % pool.length]!;
-    const hair = spec.role === 'elder' ? 0xc4c4c4 : HAIRS[spec.id % HAIRS.length]!;
     models.dress(g, kind, {
       height: (spec.female ? 1.68 : 1.8) * spec.scale,
-      recolor: { Top: spec.top, Hair: hair }
+      outfit: outfitFor({ id: spec.id, role: spec.role, female: spec.female, top: spec.top })
     });
     const p: Person = {
       spec,
@@ -353,6 +352,39 @@ export class Crowd {
       this.put(p, p.x, p.z, p.yaw);
     } else if (k === 'group') {
       const list = this.groups.get(p.spec.group)!;
+      // most groups hang about a shop front or kiosk, a step to the side of the door, in a loose ring facing in
+      const fronts = this.rnd() < 0.65 ? this.world.shopsNear(me.x, me.z, R * 0.85) : [];
+      const free = fronts.filter(
+        (s) =>
+          s.yaw !== undefined &&
+          Math.hypot(s.x - me.x, s.z - me.z) > o.rMin * 0.5 &&
+          !this.people.some(
+            (q) =>
+              q.spec.kind === 'group' &&
+              q.spec.group !== p.spec.group &&
+              q.state === 'stand' &&
+              Math.hypot(q.x - s.x, q.z - s.z) < 6
+          )
+      );
+      const shop = free[Math.floor(this.rnd() * free.length)];
+      if (shop) {
+        const ox = -Math.sin(shop.yaw!),
+          oz = -Math.cos(shop.yaw!);
+        const side = this.rnd() < 0.5 ? -1 : 1;
+        const cx = shop.x + ox * 1.3 + oz * 1.6 * side,
+          cz = shop.z + oz * 1.3 - ox * 1.6 * side;
+        const ring = list.length === 2 ? 0.5 : 0.6;
+        const a0 = this.rnd() * Math.PI * 2;
+        list.forEach((m, i) => {
+          const a = a0 + (i / list.length) * Math.PI * 2;
+          m.state = 'stand';
+          m.x = cx + Math.sin(a) * ring;
+          m.z = cz + Math.cos(a) * ring;
+          m.yaw = a + Math.PI;
+          this.put(m, m.x, m.z, m.yaw);
+        });
+        return;
+      }
       const lane = pickLane(me, this.rnd, { ...o, off: 1.3 + this.rnd() * 0.9, dense: true });
       if (!lane) return void list.forEach((m) => (m.state = 'away'));
       const q = lanePose(lane);

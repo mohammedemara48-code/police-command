@@ -28,6 +28,8 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
   https://quaternius.itch.io/universal-animation-library — retargeted onto the MakeHuman game-engine rig in Blender.
 - Uniform shirt/trousers are the casual-suit textures desaturated and tinted at runtime; duty belt, holster, radio, badge
   and shoulder patches are simple meshes made in code.
+- Cairo street clothes (galabeya, abaya, hijab, skull cap, long sleeves, school bags, canes, bread trays) and the
+  skin / hair tone variety are procedural, made in code at runtime on the same MakeHuman bodies (no extra assets).
 - Built with Blender 4.2 (GPL tool; output not covered) and glTF-Transform (meshopt, WebP textures 512 px).
 
 ## Realistic cars

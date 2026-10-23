@@ -4,6 +4,7 @@
  * this file moves people, draws markers, the cab HUD and the passengers' bubbles.
  */
 import * as THREE from 'three';
+import { models } from './Models';
 import {
   STOPS,
   addPayout,
@@ -74,7 +75,7 @@ const BOARD_SECS = 0.9;
 export interface TaxiHost {
   group: THREE.Group;
   uiRoot: () => HTMLElement | null;
-  makePerson: (female: boolean, dress: number, hair: number) => { g: THREE.Group };
+  makePerson: (female: boolean, dress: number, hair: number, id?: number) => { g: THREE.Group };
   car: () => THREE.Object3D;
   /** the car's state: position, signed speed (m/s), heading */
   state: () => { x: number; z: number; speed: number; yaw: number; inCar: boolean };
@@ -122,10 +123,11 @@ const SEAT_SPOTS: Record<TaxiVehicle, [number, number][]> = {
   ]
 };
 const SEAT_BASE: Record<TaxiVehicle, number> = { tuktuk: 0.72, microbus: 1.0 };
-const SEAT_BODY = new THREE.BoxGeometry(0.42, 0.5, 0.26);
-const SEAT_HEAD = new THREE.SphereGeometry(0.16, 8, 6);
+/** the drive clip's hip height for a 1.8 m person, and how big a seated passenger is drawn */
+const SEAT_HIP = 0.46;
+const SEAT_SCALE = 0.86;
+const HAIRS = [0x1b1410, 0x2c1e14, 0x0d0d0d, 0x3a2616];
 const SHIRTS = [0x4a6fa5, 0xb55a4a, 0x6b8f71, 0xd8b45a, 0x8a5a9a, 0x3f3f46];
-const SKINS = [0xc99a73, 0xa87550, 0xe0b48e, 0x8d5e3c];
 const nightNow = (hour: number) => hour >= 20 || hour < 5;
 
 const money = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(1)} ج`;
@@ -323,7 +325,7 @@ export class TaxiService {
     const female = (w.id * 7) % 3 === 0;
     const dress = [0x6b8f71, 0xb55a4a, 0x4a6fa5, 0xd8b45a, 0x8a5a9a, 0x3f3f46][w.id % 6]!;
     const hair = [0x1b1410, 0x2c1e14, 0x0d0d0d][w.id % 3]!;
-    const p = this.host.makePerson(female, dress, hair);
+    const p = this.host.makePerson(female, dress, hair, w.id);
     const spot = spotOf(w.stop)!;
     const dx = spot.x - spot.px,
       dz = spot.z - spot.pz;
@@ -962,15 +964,13 @@ export class TaxiService {
     this.job.riders.forEach((r, ri) => {
       for (let k = 0; k < r.size && i < spots.length; k++, i++) {
         const [x, z] = spots[i]!;
-        const g = new THREE.Group();
         const shirt = SHIRTS[(ri * 2 + k) % SHIRTS.length]!;
-        const skin = SKINS[(r.id + k) % SKINS.length]!;
-        const body = new THREE.Mesh(SEAT_BODY, new THREE.MeshLambertMaterial({ color: shirt }));
-        body.position.y = 0.15;
-        const head = new THREE.Mesh(SEAT_HEAD, new THREE.MeshLambertMaterial({ color: skin }));
-        head.position.y = 0.55;
-        g.add(body, head);
-        g.position.set(x, SEAT_BASE[this.vehicle], z);
+        const female = ((r.id + k) * 7) % 3 === 0;
+        // a real seated person (same MakeHuman people and street clothes as the crowd), sitting with the drive pose
+        const { g } = this.host.makePerson(female, shirt, HAIRS[(r.id + k) % HAIRS.length]!, r.id * 7 + k);
+        models.setClip(g, 'drive');
+        g.scale.setScalar(SEAT_SCALE);
+        g.position.set(x, SEAT_BASE[this.vehicle] - SEAT_HIP * SEAT_SCALE, z);
         this.seated.add(g);
       }
     });

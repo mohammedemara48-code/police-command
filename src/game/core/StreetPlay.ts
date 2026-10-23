@@ -152,6 +152,7 @@ import {
 } from '../logic/places';
 import { addStat, checkAch } from '../systems/Achievements';
 import * as THREE from 'three';
+import { outfitFor } from '../logic/outfits';
 import { models, CARS, MEN, WOMEN, fx } from './Models';
 import { audio } from '../systems/AudioManager';
 import { Q } from '../config/Quality';
@@ -297,7 +298,7 @@ export class StreetPlay {
   private taxi: TaxiService = new TaxiService({
     group: this.group,
     uiRoot: () => this.ui,
-    makePerson: (f, d, h) => this.makePerson(f, d, h),
+    makePerson: (f, d, h, id) => this.makePerson(f, d, h, id),
     car: () => this.car,
     state: () => ({
       x: this.car.position.x,
@@ -2194,7 +2195,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     return g;
   }
 
-  private makePerson(female: boolean, dress: number, hair: number) {
+  private makePerson(female: boolean, dress: number, hair: number, id?: number) {
     const g = new THREE.Group();
     const skinC = female ? 0xf0c2a4 : 0xc68658;
     const skin = this.mat(skinC);
@@ -2253,7 +2254,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     // realistic MakeHuman people (CC0); pick a stable variant from the colours passed in
     const pool = female ? WOMEN : MEN;
     const pick = pool[((hair >> 3) + (dress >> 5)) % pool.length]!;
-    models.dress(g, pick, { height: female ? 1.68 : 1.8 });
+    const who = id ?? (dress >> 4) + hair;
+    models.dress(g, pick, {
+      height: female ? 1.68 : 1.8,
+      outfit: outfitFor({ id: who, role: id === undefined ? 'pedestrian' : 'passenger', female, top: dress })
+    });
     return { g, legL, legR, armL, armR };
   }
 
