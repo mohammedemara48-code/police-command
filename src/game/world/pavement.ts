@@ -235,7 +235,35 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j]!.x - r[i]!.x) * (r[j]!.z + r[i]!.z);
     return a > 0 === ccw ? r : r.reverse();
   };
-  const conv = (ps: Paths64) => group(ps).map((g) => ({ outer: wind(toV2(g.outer), true), holes: g.holes.map((h) => wind(toV2(h), false)) }));
+  // a polygon with holes is cut into strips at the middle of each hole, so every piece is hole-free: earcut gets
+  // simple rings only (with holes it can lay a triangle across a hole)
+  const unholed = (ps: Paths64) => {
+    const out: { outer: Path64; holes: Path64[] }[] = [];
+    for (const g of group(Clipper.clean(ps, 20))) {
+      if (!g.holes.length) {
+        out.push(g);
+        continue;
+      }
+      const xs = g.holes.map((h) => (Math.min(...h.map((q) => q.X)) + Math.max(...h.map((q) => q.X))) / 2).sort((a, b) => a - b);
+      const lo = Math.min(...g.outer.map((q) => q.X)) - 10,
+        hi = Math.max(...g.outer.map((q) => q.X)) + 10;
+      const y0 = Math.min(...g.outer.map((q) => q.Y)) - 10,
+        y1 = Math.max(...g.outer.map((q) => q.Y)) + 10;
+      const cuts = [lo, ...xs.map(Math.round), hi];
+      for (let i = 0; i + 1 < cuts.length; i++) {
+        if (cuts[i + 1]! - cuts[i]! < 1) continue;
+        const strip = [
+          { X: cuts[i]!, Y: y0 },
+          { X: cuts[i + 1]!, Y: y0 },
+          { X: cuts[i + 1]!, Y: y1 },
+          { X: cuts[i]!, Y: y1 }
+        ];
+        out.push(...group(Clipper.clean(Clipper.Intersect([g.outer, ...g.holes], [strip]), 20)));
+      }
+    }
+    return out;
+  };
+  const conv = (ps: Paths64) => unholed(ps).map((g) => ({ outer: wind(toV2(g.outer), true), holes: g.holes.map((h) => wind(toV2(h), false)) }));
   return { pave: conv(pave), fill: conv(fill) };
 }
 
