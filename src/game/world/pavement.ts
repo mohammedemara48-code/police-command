@@ -6,7 +6,35 @@
  * carriageway right outside gets the striped kerb, the rest gets a plain edge face.
  */
 import * as THREE from 'three';
-import { Clipper, EndType, FillRule, JoinType, type Path64, type Paths64 } from 'clipper2-js';
+import ClipperLib from 'clipper-lib';
+
+type Path64 = ClipperLib.IntPoint[];
+type Paths64 = Path64[];
+const CL = ClipperLib;
+const run = (type: ClipperLib.ClipType, a: Paths64, b?: Paths64): Paths64 => {
+  const c = new CL.Clipper();
+  c.AddPaths(a, CL.PolyType.ptSubject, true);
+  if (b) c.AddPaths(b, CL.PolyType.ptClip, true);
+  const out: Paths64 = [];
+  c.Execute(type, out, CL.PolyFillType.pftNonZero, CL.PolyFillType.pftNonZero);
+  return out;
+};
+/** The few boolean and offset operations used here, on Clipper (6.4.2, Angus Johnson) integer paths. */
+const Clipper = {
+  area: (p: Path64) => CL.Clipper.Area(p),
+  Union: (a: Paths64) => run(CL.ClipType.ctUnion, a),
+  Difference: (a: Paths64, b: Paths64) => run(CL.ClipType.ctDifference, a, b),
+  Intersect: (a: Paths64, b: Paths64) => run(CL.ClipType.ctIntersection, a, b),
+  /** mitred offset of closed polygons */
+  inflate: (a: Paths64, d: number, miter: number) => {
+    const o = new CL.ClipperOffset(miter);
+    o.AddPaths(a, CL.JoinType.jtMiter, CL.EndType.etClosedPolygon);
+    const out: Paths64 = [];
+    o.Execute(out, d);
+    return out;
+  },
+  clean: (a: Paths64, d: number) => CL.Clipper.CleanPolygons(a, d)
+};
 import { type V2 } from '../logic/cairo';
 import { net } from '../logic/roadnet';
 import { carrPolys, near, shapeOf } from '../logic/roadShape';
@@ -72,36 +100,62 @@ export interface PaveRegion {
   fill: { outer: V2[]; holes: V2[][] }[];
 }
 
-const toPath = (p: readonly V2[]): Path64 => p.map((v) => ({ x: Math.round(v.x * SC), y: Math.round(v.z * SC) })) as Path64;
-const toV2 = (p: Path64): V2[] => p.map((q) => ({ x: q.x / SC, z: q.y / SC }));
+/** As a clipper path, always wound positive: the road pieces come in both windings, and under a winding rule an overlap of
+ *  opposite windings would cancel out to nothing. */
+const toPath = (p: readonly V2[]): Path64 => {
+  const q = p.map((v) => ({ X: Math.round(v.x * SC), Y: Math.round(v.z * SC) }));
+  return Clipper.area(q) < 0 ? q.reverse() : q;
+};
+const toV2 = (p: Path64): V2[] => p.map((q) => ({ x: q.X / SC, z: q.Y / SC }));
 
-/** Group clipper output into outers with their holes. */
+/**
+ * Group clipper output into outers with their holes. A hole goes to the smallest outer that holds most of its
+ * vertices (a vote, because holes often touch their outer at a vertex, where a single point-in-polygon test is a toss-up).
+ */
 function group(paths: Paths64): { outer: Path64; holes: Path64[] }[] {
-  const outs: { outer: Path64; holes: Path64[]; a: number }[] = [];
+  const outs: { outer: Path64; holes: Path64[]; a: number; v: V2[]; bb: number[] }[] = [];
   const holes: Path64[] = [];
+  const bbox = (p: Path64) => {
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
+    for (const q of p) {
+      x0 = Math.min(x0, q.X);
+      x1 = Math.max(x1, q.X);
+      y0 = Math.min(y0, q.Y);
+      y1 = Math.max(y1, q.Y);
+    }
+    return [x0, y0, x1, y1];
+  };
   for (const p of paths) {
     if (p.length < 3) continue;
     const a = Clipper.area(p);
-    if (a > 0) outs.push({ outer: p, holes: [], a });
+    if (a > 0) outs.push({ outer: p, holes: [], a, v: toV2(p), bb: bbox(p) });
     else if (a < 0) holes.push(p);
   }
   outs.sort((x, y) => x.a - y.a);
   for (const h of holes) {
-    const hp = h[0]!;
-    const o = outs.find((g) => inPoly(toV2(g.outer), hp.x / SC, hp.y / SC));
-    if (o) o.holes.push(h);
+    const hb = bbox(h);
+    const hv = toV2(h);
+    for (const o of outs) {
+      if (hb[0]! < o.bb[0]! || hb[1]! < o.bb[1]! || hb[2]! > o.bb[2]! || hb[3]! > o.bb[3]!) continue;
+      let n = 0;
+      for (const q of hv) if (inPoly(o.v, q.x, q.z)) n++;
+      if (n * 2 >= hv.length) {
+        o.holes.push(h);
+        break;
+      }
+    }
   }
   return outs.map(({ outer, holes: hs }) => ({ outer, holes: hs }));
 }
 
-/**
- * Union of many small polygons, a few at a time and then pairwise: much faster than one big union, and it avoids a
- * case where clipper2-js never returns on one large batch of overlapping carriageway quads.
- */
+/** Union of many small polygons, a few at a time and then pairwise (much faster than one big union). */
 function treeUnion(ps: Paths64): Paths64 {
-  if (ps.length <= 8) return Clipper.Union(ps, undefined, FillRule.NonZero);
+  if (ps.length <= 8) return Clipper.Union(ps);
   const m = ps.length >> 1;
-  return Clipper.Union([...treeUnion(ps.slice(0, m) as Paths64), ...treeUnion(ps.slice(m) as Paths64)] as Paths64, undefined, FillRule.NonZero);
+  return Clipper.Union([...treeUnion(ps.slice(0, m)), ...treeUnion(ps.slice(m))]);
 }
 
 const cache = new Map<string, PaveRegion>();
@@ -154,28 +208,28 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
     bz0 = z0 - MARGIN,
     bx1 = x1 + MARGIN,
     bz1 = z1 + MARGIN;
-  const bands: Paths64 = [] as unknown as Paths64;
+  const bands: Paths64 = [];
   for (const b of near(S.gridB, bx0, bz0, bx1, bz1)) bands.push(toPath(S.bands[b]!.poly.p));
-  const carr: Paths64 = [] as unknown as Paths64;
+  const carr: Paths64 = [];
   for (const c of near(S.gridC, bx0, bz0, bx1, bz1)) for (const p of carrPolys(S, c)) carr.push(toPath(p.p));
   const U = treeUnion(bands);
   const C = treeUnion(carr);
-  // simplified (5 mm): near-collinear micro-edges otherwise send clipper2-js's offsetter into an endless loop
-  const D = Clipper.Difference(U, C, FillRule.NonZero);
-  const P = eps ? Clipper.simplifyPaths(D, eps) : D;
+  // cleaned (eps, in mm): drops near-duplicate vertices and micro-edges before the offset
+  const D = Clipper.Difference(U, C);
+  const P = eps ? Clipper.clean(D, eps) : D;
   // opening: shrink then grow back (mitred, so ordinary corners come back square and only thin tips are lost)
-  const E0 = Clipper.InflatePaths(P, -OPEN * SC, JoinType.Miter, EndType.Polygon, 2);
-  const E = eps ? Clipper.simplifyPaths(E0, eps) : E0;
-  const O = Clipper.Intersect(Clipper.InflatePaths(E, OPEN * SC, JoinType.Miter, EndType.Polygon, 4), P, FillRule.NonZero);
+  const E0 = Clipper.inflate(P, -OPEN * SC, 2);
+  const E = eps ? Clipper.clean(E0, eps) : E0;
+  const O = Clipper.inflate(E, OPEN * SC, 4);
   // what the opening took off: the thin tips (and rounding dust along every edge, which is ignored)
-  const cut: Paths64 = [] as unknown as Paths64;
-  for (const g of group(Clipper.Difference(P, O, FillRule.NonZero))) {
+  const cut: Paths64 = [];
+  for (const g of group(Clipper.Difference(P, O))) {
     const a = (Clipper.area(g.outer) + g.holes.reduce((s, h) => s + Clipper.area(h), 0)) / (SC * SC);
     if (a > 0.05) cut.push(g.outer, ...g.holes);
   }
-  const P2 = cut.length ? Clipper.Difference(P, cut, FillRule.NonZero) : P;
+  const P2 = cut.length ? Clipper.Difference(P, cut) : P;
   // drop small pieces (before the chunk cut, so a big piece crossing the chunk border is not mistaken for a crumb)
-  const kept: Paths64 = [] as unknown as Paths64;
+  const kept: Paths64 = [];
   for (const g of group(P2)) {
     const a = (Clipper.area(g.outer) + g.holes.reduce((s, h) => s + Clipper.area(h), 0)) / (SC * SC);
     if (a < MIN_AREA) continue;
@@ -187,9 +241,9 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
     { x: x1, z: z1 },
     { x: x0, z: z1 }
   ]);
-  const boxes = [box] as unknown as Paths64;
-  const pave = Clipper.Intersect(kept, boxes, FillRule.NonZero);
-  const fill = Clipper.Intersect(Clipper.Difference(P, kept, FillRule.NonZero), boxes, FillRule.NonZero);
+  const boxes = [box];
+  const pave = Clipper.Intersect(kept, boxes);
+  const fill = Clipper.Intersect(Clipper.Difference(P, kept), boxes);
   const conv = (ps: Paths64) => group(ps).map((g) => ({ outer: toV2(g.outer), holes: g.holes.map(toV2) }));
   return { pave: conv(pave), fill: conv(fill) };
 }
