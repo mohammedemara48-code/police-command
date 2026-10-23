@@ -93,25 +93,13 @@ All three tracks (menu, taxi / free driving, police missions) are **composed by 
 - Menu: rast on D, 112 BPM, maqsum with riq and dhol, oud hook with a nay answer. Taxi: nahawand on C, 124 BPM, mahraganat tresillo kick with claps, electro-synth riff. Police: hijaz on A, 140 BPM, saidi with a hammering dhol, mizmar hook with an oud echo.
 - The scales and rhythms are traditional (public domain knowledge); the generated notes are original output of this code, released under the project licence.
 
-## Music (recorded instruments)
-The four background loops in `public/music/` (`menu-zuruni`, `taxi-salma`, `police-hijaz`, `free-saidi`, as `.m4a` and `.ogg`)
-are our own arrangements, sequenced in maqam and Egyptian rhythms from real instrument recordings by
-`tools/music/render.py`. Because some source recordings are CC BY-SA, **these music files are released under
-CC BY-SA 4.0** (the rest of the game keeps its own licence).
-
-Compositions (public domain):
-- «سالمة يا سلامة» *Salma ya Salama* (1919) and «زوروني كل سنة مرة» *Zuruni kull sana marra* — melodies by
-  **Sayed Darwish** (سيد درويش, 1892–1923, public domain: died over 100 years ago). Our arrangements follow the
-  refrains as remembered by ear and simplified; no recording or modern score of these songs was used.
-- The police (Hijaz, malfuf) and saidi (Bayati) themes are original to this game.
-
-Instrument recordings (Wikimedia Commons; licence checked on each file page):
-- Darbuka dum and tak: `Derbake Grave.ogg`, `Derbake Agudo.ogg` by ZappaMidiPF — CC BY-SA 4.0 —
-  https://commons.wikimedia.org/wiki/File:Derbake_Grave.ogg , https://commons.wikimedia.org/wiki/File:Derbake_Agudo.ogg
-- Riq hits: `Riq demo.ogg` by Derbake — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Riq_demo.ogg
-- Sagat (finger cymbals): `Finger cymbals.ogg` by Why? I Ask — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Finger_cymbals.ogg
-- Oud notes: `Oud open Strings.ogg` by User:Bottomline — CC BY-SA 3.0 — https://commons.wikimedia.org/wiki/File:Oud_open_Strings.ogg
-- Accordion notes: `Plein jeu mélodéon.ogg`, `Registre orgue.ogg`, `Registre bandonéon.ogg` by Levieuxtoby — CC BY-SA 4.0 —
-  https://commons.wikimedia.org/wiki/File:Plein_jeu_m%C3%A9lod%C3%A9on.ogg , https://commons.wikimedia.org/wiki/File:Registre_orgue.ogg ,
-  https://commons.wikimedia.org/wiki/File:Registre_bandon%C3%A9on.ogg
+## Music
+Background music in `public/music/` (trimmed, crossfaded into a loop and loudness-normalised to -14 LUFS; .m4a and .ogg):
+- "Ibn Al-Noor", "Desert City", "Curse of the Scarab", "Balzan Groove" — **Kevin MacLeod** (incompetech.com),
+  licensed under Creative Commons: By Attribution 3.0 — https://creativecommons.org/licenses/by/3.0/
+  Sources: https://commons.wikimedia.org/wiki/File:Ibn_Al-Noor_(ISRC_USUAN1100706).mp3 ,
+  https://commons.wikimedia.org/wiki/File:Desert_City_(ISRC_USUAN1100564).mp3 ,
+  https://commons.wikimedia.org/wiki/File:Curse_of_the_Scarab_(ISRC_USUAN1600014).mp3 ,
+  https://commons.wikimedia.org/wiki/File:Balzan_Groove_(ISRC_USUAN1100311).mp3 — and https://incompetech.com/music/royalty-free/
+- "Arabic / Eastern Electronic Synth" — **agent178**, CC0 — https://opengameart.org/content/arabic-eastern-electronic-synth
 The generated WebAudio music (EgyptianMusic) stays as the fallback when a file cannot be loaded.

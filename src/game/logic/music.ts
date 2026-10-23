@@ -1,50 +1,61 @@
 /**
- * The recorded background music: four loops rendered from real instrument recordings (see CREDITS.md),
- * one per place in the game. Pure data so tests stay light.
+ * The recorded background music (see CREDITS.md): one playlist per place in the game. A single file loops on its
+ * baked crossfade; a playlist of several plays them one after the other. Pure data so tests stay light.
  */
 import type { TrackId } from './maqam';
 
 export type MusicId = 'menu' | 'taxi' | 'police' | 'free';
 
-export interface MusicTrack {
-  id: MusicId;
+export interface MusicFile {
   /** file name in /music without the extension (.m4a and .ogg are both shipped) */
   file: string;
   title: string;
-  /** exact loop length in seconds (the loop point, whole bars) */
+  artist: string;
+  /** length in seconds; the end is crossfaded into the start so it loops cleanly */
   loop: number;
-  /** the generated (synth) track used while the file loads or when it cannot be played */
+}
+
+export interface MusicTrack {
+  id: MusicId;
+  files: MusicFile[];
+  /** the generated (synth) track used when no file can be played */
   fallback: TrackId;
 }
 
-const bars = (n: number, bpm: number, beats: number) => (n * beats * 60) / bpm;
-
-export const MUSIC: Record<MusicId, MusicTrack> = {
-  menu: { id: 'menu', file: 'menu-zuruni', title: 'زوروني كل سنة مرة — عود', loop: bars(16, 84, 4), fallback: 'menu' },
-  taxi: {
-    id: 'taxi',
-    file: 'taxi-salma',
-    title: 'سالمة يا سلامة — أكورديون ومقسوم',
-    loop: bars(32, 118, 4),
-    fallback: 'taxi'
-  },
-  police: {
-    id: 'police',
-    file: 'police-hijaz',
-    title: 'مطاردة — حجاز على ملفوف',
-    loop: bars(48, 150, 2),
-    fallback: 'police'
-  },
-  free: { id: 'free', file: 'free-saidi', title: 'صعيدي — بياتي', loop: bars(24, 112, 4), fallback: 'taxi' }
+const IBN: MusicFile = { file: 'taxi-ibn-al-noor', title: 'Ibn Al-Noor', artist: 'Kevin MacLeod', loop: 215 };
+const SYNTH: MusicFile = {
+  file: 'taxi2-arab-synthwave',
+  title: 'Arabic / Eastern Electronic Synth',
+  artist: 'agent178',
+  loop: 95
 };
 
-/** Which music goes with a vehicle mode (taxi work = sha'bi, police = tense, free driving = saidi). */
+export const MUSIC: Record<MusicId, MusicTrack> = {
+  menu: {
+    id: 'menu',
+    files: [{ file: 'menu-desert-city', title: 'Desert City', artist: 'Kevin MacLeod', loop: 86 }],
+    fallback: 'menu'
+  },
+  taxi: { id: 'taxi', files: [IBN, SYNTH], fallback: 'taxi' },
+  police: {
+    id: 'police',
+    files: [{ file: 'police-curse-of-the-scarab', title: 'Curse of the Scarab', artist: 'Kevin MacLeod', loop: 160 }],
+    fallback: 'police'
+  },
+  free: {
+    id: 'free',
+    files: [{ file: 'free-balzan-groove', title: 'Balzan Groove', artist: 'Kevin MacLeod', loop: 122 }, SYNTH],
+    fallback: 'taxi'
+  }
+};
+
+/** Which music goes with a vehicle mode (taxi work and free driving = upbeat, police = tense). */
 export function musicForMode(mode: 'police' | 'taxi' | 'free'): MusicId {
   return mode;
 }
 
 /** The file to fetch: AAC for Safari / iOS, Ogg Vorbis where AAC is missing. */
-export function musicUrl(t: MusicTrack, canPlay: (mime: string) => string): string {
+export function musicUrl(f: MusicFile, canPlay: (mime: string) => string): string {
   const aac = canPlay('audio/mp4; codecs="mp4a.40.2"');
-  return `/music/${t.file}.${aac ? 'm4a' : 'ogg'}`;
+  return `/music/${f.file}.${aac ? 'm4a' : 'ogg'}`;
 }

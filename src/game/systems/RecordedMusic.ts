@@ -4,13 +4,15 @@
  * only plays if a file cannot be fetched or decoded (the old track keeps playing while the next one loads).
  */
 import { EgyptianMusic } from './EgyptianMusic';
-import { MUSIC, musicUrl, type MusicId } from '../logic/music';
+import { MUSIC, musicUrl, type MusicFile, type MusicId } from '../logic/music';
 
 const FADE = 1.6;
 const LEVEL = 0.9;
 
 export class RecordedMusic {
-  private buffers = new Map<MusicId, Promise<AudioBuffer | null>>();
+  private buffers = new Map<string, Promise<AudioBuffer | null>>();
+  /** position in the current playlist */
+  private index = 0;
   private src: AudioBufferSourceNode | null = null;
   private gain: GainNode | null = null;
   private tone: BiquadFilterNode;
@@ -52,15 +54,15 @@ export class RecordedMusic {
     this.bus.gain.setTargetAtTime(this.paused ? 0 : 0.8 + 0.2 * this.intensity, t, 0.3);
   }
 
-  private load(id: MusicId) {
-    let p = this.buffers.get(id);
+  private load(f: MusicFile) {
+    let p = this.buffers.get(f.file);
     if (!p) {
-      const url = musicUrl(MUSIC[id], (m) => new Audio().canPlayType(m));
+      const url = musicUrl(f, (m) => new Audio().canPlayType(m));
       p = fetch(url)
         .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
         .then((b) => this.ctx.decodeAudioData(b))
         .catch(() => null);
-      this.buffers.set(id, p);
+      this.buffers.set(f.file, p);
     }
     return p;
   }
@@ -68,20 +70,29 @@ export class RecordedMusic {
   play(id: MusicId) {
     if (this.want === id) return;
     this.want = id;
+    this.index = 0;
     if (this.paused) return;
+    this.next(id);
+  }
+
+  /** Fetch and start the playlist entry at `index` (the old track keeps playing until it is in). */
+  private next(id: MusicId) {
     const t = MUSIC[id];
-    void this.load(id).then((buf) => {
+    const f = t.files[this.index % t.files.length]!;
+    void this.load(f).then((buf) => {
       if (this.want !== id || this.paused) return;
       if (!buf) {
         this.fadeOutFile();
         this.synth.play(t.fallback);
         return;
       }
-      this.start(id, buf);
+      this.start(id, f, buf);
     });
+    // fetch the one after in the background so the change-over is seamless
+    if (t.files.length > 1) void this.load(t.files[(this.index + 1) % t.files.length]!);
   }
 
-  private start(id: MusicId, buf: AudioBuffer) {
+  private start(id: MusicId, f: MusicFile, buf: AudioBuffer) {
     const now = this.ctx.currentTime;
     this.fadeOutFile();
     this.synth.stop();
@@ -92,11 +103,21 @@ export class RecordedMusic {
     s.buffer = buf;
     s.loop = true;
     s.loopStart = 0;
-    s.loopEnd = Math.min(buf.duration, MUSIC[id].loop);
+    s.loopEnd = Math.min(buf.duration, f.loop);
     s.connect(g).connect(this.bus);
     s.start(now);
     this.src = s;
     this.gain = g;
+    // a playlist moves on after one pass (minus the crossfade), a single file just keeps looping
+    if (MUSIC[id].files.length > 1) {
+      const at = Math.max(5, s.loopEnd - FADE) * 1000;
+      const mine = s;
+      window.setTimeout(() => {
+        if (this.src !== mine || this.want !== id || this.paused) return;
+        this.index++;
+        this.next(id);
+      }, at);
+    }
   }
 
   private fadeOutFile() {
@@ -128,10 +149,6 @@ export class RecordedMusic {
     this.synth.setPaused(on);
     this.applyTone();
     if (on) this.fadeOutFile();
-    else if (this.want) {
-      const id = this.want;
-      this.want = null;
-      this.play(id);
-    }
+    else if (this.want) this.next(this.want);
   }
 }

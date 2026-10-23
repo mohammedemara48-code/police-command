@@ -3,24 +3,25 @@ import { existsSync, statSync } from 'node:fs';
 import { MUSIC, musicForMode, musicUrl } from '../src/game/logic/music';
 
 describe('recorded music', () => {
-  it('has a track for every mode and the menu', () => {
+  it('has music for every mode and the menu', () => {
     expect(musicForMode('taxi')).toBe('taxi');
     expect(musicForMode('police')).toBe('police');
     expect(musicForMode('free')).toBe('free');
-    expect(MUSIC.menu.file).toBeTruthy();
+    for (const t of Object.values(MUSIC)) expect(t.files.length).toBeGreaterThan(0);
   });
-  it('ships small m4a and ogg files that are at least one loop long', () => {
-    for (const t of Object.values(MUSIC)) {
-      for (const ext of ['m4a', 'ogg']) {
-        const f = `public/music/${t.file}.${ext}`;
-        expect(existsSync(f), f).toBe(true);
-        expect(statSync(f).size).toBeLessThan(1.2 * 1024 * 1024);
-      }
-      expect(t.loop).toBeGreaterThan(30);
-    }
+  it('ships every file as m4a and ogg, under 4 MB each', () => {
+    for (const t of Object.values(MUSIC))
+      for (const f of t.files)
+        for (const ext of ['m4a', 'ogg']) {
+          const p = `public/music/${f.file}.${ext}`;
+          expect(existsSync(p), p).toBe(true);
+          expect(statSync(p).size).toBeLessThan(4 * 1024 * 1024);
+          expect(f.loop).toBeGreaterThan(30);
+        }
   });
   it('picks AAC where it plays and Ogg elsewhere', () => {
-    expect(musicUrl(MUSIC.taxi, () => 'probably')).toBe('/music/taxi-salma.m4a');
-    expect(musicUrl(MUSIC.taxi, () => '')).toBe('/music/taxi-salma.ogg');
+    const f = MUSIC.menu.files[0]!;
+    expect(musicUrl(f, () => 'probably')).toBe('/music/menu-desert-city.m4a');
+    expect(musicUrl(f, () => '')).toBe('/music/menu-desert-city.ogg');
   });
 });
