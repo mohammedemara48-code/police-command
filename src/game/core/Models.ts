@@ -49,8 +49,10 @@ export type HumanKind =
   | 'car-sedan2'
   | 'car-hatch'
   | 'car-van'
-  | 'car-police';
+  | 'car-police'
+  | 'tuktuk';
 const GLB = new Set<string>([
+  'tuktuk',
   'cop_m',
   'cop_f',
   'civ_m1',
@@ -138,7 +140,7 @@ class ModelLib {
               m.castShadow = this.shadows;
               m.receiveShadow = true;
               if (CAR_GLB.has(kind)) m.material = this.carMat(m.material as THREE.MeshStandardMaterial);
-              else if (GLB.has(kind) && !CAR_GLB.has(kind)) {
+              else if (GLB.has(kind) && !CAR_GLB.has(kind) && kind !== 'tuktuk') {
                 m.material = this.humanMat(m.material as THREE.MeshStandardMaterial);
               }
             }

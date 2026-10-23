@@ -109,8 +109,8 @@ ARROW_GEO.rotateX(Math.PI); // point down
 /** Where passengers sit in each vehicle (x right, z forward, in the body frame) and how high their seat cushion is. */
 const SEAT_SPOTS: Record<TaxiVehicle, [number, number][]> = {
   tuktuk: [
-    [-0.26, -0.5],
-    [0.26, -0.5]
+    [-0.26, -0.8],
+    [0.26, -0.8]
   ],
   microbus: [
     [-0.55, 0.45],
@@ -121,7 +121,7 @@ const SEAT_SPOTS: Record<TaxiVehicle, [number, number][]> = {
     [0.45, -1.85]
   ]
 };
-const SEAT_BASE: Record<TaxiVehicle, number> = { tuktuk: 0.75, microbus: 1.0 };
+const SEAT_BASE: Record<TaxiVehicle, number> = { tuktuk: 0.72, microbus: 1.0 };
 const SEAT_BODY = new THREE.BoxGeometry(0.42, 0.5, 0.26);
 const SEAT_HEAD = new THREE.SphereGeometry(0.16, 8, 6);
 const SHIRTS = [0x4a6fa5, 0xb55a4a, 0x6b8f71, 0xd8b45a, 0x8a5a9a, 0x3f3f46];

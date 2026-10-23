@@ -75,7 +75,7 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     hl: 1.3,
     length: 2.6,
     siren: false,
-    seat: [0, 0.3, 0.15]
+    seat: [0, 0.3, 0.42]
   }
 };
 

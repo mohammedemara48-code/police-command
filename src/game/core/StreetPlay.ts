@@ -204,6 +204,8 @@ export interface MissionDef {
 }
 
 const TRAFFIC_CARS = 15;
+/** Turns the generated tuk-tuk GLB so its nose points down +z like the other vehicles. */
+const TUKTUK_YAW = -Math.PI / 2;
 
 const MISSION_POOL: MissionDef[] = [
   {
@@ -2574,7 +2576,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       wheels.push(wh);
     }
     g.userData.wheels = wheels;
-    g.add(rearSticker(STICKERS.tuktuk[0]!, 0.95, -1.15, 1.02));
+    g.add(rearSticker(STICKERS.tuktuk[0]!, 0.8, -1.33, 0.66));
+    // Generated Bajaj-style model; the boxes above stay as the fallback if it fails to load.
+    models.dress(g, 'tuktuk', { length: VEHICLES.tuktuk.length, yaw: TUKTUK_YAW });
     return g;
   }
 

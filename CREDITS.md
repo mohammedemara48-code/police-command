@@ -39,6 +39,10 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 - `car-police.glb` (command-centre view) is based on "Police SUV with generic livery" by Innerscene, CC0: https://www.innerscene.com/tools/library/3d-parts/police-suv-with-generic-livery-76e4ca9b
 - Re-oriented, materials renamed (paint tinted per car, emissive lamps), simplified and compressed with glTF-Transform.
 
+## Tuk-tuk
+
+- `public/models/tuktuk.glb`: a Bajaj RE-style Egyptian tuk-tuk, generated for this project with Higgsfield (Tripo text-to-3D) from a written description. It is not based on any third-party model. Reduced to about 13k triangles with 1024 px textures and meshopt compression (gltf-transform). If it fails to load, the game falls back to the hand-built procedural tuk-tuk.
+
 ## Environment
 
 - Kerbs and corniche wall `Concrete034` from ambientCG (https://ambientcg.com), CC0. Resized to 512 px WebP (`public/textures/`).
