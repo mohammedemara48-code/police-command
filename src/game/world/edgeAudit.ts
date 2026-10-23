@@ -206,8 +206,7 @@ export function auditEdges(step = 0.6): EdgeReport {
     if (asph && !pave && !driveLoose && !inFill(x, z)) flag('phantom', x, z, edge);
     if (!asph && !pave && near(x, z, 0.3)) flag('gap', x, z, edge);
     // within 0.25 m of the asphalt on the pavement side: that is the kerb's top strip
-    if (pave && !N.onRoad(x, z, 0) && N.onRoad(x, z, 0.25) && !S.kerb.has(x, z))
-      flag('bare', x, z, edge);
+    if (pave && !N.onRoad(x, z, 0) && N.onRoad(x, z, 0.25) && !S.kerb.has(x, z)) flag('bare', x, z, edge);
   };
   for (const e of N.edges) {
     const h = e.half;

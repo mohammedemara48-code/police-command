@@ -28,6 +28,8 @@ export default defineConfig({
       workbox: {
         // HTML is never precached: navigations go to the network first, so one refresh picks up a new deploy.
         globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
+        // the street chunk carries the baked pavement (about 1.7 MB of JSON, ~0.5 MB gzipped)
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallback: null,
         clientsClaim: true,
         cleanupOutdatedCaches: true,

@@ -235,7 +235,7 @@ export function zebras(): Zebra[] {
 }
 
 /** Do two crossings' stripe rectangles (3 m along the street, the carriageway across) overlap? */
-function zebraOverlap(a: Zebra, b: Zebra): boolean {
+export function zebraOverlap(a: Zebra, b: Zebra): boolean {
   if (Math.hypot(a.x - b.x, a.z - b.z) > a.half + b.half + 4) return false;
   const corners = (z: Zebra) => {
     const fx = Math.sin(z.yaw),
@@ -294,7 +294,6 @@ function carrOf(e: number) {
   return m.get(e) ?? [];
 }
 
-
 /**
  * Pour the chunk's pavement region: the slab (triangulated with its holes), the asphalt in place of what was taken
  * out, and along the boundary either the striped kerb (where carriageway lies right outside) or a plain edge face.
@@ -330,7 +329,15 @@ function pourPavement(acc: Acc, reg: PaveRegion, x0: number, z0: number, x1: num
     return { g, x0: rx0, z0: rz0, x1: rx1, z1: rz1 };
   });
   const slabAt = (x: number, z: number) =>
-    pieces.some((q) => x >= q.x0 && x <= q.x1 && z >= q.z0 && z <= q.z1 && inPoly(q.g.outer, x, z) && !q.g.holes.some((h) => inPoly(h, x, z)));
+    pieces.some(
+      (q) =>
+        x >= q.x0 &&
+        x <= q.x1 &&
+        z >= q.z0 &&
+        z <= q.z1 &&
+        inPoly(q.g.outer, x, z) &&
+        !q.g.holes.some((h) => inPoly(h, x, z))
+    );
   for (const g of reg.pave) {
     const pts = [...g.outer, ...g.holes.flat()];
     for (const t of triangulate(g.outer, g.holes)) upTri(acc.paving, PAVE_Y, pts, t, TILE_REPEAT);
@@ -484,7 +491,12 @@ function kerbRun(acc: Acc, pl: V2[], closed: boolean) {
       const p0 = lerp(a, b, k0),
         p1 = lerp(a, b, k1);
       K.wall(p0.x, p0.z, p1.x, p1.z, 0.035, PAVE_Y, -o.x, -o.z, col);
-      if (acc.kerb) acc.kerb.flat(PAVE_Y + 0.004, [p0, p1, lerp(inner[i]!, inner[i + 1]!, k1), lerp(inner[i]!, inner[i + 1]!, k0)], col);
+      if (acc.kerb)
+        acc.kerb.flat(
+          PAVE_Y + 0.004,
+          [p0, p1, lerp(inner[i]!, inner[i + 1]!, k1), lerp(inner[i]!, inner[i + 1]!, k0)],
+          col
+        );
     }
   }
 }

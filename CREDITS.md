@@ -1,6 +1,6 @@
 # Credits
 
-Everything below is CC0 / public domain unless marked otherwise. The only exceptions are the Dodge Challenger model (CC-BY 3.0, attribution below) and the three.js `Water` shader (MIT).
+Everything below is CC0 / public domain unless marked otherwise. The only exceptions are the Dodge Challenger model (CC-BY 3.0, attribution below), the three.js `Water` shader (MIT) and the Clipper polygon library (Boost Software License 1.0).
 
 ## Kenney, audio and early models
 
@@ -56,6 +56,7 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 - Sky lighting: "Kloofendal 48d Partly Cloudy (Pure Sky)" HDRI from Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky), CC0 (`sky_1k.hdr`).
 - Egyptian street set (apartment blocks, road signs, striped kerbs, taxi roof sign, microbus roof rack, patrol door decals): drawn in code for this project (`src/game/world/Egypt.ts`), MIT like the rest of the code.
 - The `Water` shader from the three.js examples (https://github.com/mrdoob/three.js), MIT.
+- Clipper 6.4.2 by Angus Johnson, JavaScript port `clipper-lib` (https://sourceforge.net/projects/jsclipper/), Boost Software License 1.0 (http://www.boost.org/LICENSE_1_0.txt). Used for the pavement booleans and offsets (`src/game/world/pavement.ts`, baked by `npm run bake:pave`).
 - Shop windows and their goods, street lamps, benches, bins, signs and the corniche railing are built in code.
 
 ## VIP escort (v1.6)

@@ -58,8 +58,12 @@ export function shapeHash(): string {
   const mix = (n: number) => {
     h = Math.imul(h ^ (n | 0), 16777619) >>> 0;
   };
-  for (const b of S.bands) for (const v of b.poly.p) (mix(Math.round(v.x * 100)), mix(Math.round(v.z * 100)));
-  for (let c = 0; c < S.carr.length; c++) for (const q of carrPolys(S, c)) for (const v of q.p) (mix(Math.round(v.x * 100)), mix(Math.round(v.z * 100)));
+  const pt = (v: V2) => {
+    mix(Math.round(v.x * 100));
+    mix(Math.round(v.z * 100));
+  };
+  for (const b of S.bands) for (const v of b.poly.p) pt(v);
+  for (let c = 0; c < S.carr.length; c++) for (const q of carrPolys(S, c)) for (const v of q.p) pt(v);
   mix(OPEN * 1000);
   mix(MIN_AREA * 1000);
   return (h >>> 0).toString(16) + ':' + S.bands.length + ':' + S.carr.length;
@@ -77,14 +81,35 @@ function bakeOk(): Bake | null {
 const unpack = (ps: Poly[]) =>
   ps.map((rs) => {
     const ring = (r: Ring) => {
+      // millimetres, each point stored as the step from the one before
       const o: V2[] = [];
-      for (let i = 0; i < r.length; i += 2) o.push({ x: r[i]! / SC, z: r[i + 1]! / SC });
+      let x = 0,
+        z = 0;
+      for (let i = 0; i < r.length; i += 2) {
+        x += r[i]!;
+        z += r[i + 1]!;
+        o.push({ x: x / SC, z: z / SC });
+      }
       return o;
     };
     return { outer: ring(rs[0]!), holes: rs.slice(1).map(ring) };
   });
 export const packRegion = (r: PaveRegion): [Poly[], Poly[]] => {
-  const pk = (gs: PaveRegion['pave']) => gs.map((g) => [g.outer, ...g.holes].map((rg) => rg.flatMap((v) => [Math.round(v.x * SC), Math.round(v.z * SC)])));
+  const pk = (gs: PaveRegion['pave']) =>
+    gs.map((g) =>
+      [g.outer, ...g.holes].map((rg) => {
+        let px = 0,
+          pz = 0;
+        return rg.flatMap((v) => {
+          const x = Math.round(v.x * SC),
+            z = Math.round(v.z * SC);
+          const d = [x - px, z - pz];
+          px = x;
+          pz = z;
+          return d;
+        });
+      })
+    );
   return [pk(r.pave), pk(r.fill)];
 };
 
@@ -150,7 +175,8 @@ function earcutOk(g: { outer: Path64; holes: Path64[] }): boolean {
       mz = (a.z + b.z + c.z) / 3;
     if (!inPoly(o, mx, mz) || hs.some((h) => inPoly(h, mx, mz))) return false;
   }
-  const want = (Math.abs(Clipper.area(g.outer)) - g.holes.reduce((s, h) => s + Math.abs(Clipper.area(h)), 0)) / (SC * SC);
+  const want =
+    (Math.abs(Clipper.area(g.outer)) - g.holes.reduce((s, h) => s + Math.abs(Clipper.area(h)), 0)) / (SC * SC);
   return Math.abs(sum - want) < 1e-3 * Math.max(1, want);
 }
 
@@ -254,7 +280,15 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
   // everything of the band that is not slab (thin tips, crumbs, and the hairlines the cleaning took off) is asphalt
   // (it reaches 5 cm under the slab's edge and onto the road, so no hairline of bare ground is left between the two)
   const G = 0.05 * SC;
-  const fill = Clipper.Intersect(tidy(Clipper.Difference(Clipper.Intersect(Clipper.inflate(D, G, 2), Clipper.Union([...U, ...Clipper.inflate(C, G, 2)])), Clipper.inflate(K2, -G, 2))), boxes);
+  const fill = Clipper.Intersect(
+    tidy(
+      Clipper.Difference(
+        Clipper.Intersect(Clipper.inflate(D, G, 2), Clipper.Union([...U, ...Clipper.inflate(C, G, 2)])),
+        Clipper.inflate(K2, -G, 2)
+      )
+    ),
+    boxes
+  );
   // outers counter-clockwise in (x, z), holes clockwise: the slab is always on the left of a ring
   const wind = (r: V2[], ccw: boolean) => {
     let a = 0;
@@ -276,7 +310,9 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
         out.push(...g2);
         continue;
       }
-      const xs = g.holes.map((h) => (Math.min(...h.map((q) => q.X)) + Math.max(...h.map((q) => q.X))) / 2).sort((a, b) => a - b);
+      const xs = g.holes
+        .map((h) => (Math.min(...h.map((q) => q.X)) + Math.max(...h.map((q) => q.X))) / 2)
+        .sort((a, b) => a - b);
       const lo = Math.min(...g.outer.map((q) => q.X)) - 10,
         hi = Math.max(...g.outer.map((q) => q.X)) + 10;
       const y0 = Math.min(...g.outer.map((q) => q.Y)) - 10,
@@ -295,7 +331,8 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
     }
     return out;
   };
-  const conv = (ps: Paths64) => unholed(ps).map((g) => ({ outer: wind(toV2(g.outer), true), holes: g.holes.map((h) => wind(toV2(h), false)) }));
+  const conv = (ps: Paths64) =>
+    unholed(ps).map((g) => ({ outer: wind(toV2(g.outer), true), holes: g.holes.map((h) => wind(toV2(h), false)) }));
   return { pave: conv(pave), fill: conv(fill) };
 }
 
@@ -316,7 +353,8 @@ export function inPoly(p: readonly V2[], x: number, z: number): boolean {
 
 /** Is (x, z) on asphalt poured in place of a thin tip or a crumb of pavement? */
 export function inFill(x: number, z: number): boolean {
-  for (const f of fills.get(fkey(Math.floor(x / FC), Math.floor(z / FC))) ?? []) if (x >= f.x0 && x <= f.x1 && z >= f.z0 && z <= f.z1 && inPoly(f.outer, x, z)) return true;
+  for (const f of fills.get(fkey(Math.floor(x / FC), Math.floor(z / FC))) ?? [])
+    if (x >= f.x0 && x <= f.x1 && z >= f.z0 && z <= f.z1 && inPoly(f.outer, x, z)) return true;
   return false;
 }
 
