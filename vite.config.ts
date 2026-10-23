@@ -39,7 +39,7 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: { cacheName: 'pages', networkTimeoutSeconds: 4 }
           },
-          { urlPattern: /\/(models|audio)\//, handler: 'StaleWhileRevalidate', options: { cacheName: 'game-assets' } },
+          { urlPattern: /\/(models|audio|music)\//, handler: 'StaleWhileRevalidate', options: { cacheName: 'game-assets' } },
           // three.js comes from the CDN (import map) and fonts from Google: cache them so the game starts offline
           {
             urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/npm\/three@/,

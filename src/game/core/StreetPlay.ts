@@ -153,6 +153,7 @@ import {
 import { addStat, checkAch } from '../systems/Achievements';
 import * as THREE from 'three';
 import { outfitFor } from '../logic/outfits';
+import { musicForMode } from '../logic/music';
 import { models, CARS, MEN, WOMEN, fx } from './Models';
 import { audio } from '../systems/AudioManager';
 import { Q } from '../config/Quality';
@@ -2348,7 +2349,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   private playMusic() {
-    audio.setTrack(this.mode === 'police' ? 'police' : 'taxi');
+    audio.setTrack(musicForMode(this.mode));
   }
 
   /** Police work, taxi work or free driving: switches what runs and what the HUD shows. */

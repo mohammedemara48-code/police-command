@@ -1,6 +1,6 @@
-/** WebAudio: recorded CC0 sound effects (Kenney, OpenGameArt) with synth fallback; the music is generated in code (EgyptianMusic) */
-import { EgyptianMusic } from './EgyptianMusic';
-import type { TrackId } from '../logic/maqam';
+/** WebAudio: recorded CC0 sound effects (Kenney, OpenGameArt) with synth fallback; the music is recorded Egyptian loops (RecordedMusic) with the generated EgyptianMusic as fallback */
+import { RecordedMusic } from './RecordedMusic';
+import type { MusicId } from '../logic/music';
 
 const VOL_KEY = 'pc.vol.v1';
 export interface Volumes {
@@ -20,7 +20,7 @@ export class AudioManager {
   private musicGain: GainNode | null = null;
   private buffers = new Map<string, AudioBuffer>();
   private loading: Promise<void> | null = null;
-  private music: EgyptianMusic | null = null;
+  private music: RecordedMusic | null = null;
   private engineSrc: AudioBufferSourceNode | null = null;
   private engineGain: GainNode | null = null;
   vol: Volumes = (() => {
@@ -102,9 +102,9 @@ export class AudioManager {
     this.music?.setIntensity(v);
   }
 
-  private track: TrackId = 'menu';
-  /** 'menu' in the menus, 'taxi' for taxi and free driving, 'police' for police missions. */
-  setTrack(t: TrackId) {
+  private track: MusicId = 'menu';
+  /** 'menu' in the menus, 'taxi' for taxi work, 'free' for free driving, 'police' for police missions. */
+  setTrack(t: MusicId) {
     this.track = t;
     if (this.music?.playing && this.music.current !== t) this.music.play(t);
     else if (this.wantMusic) this.startMusic();
@@ -142,7 +142,7 @@ export class AudioManager {
     if (!this.enabled) return;
     this.ensure();
     if (!this.ctx || !this.musicGain) return;
-    this.music ??= new EgyptianMusic(this.ctx, this.musicGain);
+    this.music ??= new RecordedMusic(this.ctx, this.musicGain);
     this.music.setIntensity(this.intensity);
     this.music.setPaused(this.vol.music < 0.01 || this.vol.master < 0.01);
     this.music.play(this.track);
