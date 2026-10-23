@@ -6,7 +6,7 @@ Everything below is CC0 / public domain unless marked otherwise. The only except
 
 - 3D models: Kenney — Car Kit, Mini Characters, City Kit Commercial (https://kenney.nl), CC0. Converted to self-contained .gltf.
 - Sound effects: Kenney — Interface Sounds, Impact Sounds, Sci-Fi Sounds, Music Jingles (https://kenney.nl), CC0.
-- Music: none of it is recorded. The old CC0 loops ("Fast Fight / Battle Music" and "Empty City" from OpenGameArt) were removed; see "Music" below.
+- Music: recorded tracks, see "Music" below (main driving track supplied and licensed by the game owner; Kevin MacLeod, CC BY 3.0; agent178, CC0).
 - Siren: "Sirens and alarm noise" — OpenGameArt (https://opengameart.org/content/sirens-and-alarm-noise), CC0.
 - Gunshot: "Gunshots" (22 Pistol) — OpenGameArt (https://opengameart.org/content/gunshots), CC0.
 
@@ -94,6 +94,8 @@ All three tracks (menu, taxi / free driving, police missions) are **composed by 
 - The scales and rhythms are traditional (public domain knowledge); the generated notes are original output of this code, released under the project licence.
 
 ## Music
+- `taxi-user-main` (the default taxi and free-drive track): supplied and licensed by the game owner. Not covered by the other licences here.
+
 Background music in `public/music/` (trimmed, crossfaded into a loop and loudness-normalised to -14 LUFS; .m4a and .ogg):
 - "Ibn Al-Noor", "Desert City", "Curse of the Scarab", "Balzan Groove" — **Kevin MacLeod** (incompetech.com),
   licensed under Creative Commons: By Attribution 3.0 — https://creativecommons.org/licenses/by/3.0/

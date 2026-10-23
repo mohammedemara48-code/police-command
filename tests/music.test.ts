@@ -24,4 +24,8 @@ describe('recorded music', () => {
     expect(musicUrl(f, () => 'probably')).toBe('/music/menu-desert-city.m4a');
     expect(musicUrl(f, () => '')).toBe('/music/menu-desert-city.ogg');
   });
+  it("plays the owner's track first while driving", () => {
+    expect(MUSIC.taxi.files[0]!.file).toBe('taxi-user-main');
+    expect(MUSIC.free.files[0]!.file).toBe('taxi-user-main');
+  });
 });

@@ -22,6 +22,13 @@ export interface MusicTrack {
   fallback: TrackId;
 }
 
+/** The game owner's own track: first and default while driving. */
+const OWNER: MusicFile = {
+  file: 'taxi-user-main',
+  title: 'Main theme',
+  artist: 'Supplied and licensed by the game owner',
+  loop: 175
+};
 const IBN: MusicFile = { file: 'taxi-ibn-al-noor', title: 'Ibn Al-Noor', artist: 'Kevin MacLeod', loop: 215 };
 const SYNTH: MusicFile = {
   file: 'taxi2-arab-synthwave',
@@ -36,7 +43,7 @@ export const MUSIC: Record<MusicId, MusicTrack> = {
     files: [{ file: 'menu-desert-city', title: 'Desert City', artist: 'Kevin MacLeod', loop: 86 }],
     fallback: 'menu'
   },
-  taxi: { id: 'taxi', files: [IBN, SYNTH], fallback: 'taxi' },
+  taxi: { id: 'taxi', files: [OWNER, IBN, SYNTH], fallback: 'taxi' },
   police: {
     id: 'police',
     files: [{ file: 'police-curse-of-the-scarab', title: 'Curse of the Scarab', artist: 'Kevin MacLeod', loop: 160 }],
@@ -44,7 +51,7 @@ export const MUSIC: Record<MusicId, MusicTrack> = {
   },
   free: {
     id: 'free',
-    files: [{ file: 'free-balzan-groove', title: 'Balzan Groove', artist: 'Kevin MacLeod', loop: 122 }, SYNTH],
+    files: [OWNER, { file: 'free-balzan-groove', title: 'Balzan Groove', artist: 'Kevin MacLeod', loop: 122 }, SYNTH],
     fallback: 'taxi'
   }
 };
