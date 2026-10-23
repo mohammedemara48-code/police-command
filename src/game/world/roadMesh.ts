@@ -363,8 +363,10 @@ function pourPavement(acc: Acc, reg: PaveRegion, x0: number, z0: number, x1: num
           // the kerb goes on the side away from the slab, wherever asphalt is right outside
           const rgt = { x: mx + nx * 0.12, z: mz + nz * 0.12 },
             lft = { x: mx - nx * 0.12, z: mz - nz * 0.12 };
-          const sl = slabAt(lft.x, lft.z),
-            sr = slabAt(rgt.x, rgt.z);
+          // (a test point over the chunk border falls back on the ring's winding: slab on the left)
+          const out = (v: V2) => v.x < x0 || v.x > x1 || v.z < z0 || v.z > z1;
+          const sl = out(lft) || out(rgt) ? true : slabAt(lft.x, lft.z),
+            sr = out(lft) || out(rgt) ? false : slabAt(rgt.x, rgt.z);
           if (sl && !sr) pcs.push({ a: p, b: q, kind: asphaltAt(rgt.x, rgt.z) ? 1 : 0 });
           else if (sr && !sl) pcs.push({ a: q, b: p, kind: asphaltAt(lft.x, lft.z) ? 3 : 4 });
           else pcs.push({ a: p, b: q, kind: 2 });

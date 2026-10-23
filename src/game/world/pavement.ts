@@ -228,7 +228,9 @@ export function computeRegion(x0: number, z0: number, x1: number, z1: number, ep
   // a last clean (2 cm) takes out the hair-thin spikes the booleans can leave where edges nearly coincide
   const tidy = (ps: Paths64) => Clipper.Union(Clipper.clean(ps, 20));
   const pave = tidy(Clipper.Intersect(kept, boxes));
-  const fill = tidy(Clipper.Intersect(Clipper.Difference(P, kept), boxes));
+  // everything of the band that is not slab (thin tips, crumbs, and the hairlines the cleaning took off) is asphalt
+  // (grown by 5 cm, under the slab's edge, so no hairline of bare ground is left between slab and road)
+  const fill = tidy(Clipper.Intersect(Clipper.inflate(Clipper.Difference(D, pave), 0.05 * SC, 2), boxes));
   // outers counter-clockwise in (x, z), holes clockwise: the slab is always on the left of a ring
   const wind = (r: V2[], ccw: boolean) => {
     let a = 0;
