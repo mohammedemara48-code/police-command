@@ -2634,8 +2634,15 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
           g.add(ld);
         } else {
           if (kind === 'yellowBlack') {
-            // the black lower half of the old two-tone taxi
-            for (const sx of [-1, 1]) g.add(this.box(0.03, 0.32, L * 0.82, this.mat(0x141414), sx * 0.86, 0.55, 0));
+            // the black lower band of the old two-tone taxi, along the sides and round the back and the front
+            // (kept when the model dresses the car)
+            const band = this.mat(0x141414);
+            const add = (m: THREE.Mesh) => {
+              m.userData.keep = true;
+              g.add(m);
+            };
+            for (const sx of [-1, 1]) add(this.box(0.03, 0.3, L * 0.8, band, sx * 0.87, 0.6, 0));
+            for (const sz of [-1, 1]) add(this.box(1.66, 0.26, 0.04, band, 0, 0.62, sz * (L / 2 + 0.09)));
           }
           const t = taxiSign();
           t.position.set(0, 1.42, -0.25);
@@ -3028,6 +3035,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   private gaugeNeedle: SVGElement | null = null;
   private gaugeNum: HTMLElement | null = null;
   private gaugeKmh = -1;
+  /** sideways step of the chase camera around a pole (m) */
+  private camSide = 0;
 
   /** Analog virtual joystick for touch screens; maps to the same hold flags as the D-pad. */
   private mountStick(el: HTMLElement) {
@@ -3749,9 +3758,8 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const tx = target.position.x,
       tz = target.position.z;
     // free = the road and its pavement, or any open ground (a yard, a lawn, the station forecourt) that is not inside a building
-    // poles, lamp posts and trunks stay behind the lens too: one right in front of it fills the whole screen
-    const free = (x: number, z: number) =>
-      (onRoad(x, z, pad) || !lots().blocked(x, z, 1.1)) && !(this.inCar && propNear(x, z, 0.7));
+    // (poles, lamp posts and trunks do not shorten the boom: the camera steps aside from them below)
+    const free = (x: number, z: number) => onRoad(x, z, pad) || !lots().blocked(x, z, 1.1);
     const { length: b, boxed } = boomLength(free, tx, tz, yaw, back);
     // ease the boom length (no pops), and rise smoothly as it shortens
     this.camB = k >= 1 ? b : this.camB + (b - this.camB) * Math.min(1, k * 1.5);
@@ -3772,8 +3780,29 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       );
       h += wallLift(f);
     }
-    const cx = target.position.x - sin * cb,
+    let cx = target.position.x - sin * cb,
       cz = target.position.z - cos * cb;
+    // a pole, lamp post or trunk on the line to the car (or at the lens): slide the camera sideways, the side with a clear
+    // line, easing in and out, and when neither side is clear rise above it a little instead of zooming onto the roof
+    if (this.inCar) {
+      const tx0 = target.position.x,
+        tz0 = target.position.z;
+      const blockedLine = (ox: number, oz: number) => {
+        for (let f = 0.25; f <= 1.001; f += 0.125)
+          if (propNear(tx0 + (ox - tx0) * f, tz0 + (oz - tz0) * f, 0.55)) return true;
+        return false;
+      };
+      let want = 0;
+      if (blockedLine(cx, cz)) {
+        const px = cos,
+          pz = -sin;
+        want = !blockedLine(cx + px * 1.6, cz + pz * 1.6) ? 1.6 : !blockedLine(cx - px * 1.6, cz - pz * 1.6) ? -1.6 : 0;
+        if (!want) h += 2.2;
+      }
+      this.camSide += (want - this.camSide) * Math.min(1, k * 1.2);
+      cx += cos * this.camSide;
+      cz -= sin * this.camSide;
+    }
     // on foot next to the patrol car: lift over it instead of clipping into the body
     if (!this.inCar) {
       const C = this.car.position;
