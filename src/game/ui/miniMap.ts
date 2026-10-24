@@ -44,7 +44,15 @@ export const RADAR_R = 170;
 const WIDTH = { arterial: 4.2, collector: 3.2, local: 2.2 } as const;
 const COLOR = { arterial: '#aab6c6', collector: '#8794a6', local: '#667386' } as const;
 
-export function drawMiniMap(ctx: CanvasRenderingContext2D, w: number, h: number, cx: number, cz: number, dots: Dot[]) {
+export function drawMiniMap(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  cx: number,
+  cz: number,
+  dots: Dot[],
+  route?: readonly { x: number; z: number }[]
+) {
   const k = Math.min(w, h) / 2 / RADAR_R;
   const sx = (x: number) => w / 2 + (x - cx) * k;
   const sz = (z: number) => h / 2 + (z - cz) * k;
@@ -83,6 +91,50 @@ export function drawMiniMap(ctx: CanvasRenderingContext2D, w: number, h: number,
       e.pts.forEach((p, i) => (i ? ctx.lineTo(sx(p.x), sz(p.z)) : ctx.moveTo(sx(p.x), sz(p.z))));
     }
     ctx.stroke();
+  }
+  // the route to the objective, along the streets
+  if (route && route.length) {
+    ctx.strokeStyle = 'rgba(61,165,255,0.95)';
+    ctx.lineWidth = Math.max(2, 3.2 * k * 2);
+    ctx.beginPath();
+    ctx.moveTo(w / 2, h / 2);
+    for (const p of route) ctx.lineTo(sx(p.x), sz(p.z));
+    ctx.stroke();
+  }
+  // names of the main streets in view: one label per street, along the road, upright
+  ctx.font = `bold ${Math.round(Math.max(8, w / 18))}px Cairo, Tahoma, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const named = new Set<string>();
+  const boxes: [number, number, number, number][] = [];
+  const near = N.edges
+    .filter((e) => e.cls !== 'local' && !e.ring && e.len > 50 && e.name)
+    .map((e) => ({ e, m: e.pts[Math.floor(e.pts.length / 2)]! }))
+    .filter(({ m }) => Math.abs(m.x - cx) < RADAR_R * 0.8 && Math.abs(m.z - cz) < RADAR_R * 0.8)
+    .sort((a, b) => (a.e.cls === b.e.cls ? 0 : a.e.cls === 'arterial' ? -1 : 1));
+  for (const { e, m } of near) {
+    if (named.has(e.name)) continue;
+    const i = Math.floor(e.pts.length / 2);
+    const a = e.pts[Math.max(0, i - 1)]!,
+      bb = e.pts[Math.min(e.pts.length - 1, i + 1)]!;
+    let ang = Math.atan2(sz(bb.z) - sz(a.z), sx(bb.x) - sx(a.x));
+    if (ang > Math.PI / 2) ang -= Math.PI;
+    if (ang < -Math.PI / 2) ang += Math.PI;
+    const x = sx(m.x),
+      y = sz(m.z);
+    const tw = ctx.measureText(e.name).width / 2 + 2;
+    if (boxes.some(([bx, by, bw]) => Math.abs(bx - x) < bw + tw && Math.abs(by - y) < 12)) continue;
+    boxes.push([x, y, tw, 0]);
+    named.add(e.name);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(8,14,22,0.9)';
+    ctx.strokeText(e.name, 0, 0);
+    ctx.fillStyle = '#e8f1ff';
+    ctx.fillText(e.name, 0, 0);
+    ctx.restore();
   }
   // markers that are beyond the radar sit on its rim, pointing the way
   for (const p of dots) {

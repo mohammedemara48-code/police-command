@@ -1610,7 +1610,17 @@ export class StreetPlay {
       this.routeLine.renderOrder = 3;
       this.group.add(this.routeLine);
     }
-    const pts: { x: number; z: number }[] = [{ x: me.x, z: me.z }, ...this.route];
+    // start from the route point nearest to us (not a diagonal back to one already passed)
+    let i0 = 0,
+      bd = Infinity;
+    for (let i = 0; i < Math.min(12, this.route.length); i++) {
+      const d = Math.hypot(this.route[i]!.x - me.x, this.route[i]!.z - me.z);
+      if (d < bd) {
+        bd = d;
+        i0 = i;
+      }
+    }
+    const pts: { x: number; z: number }[] = [{ x: me.x, z: me.z }, ...this.route.slice(i0)];
     // keep the stretch ahead, resampled every 2 m
     const out: { x: number; z: number }[] = [];
     let run = 0;
@@ -1626,9 +1636,19 @@ export class StreetPlay {
     if (last) out.push(last);
     const pos: number[] = [];
     const W = 0.55;
-    for (let i = 3; i + 1 < out.length; i++) {
-      const a = out[i]!,
-        b = out[i + 1]!;
+    // the route runs down the middle of the street: paint it in the right-hand lane we drive in (not the last stretch
+    // to the door, which leaves the road)
+    const LANE_OFF = 1.9;
+    const lane = out.map((p, i) => {
+      const a = out[Math.max(0, i - 1)]!,
+        b = out[Math.min(out.length - 1, i + 1)]!;
+      const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+      const k = i >= out.length - 4 ? 0 : LANE_OFF;
+      return { x: p.x - ((b.z - a.z) / L) * k, z: p.z + ((b.x - a.x) / L) * k };
+    });
+    for (let i = 3; i + 1 < lane.length; i++) {
+      const a = lane[i]!,
+        b = lane[i + 1]!;
       const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
       const nx = (-(b.z - a.z) / L) * W,
         nz = ((b.x - a.x) / L) * W;
@@ -4493,7 +4513,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       dots.push({ x: this.vip.position.x, z: this.vip.position.z, c: '#ffc93c', r: 4.5 });
     }
 
-    const m = drawMiniMap(ctx, c.width, c.height, pos.x, pos.z, dots);
+    const m = drawMiniMap(ctx, c.width, c.height, pos.x, pos.z, dots, this.msHasTarget ? this.route : undefined);
     // district names, small, so the map says where you are
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
