@@ -112,3 +112,7 @@ The generated WebAudio music (EgyptianMusic) stays as the fallback when a file c
   font. No outside assets.
 - Traffic liveries (yellow and yellow-and-black taxis, white microbuses), the microbus rear ladder and the red/grey
   downtown paving tiles are procedural (code-built boxes, tints and canvas textures) on the existing car models.
+
+## Map data
+- Street geometry corrections (the west end of Haram Street at the Mena House junction, the plateau road round the
+  pyramids) and the pyramid positions: © OpenStreetMap contributors, ODbL 1.0 — https://www.openstreetmap.org/copyright

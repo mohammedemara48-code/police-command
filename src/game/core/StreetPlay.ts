@@ -2854,6 +2854,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         <button type="button" data-k="b">▼</button>
       </div>
       <div id="street-speedo" aria-live="off"></div>
+      <button type="button" id="street-ctl" aria-label="بدّل بين الجويستيك والدريكسيون">🛞</button>
       <div class="street-wheel" dir="ltr" aria-label="الدريكسيون"><svg viewBox="-60 -60 120 120"><circle r="52" fill="none" stroke="#1d1f22" stroke-width="12"/><circle r="52" fill="none" stroke="#3a3d42" stroke-width="3"/><path d="M-50 0 H-14 M14 0 H50 M0 14 V50" stroke="#1d1f22" stroke-width="11" stroke-linecap="round"/><circle r="17" fill="#26292d" stroke="#4b4f55" stroke-width="2"/><rect x="-3" y="-58" width="6" height="10" rx="2" fill="#e9b949"/></svg></div>
       <div class="street-pedals" dir="ltr">
         <button type="button" class="pedal brake" data-pedal="brake" aria-label="فرامل"></button>
@@ -2979,6 +2980,15 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
    */
   private mountWheel(ui: HTMLElement, holdBtn: (b: HTMLElement, on: (v: boolean) => void) => void) {
     setControls(controls);
+    // one tap on the HUD switches between the joystick and the wheel with pedals (the same choice as in the settings)
+    const ctl = ui.querySelector('#street-ctl') as HTMLElement;
+    const mark = () => (ctl.textContent = controls === 'wheel' ? '🕹' : '🛞');
+    mark();
+    ctl.addEventListener('click', () => {
+      this.stick.x = this.stick.y = 0;
+      setControls(controls === 'wheel' ? 'joystick' : 'wheel');
+      mark();
+    });
     const wheel = ui.querySelector('.street-wheel') as HTMLElement;
     const svg = wheel.firstElementChild as SVGElement;
     const MAX = 135;

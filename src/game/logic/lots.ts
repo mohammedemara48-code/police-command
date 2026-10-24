@@ -2,6 +2,7 @@
  * Building lots of the open city (pure, unit-tested): rows of plots along every street, set back behind the pavement,
  * never on a road, in the river or on top of each other. Planned once for the whole world, so chunk borders always agree.
  */
+import { pyramidBoxes } from './pyramidsFoot';
 import { PAVEMENT, type District, type V2 } from './cairo';
 import { cornersAt } from './junctions';
 import { hash01 } from './districts';
@@ -254,6 +255,8 @@ export class Lots {
     hold(STATION_BOX);
     hold(TOWER_BOX, true);
     for (const l of lions()) hold(lionBox(l));
+    // the pyramids are solid
+    for (const b of pyramidBoxes()) hold(b);
     const order = [...N.edges].sort((a, b) => rank(a) - rank(b) || a.id - b.id);
     let id = 0;
     for (const e of order) {

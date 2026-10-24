@@ -121,6 +121,7 @@ export class UI {
                     : `<h2>الحقوق</h2>
               <p class="credits">الضابط والمشاة وعربية الشرطة: Quaternius (CC0)<br>
               عربية Dodge Challenger: Grzybek عبر Poly Pizza (CC-BY 3.0)<br>
+              بيانات الشوارع ومواقع الأهرامات: © مساهمو OpenStreetMap (ODbL)<br>
               مباني ومؤثرات صوتية: Kenney.nl (CC0)<br>
               تراكين السواقة الأساسيين: مقدَّمين ومرخَّصين من صاحب اللعبة<br>
               "Ibn Al-Noor" و"Desert City" و"Curse of the Scarab" و"Balzan Groove": Kevin MacLeod (incompetech.com)، رخصة CC BY 3.0<br>

@@ -1,3 +1,4 @@
+import { pyramidBoxes } from '../src/game/logic/pyramidsFoot';
 import { describe, expect, it } from 'vitest';
 import { ANCHORS, LANDMARKS, SQUARES, STREETS, WORLD_BOX, toWorld } from '../src/game/logic/cairo';
 import { RIVER, inRiver, net, type RNode } from '../src/game/logic/roadnet';
@@ -77,8 +78,13 @@ describe('open city road network', () => {
       const end = path[path.length - 1]!;
       expect(Math.hypot(end.x - w.x, end.z - w.z)).toBeLessThan(1);
       const last = path[path.length - 2]!;
-      expect(Math.hypot(last.x - w.x, last.z - w.z)).toBeLessThan(40);
+      // the pyramids stand on the plateau beyond the end of the street (the road stops short of Khufu's base)
+      expect(Math.hypot(last.x - w.x, last.z - w.z)).toBeLessThan(name === 'الأهرامات' ? 140 : 40);
     }
+    // and no street runs through a pyramid
+    for (const b of pyramidBoxes())
+      for (const e of N.edges)
+        for (const p of e.pts) expect(Math.hypot(p.x - b.x, p.z - b.z), e.name).toBeGreaterThan(b.hw + 6);
     const route = new Set(
       N.findPath(t.x, t.z, toWorld([31.1342, 29.9792]).x, toWorld([31.1342, 29.9792]).z).map(
         (p) => N.nearest(p.x, p.z, 20)?.e.name

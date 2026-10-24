@@ -1609,7 +1609,7 @@ body[data-play='street'] .hint {
   .meta-pause-btn {
     left: 14px;
     right: auto;
-    top: calc(250px + env(safe-area-inset-top));
+    top: calc(292px + env(safe-area-inset-top));
     bottom: auto;
   }
 }
@@ -4432,4 +4432,35 @@ html.wheel:not(.onfoot) body #street-gauge {
 /* the pedals take the corner of the action buttons' lower row: lift those while driving with the wheel */
 html.wheel:not(.onfoot) body[data-play='street'] .street-actions {
   bottom: calc(112px + env(safe-area-inset-bottom)) !important;
+}
+
+/* the 3D view always fills the screen in CSS (its drawing buffer is sized in code), so nothing is ever wider than the
+   phone and the browser never zooms the page out after a rotation */
+canvas.gl-view {
+  position: fixed;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* HUD switch between joystick and wheel+pedals, while driving */
+#street-ctl {
+  display: none;
+}
+html:not(.onfoot) body[data-play='street'] #street-ctl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  left: calc(10px + env(safe-area-inset-left));
+  top: calc(292px + env(safe-area-inset-top));
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: 24px;
+  background: rgba(10, 22, 40, 0.78);
+  border: 1px solid rgba(126, 200, 255, 0.55);
+  pointer-events: auto;
+  z-index: 7;
 }

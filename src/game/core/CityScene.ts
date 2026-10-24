@@ -61,7 +61,10 @@ export class CityScene {
     });
     canvas.addEventListener('webglcontextrestored', () => location.reload());
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, Q.pixelRatio));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // (CSS size stays 100% of the screen: a pixel width left over from the other orientation would make the phone
+    // browser zoom the whole page out, shrinking the HUD into a corner)
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    this.renderer.domElement.classList.add('gl-view');
     this.renderer.shadowMap.enabled = Q.shadows;
     models.shadows = Q.shadows;
     models.hiQuality = !Q.lowDetailPeople;
@@ -100,6 +103,10 @@ export class CityScene {
     if (location.search.includes('autotest')) (window as unknown as { __city: unknown }).__city = this;
 
     window.addEventListener('resize', () => this.onResize());
+    // phones report the new size late after a rotation: resize again once it has settled
+    const later = () => [60, 300, 800].forEach((t) => setTimeout(() => this.onResize(), t));
+    window.addEventListener('orientationchange', later);
+    window.visualViewport?.addEventListener('resize', later);
   }
 
   /** Lazy-load the street-mode chunk (StreetPlay, city/road graph, NPC AI) and build it once. */
@@ -912,7 +919,9 @@ export class CityScene {
     this.composer?.setSize(window.innerWidth, window.innerHeight);
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // (CSS size stays 100% of the screen: a pixel width left over from the other orientation would make the phone
+    // browser zoom the whole page out, shrinking the HUD into a corner)
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
   }
 
   dispose() {

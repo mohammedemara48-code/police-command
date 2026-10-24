@@ -135,7 +135,9 @@ export const STREETS: readonly Street[] = [
     [31.1985, 30.0095],
     [31.1758, 29.999],
     [31.156, 29.989],
-    [31.1342, 29.9792]
+    [31.1494, 29.9898],
+    // the real west end (OpenStreetMap): the Mena House junction below the plateau, not inside the Great Pyramid
+    [31.1358, 29.9849]
   ]),
   s('faisal', 'شارع فيصل', 'arterial', [
     [31.2089, 30.0131],
@@ -160,10 +162,12 @@ export const STREETS: readonly Street[] = [
     [31.26, 30.128],
     [31.2625, 30.1335]
   ]),
+  // from the end of Haram Street round the east of the plateau to the Sphinx gate, clear of the pyramids
   s('pyramids-spur', 'طريق الأهرام - المنصة', 'collector', [
-    [31.1342, 29.9792],
-    [31.1362, 29.9772],
-    [31.1376, 29.9756]
+    [31.1358, 29.9849],
+    [31.1392, 29.9815],
+    [31.1398, 29.9785],
+    [31.1392, 29.9762]
   ]),
   s('maryoutia', 'شارع المريوطية', 'collector', [
     [31.1985, 30.0095],
