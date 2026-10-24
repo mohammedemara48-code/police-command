@@ -447,7 +447,7 @@ export interface Square {
 }
 export const SQUARES: readonly Square[] = [
   { id: 'tahrir', name: 'ميدان التحرير', at: [31.2357, 30.0444], r: 24 },
-  { id: 'talaat', name: 'ميدان طلعت حرب', at: [31.2394, 30.049], r: 13 },
+  { id: 'talaat', name: 'ميدان طلعت حرب', at: [31.2394, 30.049], r: 19 },
   { id: 'ramses', name: 'ميدان رمسيس', at: [31.2469, 30.0614], r: 20 },
   { id: 'mesaha', name: 'ميدان المساحة', at: [31.2128, 30.0376], r: 20 },
   { id: 'giza', name: 'ميدان الجيزة', at: [31.2089, 30.0131], r: 22 }

@@ -1,3 +1,4 @@
+import { isles } from './isles';
 /**
  * Street furniture of the open city, planned once for the whole world (pure): lamps, trees, palms and traffic-light poles.
  * Every item is placed on a pavement and checked against the roads, the building lots, the quay and the other items, so
@@ -176,12 +177,13 @@ export function propsIn(x0: number, z0: number, x1: number, z1: number): Prop[] 
   return planProps().filter((p) => p.x >= x0 && p.x < x1 && p.z >= z0 && p.z < z1);
 }
 
-let poleGrid: Map<number, Prop[]> | null = null;
+let poleGrid: Map<number, { x: number; z: number }[]> | null = null;
 /** Is a pole, lamp post or tree trunk within r of (x, z)? The chase camera keeps in front of them. */
 export function propNear(x: number, z: number, r: number): boolean {
   if (!poleGrid) {
     poleGrid = new Map();
-    for (const p of planProps()) {
+    const pts: { x: number; z: number }[] = [...planProps(), ...isles().map((s) => s.pole)];
+    for (const p of pts) {
       const k = Math.floor(p.x / 8) * 65536 + Math.floor(p.z / 8);
       const l = poleGrid.get(k);
       if (l) l.push(p);

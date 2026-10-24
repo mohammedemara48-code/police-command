@@ -5,6 +5,7 @@
 import { resetJunctions } from './junctions';
 import { roadConflicts } from './netcheck';
 import { inCarriage, resetShape } from './roadShape';
+import { inIsle } from './isles';
 import {
   ANCHORS,
   BANK_EAST,
@@ -724,7 +725,9 @@ export class RoadNet {
   /** On a carriageway (pad = extra margin, e.g. the pavement for people on foot). */
   onRoad(x: number, z: number, pad = 0): boolean {
     // the exact drawn carriageway quads (mitred, flat ends) and the rounded corner fillets
-    return inCarriage(this, x, z, pad);
+    // (a splitter island is not road: with a positive pad only its inside beyond the pad counts, with a negative pad
+    // the island grown by it)
+    return inCarriage(this, x, z, pad) && !inIsle(x, z, -pad);
   }
 
   /** Distance to the nearest carriageway edge over all roads except `skip` (for placing buildings). */

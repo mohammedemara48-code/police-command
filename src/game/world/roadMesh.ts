@@ -6,6 +6,7 @@ import { type V2 } from '../logic/cairo';
 import { net, type REdge } from '../logic/roadnet';
 import { lots } from '../logic/lots';
 import { junctionsOf } from '../logic/junctions';
+import { inIsle, islesIn } from '../logic/isles';
 import { Soup } from './Soup';
 import { inFill, inPoly, paveRegion, triangulate, type PaveRegion } from './pavement';
 import { shapeOf, type ProfPt } from '../logic/roadShape';
@@ -166,6 +167,11 @@ export function pourRoads(
   // pavements, kerbs and the asphalt poured where a thin tip or crumb of pavement was taken out
   const reg = paveRegion(x0, z0, x1, z1);
   pourPavement(acc, reg, x0, z0, x1, z1);
+  // kerbed splitter islands at the mouths of the big junctions
+  for (const isle of islesIn(x0, z0, x1, z1)) {
+    for (const t of triangulate(isle.poly, [])) upTri(acc.paving, PAVE_Y, isle.poly, t, TILE_REPEAT);
+    kerbRun(acc, [...isle.poly, isle.poly[0]!], true);
+  }
   // zebra crossings at junctions
   for (const n of N.nodes) {
     if (n.edges.length < 3 || n.x < x0 - 30 || n.x >= x1 + 30 || n.z < z0 - 30 || n.z >= z1 + 30) continue;
@@ -197,6 +203,21 @@ export function pourRoads(
           }
         );
       }
+      // the stop line: a solid bar across the lanes coming in, half a metre before the crossing
+      const ss = atA ? sc + 3.5 : sc - 0.5;
+      const lo = atA ? 1.4 : -(e.half - 0.5),
+        hi = atA ? e.half - 0.5 : -1.4;
+      each(
+        e,
+        ss,
+        ss + 0.45,
+        () => true,
+        (i, k0, k1) => {
+          const q = [at(P, i, k0, lo), at(P, i, k0, hi), at(P, i, k1, hi), at(P, i, k1, lo)];
+          if (q.some((v) => onPave(v.x, v.z))) return;
+          acc.paint.flat(PAINT_Y, q);
+        }
+      );
     }
   }
   return { crossings };
@@ -276,7 +297,7 @@ export function onPave(x: number, z: number): boolean {
     j = Math.floor(z / CH);
   const r = paveRegion(i * CH, j * CH, (i + 1) * CH, (j + 1) * CH);
   for (const g of r.pave) if (inPoly(g.outer, x, z) && !g.holes.some((h) => inPoly(h, x, z))) return true;
-  return false;
+  return inIsle(x, z, 0);
 }
 
 const carrIdx = new WeakMap<object, Map<number, ReturnType<typeof shapeOf>['carr']>>();

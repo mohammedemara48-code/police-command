@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD_BOX } from '../src/game/logic/cairo';
 import { net } from '../src/game/logic/roadnet';
+import { isles } from '../src/game/logic/isles';
 import { planProps } from '../src/game/logic/props';
 import { BAKE_CHUNK as C, MIN_AREA, inFill, paveRegion } from '../src/game/world/pavement';
 import { edgesIn, onPave, signalSpot } from '../src/game/world/roadMesh';
@@ -52,4 +53,20 @@ describe('street structure', () => {
     for (const p of built) expect(net().onRoad(p.x, p.z, 0.6) || !onPave(p.x, p.z)).toBe(false);
     expect(built.length).toBeGreaterThan(sig.length * 0.6);
   }, 120_000);
+});
+
+describe('splitter islands', () => {
+  it('stand at the big junctions, are not road, and carry their signal on slab', () => {
+    const N = net();
+    const all = isles();
+    expect(all.length).toBeGreaterThan(40);
+    for (const s of all) {
+      const c = s.poly.reduce((a, p) => ({ x: a.x + p.x / s.poly.length, z: a.z + p.z / s.poly.length }), {
+        x: 0,
+        z: 0
+      });
+      expect(N.onRoad(c.x, c.z, 0), `isle ${s.edge}`).toBe(false);
+      expect(onPave(s.pole.x, s.pole.z), `pole ${s.edge}`).toBe(true);
+    }
+  });
 });

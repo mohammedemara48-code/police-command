@@ -10,7 +10,10 @@ import { PAVEMENT, ROAD_HALF, SQUARES, WORLD_BOX, toWorld } from '../logic/cairo
 import { blockLook, hash01 } from '../logic/districts';
 import { lots } from '../logic/lots';
 import { inRiver, net, rng } from '../logic/roadnet';
-import { armAxis, axisGreen } from '../logic/signals';
+import { armAxis, axisGreen, signalNodes } from '../logic/signals';
+import { islesIn } from '../logic/isles';
+let sigIds: Set<number> | null = null;
+const signalIds = () => (sigIds ??= new Set(signalNodes().map((n) => n.id)));
 import { propsIn } from '../logic/props';
 import { Batch, PROP_MATS as M, surface } from './Environment';
 import { wallGeo } from './Egypt';
@@ -607,6 +610,19 @@ export class OpenWorld {
           yaw
         );
       }
+    }
+    // a signal on the nose of every splitter island at a signalled junction, facing the traffic coming in on that arm
+    const sig = signalIds();
+    for (const s of islesIn(x0, z0, x1, z1)) {
+      if (!sig.has(s.node)) continue;
+      const n = N.nodes[s.node]!;
+      const axis = armAxis(n, N.edges[s.edge]!);
+      const dx = s.fx,
+        dz = s.fz;
+      const yaw = Math.atan2(-dx, -dz);
+      b.box(M.metal, 0.12, 3.4, 0.12, s.pole.x, PAVE_Y + 1.7, s.pole.z);
+      b.box(M.metal, 0.3, 0.8, 0.26, s.pole.x - dx * 0.08, 3.5, s.pole.z - dz * 0.08, yaw);
+      b.box(m.light[axis], 0.2, 0.2, 0.04, s.pole.x - dx * 0.08 - Math.sin(yaw) * 0.15, 3.62, s.pole.z - dz * 0.08 - Math.cos(yaw) * 0.15, yaw);
     }
     b.flush(chunk.group, Q.shadows);
     chunk.group.traverse((o) => {

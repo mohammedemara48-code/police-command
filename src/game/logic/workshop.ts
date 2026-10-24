@@ -180,10 +180,12 @@ export function workshopSpots(): WorkshopSpot[] {
     const n = N.nearest(w.x, w.z, 600)!;
     const a = N.at(n.e, n.s);
     const side = n.e.half + 1.8;
+    // the bay is in the kerbside lane (not on the centre line, where a splitter island may stand)
+    const lane = n.e.half * 0.5;
     return {
       shop,
-      x: n.x,
-      z: n.z,
+      x: n.x + Math.cos(a.yaw) * lane,
+      z: n.z - Math.sin(a.yaw) * lane,
       px: n.x + Math.cos(a.yaw) * side,
       pz: n.z - Math.sin(a.yaw) * side,
       yaw: a.yaw
