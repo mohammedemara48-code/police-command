@@ -145,7 +145,7 @@ class ModelLib {
             if (m.isMesh) {
               m.castShadow = this.shadows;
               m.receiveShadow = true;
-              if (CAR_GLB.has(kind)) m.material = this.carMat(m.material as THREE.MeshStandardMaterial);
+              if (CAR_GLB.has(kind)) m.material = this.carMat(m.material as THREE.MeshStandardMaterial, kind === 'car-van');
               else if (GLB.has(kind) && !CAR_GLB.has(kind) && kind !== 'tuktuk') {
                 m.material = this.humanMat(m.material as THREE.MeshStandardMaterial);
               }
@@ -406,7 +406,7 @@ class ModelLib {
   /** Cached tinted copy of a material (multiplies the palette texture), shared by all cars of that colour. */
   /** Car paint gets a clear coat (high quality), lamps glow, glass reflects. */
   hiQuality = true;
-  private carMat(src: THREE.MeshStandardMaterial): THREE.Material {
+  private carMat(src: THREE.MeshStandardMaterial, van = false): THREE.Material {
     const n = src.name;
     if ((n === 'Paint' || n === 'Livery') && this.hiQuality) {
       const m = new THREE.MeshPhysicalMaterial({
@@ -452,6 +452,13 @@ class ModelLib {
       src.roughness = 0.06;
       src.envMapIntensity = 1.6;
       src.depthWrite = false;
+      // the microbus: light clear glass, so the passengers sitting inside show from the street
+      if (van) {
+        src.color.setHex(0x5a6a72);
+        src.opacity = 0.42;
+        src.metalness = 0.2;
+        src.envMapIntensity = 0.8;
+      }
     }
     return src;
   }
