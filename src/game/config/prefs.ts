@@ -25,3 +25,14 @@ export function setPaveStyle(v: PaveStyle) {
   put(PAVE_KEY, v);
   location.reload();
 }
+
+export type Controls = 'joystick' | 'wheel';
+const CTL_KEY = 'pc.controls.v1';
+/** driving controls on touch screens: the joystick, or a steering wheel with gas and brake pedals and a dial */
+export let controls: Controls =
+  typeof localStorage === 'undefined' ? 'joystick' : get<Controls>(CTL_KEY, ['joystick', 'wheel'], 'joystick');
+export function setControls(v: Controls) {
+  controls = v;
+  put(CTL_KEY, v);
+  if (typeof document !== 'undefined') document.documentElement.classList.toggle('wheel', v === 'wheel');
+}

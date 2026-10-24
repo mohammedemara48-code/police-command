@@ -4218,12 +4218,50 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
 }
 
 /* shift start: pick the district to work */
-.zone-pick { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 40; pointer-events: auto; background: rgba(0, 0, 0, 0.25); }
-.zone-pick .zp-card { direction: rtl; background: rgba(18, 22, 30, 0.92); color: #fff; border-radius: 14px; padding: 14px 16px; max-width: 340px; width: 86%; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); }
-.zone-pick h3 { margin: 0 0 10px; font-size: 17px; text-align: center; }
-.zone-pick .zp-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.zone-pick button { padding: 10px 6px; border: 1px solid #f2d14b; background: transparent; color: #f2d14b; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
-.zone-pick button:active { background: #f2d14b; color: #111; }
+.zone-pick {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.25);
+}
+.zone-pick .zp-card {
+  direction: rtl;
+  background: rgba(18, 22, 30, 0.92);
+  color: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  max-width: 340px;
+  width: 86%;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+.zone-pick h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+  text-align: center;
+}
+.zone-pick .zp-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.zone-pick button {
+  padding: 10px 6px;
+  border: 1px solid #f2d14b;
+  background: transparent;
+  color: #f2d14b;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.zone-pick button:active {
+  background: #f2d14b;
+  color: #111;
+}
 
 /* in-car radio: under the pause button, thumb-sized, the panel opens beside it */
 #street-fm {
@@ -4306,4 +4344,92 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
 
 html.onfoot #street-fm {
   display: none;
+}
+
+/* Wheel controls (settings: تحكم السواقة): steering wheel left, pedals right, dial at the top, only while driving */
+.street-wheel,
+.street-pedals,
+#street-gauge {
+  display: none;
+}
+html.wheel:not(.onfoot) .street-stick {
+  display: none !important;
+}
+html.wheel:not(.onfoot) .street-wheel {
+  display: block;
+  position: absolute;
+  left: calc(10px + env(safe-area-inset-left));
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  width: 150px;
+  height: 150px;
+  touch-action: none;
+  pointer-events: auto;
+  z-index: 6;
+}
+.street-wheel svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
+}
+html.wheel:not(.onfoot) .street-pedals {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  position: absolute;
+  right: calc(10px + env(safe-area-inset-right));
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  z-index: 6;
+  pointer-events: auto;
+}
+.street-pedals .pedal {
+  touch-action: none;
+  border: 2px solid #2b2e33;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle, #2b2e33 3px, transparent 3.5px) 0 0 / 12px 12px,
+    linear-gradient(#c9ced4, #8b9299);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5);
+}
+.street-pedals .brake {
+  width: 74px;
+  height: 64px;
+}
+.street-pedals .gas {
+  width: 52px;
+  height: 104px;
+}
+.street-pedals .pedal.held {
+  transform: scale(0.94);
+  filter: brightness(0.85);
+}
+html.wheel:not(.onfoot) body #street-gauge {
+  display: block;
+  position: fixed;
+  top: calc(118px + env(safe-area-inset-top)) !important;
+  right: calc(10px + env(safe-area-inset-right)) !important;
+  left: auto !important;
+  transform: none !important;
+  width: 92px;
+  height: 92px;
+  pointer-events: none;
+  z-index: 5;
+}
+#street-gauge svg {
+  width: 100%;
+  height: 100%;
+}
+#street-gauge b {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  text-align: center;
+  color: #fff;
+  font:
+    700 15px/1 system-ui,
+    sans-serif;
+}
+/* the pedals take the corner of the action buttons' lower row: lift those while driving with the wheel */
+html.wheel:not(.onfoot) body[data-play='street'] .street-actions {
+  bottom: calc(112px + env(safe-area-inset-bottom)) !important;
 }

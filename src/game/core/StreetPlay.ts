@@ -100,6 +100,7 @@ import type { Speaker } from '../ui/Barks';
 import { CairoMap } from '../ui/CairoMap';
 import { Crowd } from './Crowd';
 import { quality } from '../config/Quality';
+import { controls, setControls } from '../config/prefs';
 import { damageWord } from '../logic/barks';
 import {
   boomLength,
@@ -2826,6 +2827,12 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         <button type="button" data-k="b">▼</button>
       </div>
       <div id="street-speedo" aria-live="off"></div>
+      <div class="street-wheel" dir="ltr" aria-label="الدريكسيون"><svg viewBox="-60 -60 120 120"><circle r="52" fill="none" stroke="#1d1f22" stroke-width="12"/><circle r="52" fill="none" stroke="#3a3d42" stroke-width="3"/><path d="M-50 0 H-14 M14 0 H50 M0 14 V50" stroke="#1d1f22" stroke-width="11" stroke-linecap="round"/><circle r="17" fill="#26292d" stroke="#4b4f55" stroke-width="2"/><rect x="-3" y="-58" width="6" height="10" rx="2" fill="#e9b949"/></svg></div>
+      <div class="street-pedals" dir="ltr">
+        <button type="button" class="pedal brake" data-pedal="brake" aria-label="فرامل"></button>
+        <button type="button" class="pedal gas" data-pedal="gas" aria-label="بنزين"></button>
+      </div>
+      <div id="street-gauge" aria-hidden="true"><svg viewBox="-50 -50 100 100"><circle r="47" fill="#0d1117" stroke="#9aa4ad" stroke-width="2"/><g class="ticks"></g><text y="22" text-anchor="middle" font-size="9" fill="#cfd6dd">km/h</text><line class="needle" x1="0" y1="6" x2="0" y2="-38" stroke="#ff3b30" stroke-width="2.6" stroke-linecap="round"/><circle r="4" fill="#ddd"/></svg><b>0</b></div>
       <div class="street-actions">
         <button type="button" data-act="car" aria-label="ركب الدورية"><i>🚓</i><span>اركب</span></button>
         <button type="button" data-act="run" aria-label="ركض"><i>🏃</i><span>ركض</span></button>
@@ -2894,6 +2901,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       holdBtn(btn, (v) => press(k, v));
     });
     this.mountStick(ui.querySelector('.street-stick') as HTMLElement);
+    this.mountWheel(ui, holdBtn);
     holdBtn(ui.querySelector('[data-act="run"]') as HTMLElement, (v) => (this.hold.run = v));
     ui.querySelector('[data-act="siren"]')!.addEventListener('click', () => this.toggleSiren());
     this.applyVehicle(this.vehicle);
@@ -2937,6 +2945,89 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.applyVehicle(this.vehicle);
     this.taxi.remount();
   }
+
+  /**
+   * Optional wheel controls (settings: تحكم السواقة): drag the steering wheel round (up to 135° each way, springs back),
+   * hold the gas or brake pedal. They feed the same analog input as the joystick; the dial shows the speed.
+   */
+  private mountWheel(ui: HTMLElement, holdBtn: (b: HTMLElement, on: (v: boolean) => void) => void) {
+    setControls(controls);
+    const wheel = ui.querySelector('.street-wheel') as HTMLElement;
+    const svg = wheel.firstElementChild as SVGElement;
+    const MAX = 135;
+    let id: number | null = null,
+      a0 = 0,
+      ang = 0;
+    const angleOf = (e: PointerEvent) => {
+      const r = wheel.getBoundingClientRect();
+      return (Math.atan2(e.clientX - r.left - r.width / 2, -(e.clientY - r.top - r.height / 2)) * 180) / Math.PI;
+    };
+    const show = (v: number) => {
+      ang = Math.max(-MAX, Math.min(MAX, v));
+      svg.style.transform = `rotate(${ang}deg)`;
+      this.stick.x = ang / MAX;
+    };
+    wheel.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (id !== null) return;
+      id = e.pointerId;
+      try {
+        wheel.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      a0 = angleOf(e) - ang;
+      svg.style.transition = 'none';
+    });
+    wheel.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id) return;
+      let d = angleOf(e) - a0;
+      // keep the turn continuous across the ±180° seam
+      while (d - ang > 180) d -= 360;
+      while (d - ang < -180) d += 360;
+      show(d);
+    });
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== id) return;
+      id = null;
+      svg.style.transition = 'transform 0.25s ease-out';
+      show(0);
+    };
+    wheel.addEventListener('pointerup', end);
+    wheel.addEventListener('pointercancel', end);
+    wheel.addEventListener('lostpointercapture', end);
+    let gas = false,
+      brake = false;
+    const pedals = () => {
+      this.stick.y = gas && !brake ? 1 : brake ? -1 : 0;
+      this.hold.f = gas && !brake;
+      this.hold.b = brake;
+    };
+    holdBtn(ui.querySelector('[data-pedal="gas"]') as HTMLElement, (v) => {
+      gas = v;
+      pedals();
+    });
+    holdBtn(ui.querySelector('[data-pedal="brake"]') as HTMLElement, (v) => {
+      brake = v;
+      pedals();
+    });
+    // dial ticks every 20 km/h, 0..200 over 240°
+    const ticks = ui.querySelector('#street-gauge .ticks')!;
+    let html = '';
+    for (let k = 0; k <= 10; k++) {
+      const t = ((-120 + k * 24) * Math.PI) / 180;
+      const [sx, sy] = [Math.sin(t), -Math.cos(t)];
+      html += `<line x1="${sx * 40}" y1="${sy * 40}" x2="${sx * 46}" y2="${sy * 46}" stroke="#cfd6dd" stroke-width="${k % 5 ? 1.2 : 2.2}"/>`;
+      if (k % 2 === 0)
+        html += `<text x="${sx * 32}" y="${sy * 32 + 3}" text-anchor="middle" font-size="7.5" fill="#cfd6dd">${k * 20}</text>`;
+    }
+    ticks.innerHTML = html;
+    this.gaugeNeedle = ui.querySelector('#street-gauge .needle');
+    this.gaugeNum = ui.querySelector('#street-gauge b');
+  }
+  private gaugeNeedle: SVGElement | null = null;
+  private gaugeNum: HTMLElement | null = null;
+  private gaugeKmh = -1;
 
   /** Analog virtual joystick for touch screens; maps to the same hold flags as the D-pad. */
   private mountStick(el: HTMLElement) {
@@ -3800,6 +3891,14 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       if (txt !== this.speedoTxt) {
         this.speedoEl.innerHTML = txt;
         this.speedoTxt = txt;
+      }
+    }
+    if (this.gaugeNeedle && controls === 'wheel') {
+      const k = Math.round(Number(kmh(this.speed)) || 0);
+      if (k !== this.gaugeKmh) {
+        this.gaugeKmh = k;
+        this.gaugeNeedle.setAttribute('transform', `rotate(${-120 + Math.min(200, Math.abs(k)) * 1.2})`);
+        if (this.gaugeNum) this.gaugeNum.textContent = String(Math.abs(k));
       }
     }
     if (locked) {

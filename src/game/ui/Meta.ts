@@ -3,7 +3,7 @@ import { exportSave, importSave } from '../systems/Save';
 import type { GameManager } from '../core/GameManager';
 import { audio } from '../systems/AudioManager';
 import { quality, setQuality, type Quality } from '../config/Quality';
-import { paveStyle, setPaveStyle, type PaveStyle } from '../config/prefs';
+import { controls, paveStyle, setControls, setPaveStyle, type Controls, type PaveStyle } from '../config/prefs';
 
 const KEY = 'pc.save.v1';
 interface Save {
@@ -152,6 +152,10 @@ export function settingsHtml() {
           <label>جودة الرسوم <select data-q>
             ${(['low', 'medium', 'high'] as Quality[]).map((q) => `<option value="${q}" ${q === quality ? 'selected' : ''}>${{ low: 'منخفضة (موبايل ضعيف)', medium: 'متوسطة', high: 'عالية' }[q]}</option>`).join('')}
           </select></label>
+          <label>تحكم السواقة <select data-ctl>
+            <option value="joystick" ${controls === 'joystick' ? 'selected' : ''}>جويستيك</option>
+            <option value="wheel" ${controls === 'wheel' ? 'selected' : ''}>دريكسيون ودواسات وعداد</option>
+          </select></label>
           <label>بلاط الرصيف في وسط البلد <select data-pave>
             <option value="redgrey" ${paveStyle === 'redgrey' ? 'selected' : ''}>أحمر ورمادي</option>
             <option value="beige" ${paveStyle === 'beige' ? 'selected' : ''}>بيج</option>
@@ -175,6 +179,8 @@ export function bindSettings(root: HTMLElement, beforeReload: () => void = () =>
     beforeReload();
     setQuality(q.value as Quality);
   });
+  const ct = root.querySelector<HTMLSelectElement>('[data-ctl]');
+  ct?.addEventListener('change', () => setControls(ct.value as Controls));
   const pv = root.querySelector<HTMLSelectElement>('[data-pave]');
   pv?.addEventListener('change', () => {
     beforeReload();
