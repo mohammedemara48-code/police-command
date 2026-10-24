@@ -117,7 +117,7 @@ const SC = 1000;
 /** half the thinnest pavement kept (m) */
 export const OPEN = 1.0;
 /** smallest pavement piece kept (m²) */
-export const MIN_AREA = 3;
+export const MIN_AREA = 16;
 const MARGIN = 6;
 
 export interface PaveRegion {

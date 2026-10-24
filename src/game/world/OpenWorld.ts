@@ -16,7 +16,8 @@ import { Batch, PROP_MATS as M, surface } from './Environment';
 import { wallGeo } from './Egypt';
 import { facadeMaterial } from './Facade';
 import { Soup } from './Soup';
-import { PAVE_Y, edgesIn, pourRoads } from './roadMesh';
+import { PAVE_Y, edgesIn, pourRoads, signalSpot } from './roadMesh';
+import { planWalls } from './walls';
 import { buildWater, groundMats, pourBanks, pourGround } from './riverMesh';
 import { SHOP_COLS, SHOP_ROWS, SHOPS, TreeKit, lampAt, shopAtlas } from './streetKit';
 import { palmInstances, type PalmSpot } from './Trees';
@@ -439,8 +440,7 @@ export class OpenWorld {
           // flat roof: one plain-wall texel, so the facade windows do not show up on top
           c.setXYZ(v, 0.42, 0.41, 0.4);
           uvs.setXY(v, 0.002, 0.45);
-        }
-        else c.setXYZ(v, c.getX(v) * col.r, c.getY(v) * col.g, c.getZ(v) * col.b);
+        } else c.setXYZ(v, c.getX(v) * col.r, c.getY(v) * col.g, c.getZ(v) * col.b);
       }
       g.rotateY(l.yaw);
       g.translate(l.x, l.h / 2, l.z);
@@ -561,7 +561,7 @@ export class OpenWorld {
     const b = new Batch();
     const palms: PalmSpot[] = [];
     const m = materials();
-    for (const p of propsIn(x0, z0, x1, z1)) {
+    for (let p of propsIn(x0, z0, x1, z1)) {
       if (p.kind === 'lamp') {
         chunk.lamps.push(lampAt(b, p.x, p.z, p.fx, p.fz));
       } else if (p.kind === 'palm') {
@@ -570,6 +570,10 @@ export class OpenWorld {
         this.kit.tree(b, p.x, p.z, p.seed);
       } else {
         // traffic light: a pole on the pavement corner facing the traffic that approaches along the nearest arm
+        // (never on the asphalt: a corner that ended up as junction asphalt loses its pole)
+        const at = signalSpot(p);
+        if (!at) continue;
+        p = { ...p, x: at.x, z: at.z };
         const n = N.nodes[p.node!]!;
         const dx = p.fx,
           dz = p.fz;
@@ -589,16 +593,17 @@ export class OpenWorld {
         }
         const axis = armAxis(n, best);
         const yaw = Math.atan2(-dx, -dz);
-        b.box(M.metal, 0.16, 4.4, 0.16, p.x, 2.2, p.z);
-        b.box(M.metal, 0.4, 0.9, 0.34, p.x - dx * 0.1, 4.4, p.z - dz * 0.1, yaw);
+        // a Cairo junction signal: 3.4 m pole, a slim three-lamp head
+        b.box(M.metal, 0.12, 3.4, 0.12, p.x, 1.7, p.z);
+        b.box(M.metal, 0.3, 0.8, 0.26, p.x - dx * 0.08, 3.5, p.z - dz * 0.08, yaw);
         b.box(
           m.light[axis],
-          0.26,
-          0.26,
+          0.2,
+          0.2,
           0.04,
-          p.x - dx * 0.1 - Math.sin(yaw) * 0.19,
-          4.55,
-          p.z - dz * 0.1 - Math.cos(yaw) * 0.19,
+          p.x - dx * 0.08 - Math.sin(yaw) * 0.15,
+          3.62,
+          p.z - dz * 0.08 - Math.cos(yaw) * 0.15,
           yaw
         );
       }
@@ -615,11 +620,7 @@ export class OpenWorld {
     }
   }
 
-  /**
-   * Boundary walls (سور) on the building line wherever a street has no building: the open ground behind a pavement
-   * was read as a field you could drive into, with houses floating in it. Dead ends get a wall across the end.
-   * By the Nile the wall drops to a low parapet so the river still shows.
-   */
+  /** Boundary walls (see walls.ts) as plaster with a stone cap. */
   private enclosures(
     x0: number,
     z0: number,
@@ -628,14 +629,11 @@ export class OpenWorld {
     edges: ReturnType<typeof edgesIn>,
     out: (s: Soup, m: THREE.Material, shadow?: boolean) => void
   ) {
-    const N = net();
-    const L = lots();
     const wall = new Soup(3),
       cap = new Soup(1.6);
-    const T = 0.3;
-    const slab = (ax: number, az: number, bx: number, bz: number, h: number, u: number, t = T) => {
+    for (const w of planWalls(x0, z0, x1, z1, edges)) {
+      const { ax, az, bx, bz, h, u, t } = w;
       const len = Math.hypot(bx - ax, bz - az);
-      if (len < 0.2) return;
       const nx = -(bz - az) / len,
         nz = (bx - ax) / len;
       const o = t / 2;
@@ -652,58 +650,6 @@ export class OpenWorld {
       wall.wall(p[0]!.x, p[0]!.z, p[3]!.x, p[3]!.z, 0, h, -dx, -dz);
       wall.wall(p[1]!.x, p[1]!.z, p[2]!.x, p[2]!.z, 0, h, dx, dz);
       cap.flat(h, p);
-    };
-    const inside = (x: number, z: number) => x >= x0 && x < x1 && z >= z0 && z < z1;
-    const W = WORLD_BOX;
-    const height = (x: number, z: number) => (inRiver(x, z, 18) ? 1.0 : 2.4);
-    const STEP = 2;
-    for (const e of edges) {
-      if (e.bridge || e.ring) continue;
-      const off = e.half + PAVEMENT + 0.55;
-      for (const side of [1, -1]) {
-        for (let s = 0; s < e.len; s += STEP) {
-          const s1 = Math.min(e.len, s + STEP);
-          const a = N.at(e, s),
-            b = N.at(e, s1);
-          const ax = a.x + Math.cos(a.yaw) * side * off,
-            az = a.z - Math.sin(a.yaw) * side * off,
-            bx = b.x + Math.cos(b.yaw) * side * off,
-            bz = b.z - Math.sin(b.yaw) * side * off;
-          const mx = (ax + bx) / 2,
-            mz = (az + bz) / 2;
-          if (!inside(mx, mz)) continue;
-          if (mx < W.x0 + 4 || mx > W.x1 - 4 || mz < W.z0 + 4 || mz > W.z1 - 4) continue;
-          // other streets, their pavements and corner fills stay open; buildings already close the line
-          const ok = (x: number, z: number) =>
-            N.clearance(x, z) >= PAVEMENT + 0.45 && !L.blocked(x, z, 0.35) && !inRiver(x, z, 1.5);
-          if (!ok(ax, az) || !ok(bx, bz) || !ok(mx, mz)) continue;
-          const h = height(mx, mz);
-          slab(ax, az, bx, bz, h, s);
-          // a plastered pier every 6 m breaks up the long runs
-          if (h > 2 && Math.round(s / STEP) % 3 === 0) {
-            const dx = (bx - ax) / STEP,
-              dz = (bz - az) / STEP;
-            slab(ax - dx * 0.25, az - dz * 0.25, ax + dx * 0.25, az + dz * 0.25, h + 0.3, 0, 0.5);
-          }
-        }
-      }
-      // a dead end: wall across the end of the pavement (the map edge has its barrier arm instead)
-      for (const atA of [true, false]) {
-        const nd = N.nodes[atA ? e.a : e.b]!;
-        if (nd.edges.length !== 1 || !inside(nd.x, nd.z)) continue;
-        if (Math.min(nd.x - W.x0, W.x1 - nd.x, nd.z - W.z0, W.z1 - nd.z) < 40) continue;
-        const q = N.at(e, atA ? 0 : e.len);
-        const dir = atA ? -1 : 1;
-        const fx = Math.sin(q.yaw) * dir,
-          fz = Math.cos(q.yaw) * dir;
-        const cx = nd.x + fx * (PAVEMENT + 0.55),
-          cz = nd.z + fz * (PAVEMENT + 0.55);
-        if (inRiver(cx, cz, 1.5)) continue;
-        const rx = Math.cos(q.yaw),
-          rz = -Math.sin(q.yaw);
-        const w = off + T / 2;
-        slab(cx - rx * w, cz - rz * w, cx + rx * w, cz + rz * w, height(cx, cz), 0);
-      }
     }
     const m = materials();
     out(wall, m.plaster, true);

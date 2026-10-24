@@ -175,3 +175,23 @@ export function planProps(filter = true): Prop[] {
 export function propsIn(x0: number, z0: number, x1: number, z1: number): Prop[] {
   return planProps().filter((p) => p.x >= x0 && p.x < x1 && p.z >= z0 && p.z < z1);
 }
+
+let poleGrid: Map<number, Prop[]> | null = null;
+/** Is a pole, lamp post or tree trunk within r of (x, z)? The chase camera keeps in front of them. */
+export function propNear(x: number, z: number, r: number): boolean {
+  if (!poleGrid) {
+    poleGrid = new Map();
+    for (const p of planProps()) {
+      const k = Math.floor(p.x / 8) * 65536 + Math.floor(p.z / 8);
+      const l = poleGrid.get(k);
+      if (l) l.push(p);
+      else poleGrid.set(k, [p]);
+    }
+  }
+  const i = Math.floor(x / 8),
+    j = Math.floor(z / 8);
+  for (let a = i - 1; a <= i + 1; a++)
+    for (let b = j - 1; b <= j + 1; b++)
+      for (const p of poleGrid.get(a * 65536 + b) ?? []) if (Math.hypot(p.x - x, p.z - z) < r) return true;
+  return false;
+}

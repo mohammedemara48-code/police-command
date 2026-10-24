@@ -4,6 +4,7 @@
  */
 import { type V2 } from '../logic/cairo';
 import { net, type REdge } from '../logic/roadnet';
+import { lots } from '../logic/lots';
 import { junctionsOf } from '../logic/junctions';
 import { Soup } from './Soup';
 import { inFill, inPoly, paveRegion, triangulate, type PaveRegion } from './pavement';
@@ -499,4 +500,32 @@ function kerbRun(acc: Acc, pl: V2[], closed: boolean) {
         );
     }
   }
+}
+
+/** Thickness of the boundary walls (m). */
+export const WALL_T = 0.3;
+/** May a boundary wall stand here: off every carriageway, junction fill and pavement slab. */
+export function wallSpot(x: number, z: number): boolean {
+  return !onPave(x, z) && !net().onRoad(x, z, 0.3) && !inFill(x, z);
+}
+/** Does a pole (traffic light, lamp, tree) stand on the slab, clear of the kerb edge? */
+export function poleSpot(x: number, z: number): boolean {
+  // (pavement and junction fill never overlap, so the slab test is enough)
+  return onPave(x, z) && !net().onRoad(x, z, 0.7);
+}
+/**
+ * Where a traffic-light pole is built: its planned corner spot when that is on the slab, else the nearest slab spot
+ * found stepping back from the junction (up to 6 m), else nowhere (a corner that became junction asphalt has no pole).
+ */
+export function signalSpot(p: { x: number; z: number; fx: number; fz: number }): { x: number; z: number } | null {
+  if (poleSpot(p.x, p.z)) return { x: p.x, z: p.z };
+  for (let d = 0.5; d <= 6; d += 0.5)
+    for (const sg of [0, 1, -1]) {
+      const ax = p.fx * Math.cos(sg * 0.35) - p.fz * Math.sin(sg * 0.35),
+        az = p.fx * Math.sin(sg * 0.35) + p.fz * Math.cos(sg * 0.35);
+      const x = p.x + ax * d,
+        z = p.z + az * d;
+      if (poleSpot(x, z) && !lots().blocked(x, z, 0.4)) return { x, z };
+    }
+  return null;
 }

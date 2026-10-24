@@ -156,6 +156,7 @@ import { outfitFor } from '../logic/outfits';
 import { musicForMode, nextRadio, radioLabel, radioOrder } from '../logic/music';
 import { models, CARS, MEN, WOMEN, fx } from './Models';
 import { audio } from '../systems/AudioManager';
+import { propNear } from '../logic/props';
 import { Q } from '../config/Quality';
 import { tutorialHint, TUT_KEY, TUT_STEPS, type TutAct } from '../logic/tutorial';
 import {
@@ -3642,7 +3643,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     const tx = target.position.x,
       tz = target.position.z;
     // free = the road and its pavement, or any open ground (a yard, a lawn, the station forecourt) that is not inside a building
-    const free = (x: number, z: number) => onRoad(x, z, pad) || !lots().blocked(x, z, 1.1);
+    // poles, lamp posts and trunks stay behind the lens too: one right in front of it fills the whole screen
+    const free = (x: number, z: number) =>
+      (onRoad(x, z, pad) || !lots().blocked(x, z, 1.1)) && !(this.inCar && propNear(x, z, 0.7));
     const { length: b, boxed } = boomLength(free, tx, tz, yaw, back);
     // ease the boom length (no pops), and rise smoothly as it shortens
     this.camB = k >= 1 ? b : this.camB + (b - this.camB) * Math.min(1, k * 1.5);
