@@ -529,18 +529,14 @@ export class OpenWorld {
           b.box(fm.rail, 2.3, 0.9, 0.05, px + nx * 0.98, y + 0.5, pz + nz * 0.98, ry);
           b.box(fm.rail, 0.05, 0.9, 1.0, px + nx * 0.5 + rt.x * 1.13, y + 0.5, pz + nz * 0.5 + rt.z * 1.13, ry);
           b.box(fm.rail, 0.05, 0.9, 1.0, px + nx * 0.5 - rt.x * 1.13, y + 0.5, pz + nz * 0.5 - rt.z * 1.13, ry);
-        } else if (r2 < 0.3 * dens) {
-          const o = (h(f * 50 + bI + 300) - 0.5) * 1.4;
-          b.box(
-            fm.ac,
-            0.85,
-            0.55,
-            0.32,
-            px + rt.x * o + nx * 0.18,
-            f * 3 + 0.5 + h(bI + f) * 1.4,
-            pz + rt.z * o + nz * 0.18,
-            ry
-          );
+        } else if (r2 < 0.3 * dens && bI > 0) {
+          // split AC unit on the pier between two window bays (the facade photos have their windows and balconies
+          // mid-bay), its back on the wall, dark grey and weathered rather than a bright box in the air
+          const pc = -F / 2 + (F / bays) * bI;
+          const qx = fx + rt.x * pc,
+            qz = fz + rt.z * pc;
+          b.box(fm.ac, 0.62, 0.46, 0.26, qx + nx * 0.13, f * 3 + 1.55, qz + nz * 0.13, ry);
+          b.box(fm.rail, 0.66, 0.04, 0.3, qx + nx * 0.14, f * 3 + 1.3, qz + nz * 0.14, ry);
         }
       }
   }
@@ -894,7 +890,7 @@ let fm: { ac: THREE.MeshStandardMaterial; slab: THREE.MeshStandardMaterial; rail
 /** materials of the facade clutter: AC units, balcony slabs and railings */
 function fmats() {
   return (fm ??= {
-    ac: new THREE.MeshStandardMaterial({ color: 0xe4e2dc, roughness: 0.6 }),
+    ac: new THREE.MeshStandardMaterial({ color: 0x6d6f70, roughness: 0.8 }),
     slab: new THREE.MeshStandardMaterial({ color: 0xb9ae9c, roughness: 0.95 }),
     rail: new THREE.MeshStandardMaterial({ color: 0x3a3632, roughness: 0.7, metalness: 0.3 })
   });
