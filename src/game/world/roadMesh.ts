@@ -17,7 +17,7 @@ const PAINT_Y = 0.07;
 const FILLET_Y = 0.04;
 /** length of one yellow or black kerb stripe (m) */
 export const STRIPE = 1.1;
-const YELLOW: [number, number, number] = [0.97, 0.69, 0.04];
+const YELLOW: [number, number, number] = [0.9, 0.7, 0.14];
 const BLACK: [number, number, number] = [0.03, 0.03, 0.03];
 /** metres per pavement texture repeat (4 x 4 tiles of 0.5 m) */
 export const TILE_REPEAT = 2;
@@ -35,7 +35,7 @@ export interface Acc {
   paint: Soup;
 }
 /** Width of the kerb's top strip (m). */
-export const KERB_W = 0.42;
+export const KERB_W = 0.34;
 
 /** Point `off` metres to the left of the centre line at segment i, fraction k. */
 function at(P: P[], i: number, k: number, off: number): V2 {

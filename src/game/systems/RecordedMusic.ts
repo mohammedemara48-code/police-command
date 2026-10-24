@@ -4,7 +4,7 @@
  * only plays if a file cannot be fetched or decoded (the old track keeps playing while the next one loads).
  */
 import { EgyptianMusic } from './EgyptianMusic';
-import { MUSIC, musicUrl, type MusicFile, type MusicId } from '../logic/music';
+import { MUSIC, musicUrl, playlistFor, type MusicFile, type MusicId, type RadioPick } from '../logic/music';
 
 const FADE = 1.6;
 const LEVEL = 0.9;
@@ -21,6 +21,7 @@ export class RecordedMusic {
   private want: MusicId | null = null;
   private paused = false;
   private intensity = 0.4;
+  private pick: RadioPick = 'auto';
 
   constructor(
     private ctx: AudioContext,
@@ -67,6 +68,14 @@ export class RecordedMusic {
     return p;
   }
 
+  /** The driver's radio choice; takes effect at once with a crossfade. */
+  setPick(p: RadioPick) {
+    if (p === this.pick) return;
+    this.pick = p;
+    this.index = 0;
+    if (this.want && !this.paused) this.next(this.want);
+  }
+
   play(id: MusicId) {
     if (this.want === id) return;
     this.want = id;
@@ -78,9 +87,16 @@ export class RecordedMusic {
   /** Fetch and start the playlist entry at `index` (the old track keeps playing until it is in). */
   private next(id: MusicId) {
     const t = MUSIC[id];
-    const f = t.files[this.index % t.files.length]!;
+    const files = playlistFor(id, this.pick);
+    if (!files.length) {
+      this.fadeOutFile();
+      this.synth.stop();
+      return;
+    }
+    const f = files[this.index % files.length]!;
+    const pick = this.pick;
     void this.load(f).then((buf) => {
-      if (this.want !== id || this.paused) return;
+      if (this.want !== id || this.paused || this.pick !== pick) return;
       if (!buf) {
         this.fadeOutFile();
         this.synth.play(t.fallback);
@@ -89,7 +105,7 @@ export class RecordedMusic {
       this.start(id, f, buf);
     });
     // fetch the one after in the background so the change-over is seamless
-    if (t.files.length > 1) void this.load(t.files[(this.index + 1) % t.files.length]!);
+    if (files.length > 1) void this.load(files[(this.index + 1) % files.length]!);
   }
 
   private start(id: MusicId, f: MusicFile, buf: AudioBuffer) {
@@ -109,7 +125,7 @@ export class RecordedMusic {
     this.src = s;
     this.gain = g;
     // a playlist moves on after one pass (minus the crossfade), a single file just keeps looping
-    if (MUSIC[id].files.length > 1) {
+    if (playlistFor(id, this.pick).length > 1) {
       const at = Math.max(5, s.loopEnd - FADE) * 1000;
       const mine = s;
       window.setTimeout(() => {

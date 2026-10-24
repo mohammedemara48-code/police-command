@@ -69,6 +69,8 @@ const GLB = new Set<string>([
 ]);
 const CAR_GLB = new Set<string>(['car-sedan2', 'car-hatch', 'car-van', 'car-police']);
 /** Cars with a light `-lo.glb` version (fewer triangles, smaller textures) used on low quality. */
+/** loose parts in the car files (see apply) */
+export const STRAY_CAR_PART = /brake|rotor|caliper/i;
 const LOD = new Set<string>(['car-sedan2', 'car-hatch', 'car-van']);
 export const MEN: ModelKind[] = ['civ_m1', 'civ_m2', 'civ_m3'];
 export const WOMEN: ModelKind[] = ['civ_f1', 'civ_f2'];
@@ -231,6 +233,12 @@ class ModelLib {
         m.material = mm;
       });
     }
+    // the high-detail car files carry loose brake parts that the export left far from the wheels: thin black
+    // rods poking up behind the roof and wire-like bits under the bumper. Nothing of them shows when they sit right.
+    if (CAR_GLB.has(kind))
+      model.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh && STRAY_CAR_PART.test(o.name)) o.visible = false;
+      });
     if (fit.tint !== undefined || fit.noShadow || !this.shadows) {
       model.traverse((o) => {
         const m = o as THREE.Mesh;

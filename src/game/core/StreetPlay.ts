@@ -153,7 +153,7 @@ import {
 import { addStat, checkAch } from '../systems/Achievements';
 import * as THREE from 'three';
 import { outfitFor } from '../logic/outfits';
-import { musicForMode } from '../logic/music';
+import { musicForMode, nextRadio, radioLabel, radioOrder } from '../logic/music';
 import { models, CARS, MEN, WOMEN, fx } from './Models';
 import { audio } from '../systems/AudioManager';
 import { Q } from '../config/Quality';
@@ -2509,7 +2509,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     g.add(this.box(1.7, 1.0, L - 0.3, this.mat(id === 'microbus' ? 0xeeeeee : 0x7a1f24), 0, 0.8, 0));
     if (id === 'microbus') {
       models.dress(g, 'car-van', { length: L, tint: 0xf4f4f0 });
-      const r = roofRack(L * 0.7, 1.55);
+      const r = roofRack(L * 0.55, 1.5);
       r.position.set(0, 2.17, -0.15);
       g.add(r);
       g.add(rearSticker(STICKERS.microbus[0]!, 1.3, -L / 2 - 0.03, 1.15));
@@ -2615,7 +2615,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         const L = special === 'microbus' ? 5.3 : 4.5;
         models.dress(g, special === 'microbus' ? 'car-van' : 'car-sedan2', { length: L, tint: 0xf4f4f0 });
         if (special === 'microbus') {
-          const r = roofRack(L * 0.7, 1.55);
+          const r = roofRack(L * 0.55, 1.5);
           r.position.set(0, 2.17, -0.15);
           g.add(r);
           g.add(rearSticker(STICKERS.microbus[(i * 3) % STICKERS.microbus.length]!, 1.3, -L / 2 - 0.03, 1.15));
@@ -2822,6 +2822,14 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
         <button type="button" data-act="hub" aria-label="ادخل القسم"><i>🏢</i><span>القسم</span></button>
       </div>
       <div id="street-radio"></div>
+      <div id="street-fm" dir="rtl">
+        <button type="button" class="fm-now" data-fm="open" aria-label="راديو العربية"><i>📻</i><span></span></button>
+        <button type="button" class="fm-next" data-fm="next" aria-label="المحطة اللي بعدها">⏭</button>
+        <div class="fm-panel" hidden>
+          <div class="fm-list"></div>
+          <label class="fm-vol">🔊 <input type="range" min="0" max="1" step="0.05" aria-label="صوت المزيكا"></label>
+        </div>
+      </div>
       <div id="street-ret"></div>
       <div id="street-hp"></div>
     `;
@@ -2878,6 +2886,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     this.hudEl = ui.querySelector('#street-hp');
     this.hudHtml = '';
     this.radioEl = ui.querySelector('#street-radio');
+    this.bindFm(ui);
     this.barks.mount(ui, this.camera);
     this.retEl = ui.querySelector('#street-ret');
     this.radioEl!.addEventListener('click', () => {
@@ -3055,6 +3064,40 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     if (btn) btn.innerHTML = '<i>🚪</i><span>انزل</span>';
     const rb = this.ui?.querySelector('[data-act="run"]');
     if (rb) rb.innerHTML = '<i>🛞</i><span>فرامل</span>';
+  }
+
+  /** The in-car radio: one button cycles stations, the panel lists them all with a music volume slider. */
+  private bindFm(ui: HTMLElement) {
+    const fm = ui.querySelector<HTMLElement>('#street-fm');
+    if (!fm) return;
+    const panel = fm.querySelector<HTMLElement>('.fm-panel')!;
+    const list = fm.querySelector<HTMLElement>('.fm-list')!;
+    const vol = fm.querySelector<HTMLInputElement>('.fm-vol input')!;
+    const paint = () => {
+      fm.querySelector('.fm-now span')!.textContent = radioLabel(audio.station);
+      fm.classList.toggle('off', audio.station === 'off');
+      list.innerHTML = radioOrder()
+        .map(
+          (p) =>
+            `<button type="button" data-pick="${p}" class="${p === audio.station ? 'on' : ''}">${radioLabel(p)}</button>`
+        )
+        .join('');
+      vol.value = String(audio.vol.music);
+    };
+    fm.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('button');
+      if (!b) return;
+      e.stopPropagation();
+      if (b.dataset.fm === 'open') panel.hidden = !panel.hidden;
+      else if (b.dataset.fm === 'next') audio.setRadio(nextRadio(audio.station));
+      else if (b.dataset.pick) {
+        audio.setRadio(b.dataset.pick);
+        panel.hidden = true;
+      }
+      paint();
+    });
+    vol.addEventListener('input', () => audio.setVolume('music', Number(vol.value)));
+    paint();
   }
 
   /** Street talk stays out of cutscenes, the tutorial, menus and radio calls; mission results may break in. */

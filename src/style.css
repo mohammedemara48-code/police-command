@@ -4224,3 +4224,86 @@ html[data-mode]:not([data-mode='police']) body[data-play='street'] .street-actio
 .zone-pick .zp-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .zone-pick button { padding: 10px 6px; border: 1px solid #f2d14b; background: transparent; color: #f2d14b; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
 .zone-pick button:active { background: #f2d14b; color: #111; }
+
+/* in-car radio: under the pause button, thumb-sized, the panel opens beside it */
+#street-fm {
+  position: fixed;
+  top: calc(226px + env(safe-area-inset-top));
+  left: 10px;
+  z-index: 30;
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  max-width: 230px;
+  pointer-events: auto;
+}
+#street-fm > button {
+  height: 40px;
+  min-width: 40px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 210, 61, 0.55);
+  background: rgba(10, 18, 34, 0.78);
+  color: #fff;
+  font: 700 13px/1 inherit;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#street-fm.off .fm-now {
+  opacity: 0.6;
+}
+#street-fm .fm-panel {
+  flex-basis: 100%;
+  background: rgba(10, 18, 34, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 8px;
+}
+#street-fm .fm-panel[hidden] {
+  display: none;
+}
+#street-fm .fm-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+#street-fm .fm-list button {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: 600 13px inherit;
+}
+#street-fm .fm-list button.on {
+  background: #ffd23d;
+  color: #111;
+}
+#street-fm .fm-vol {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #fff;
+}
+#street-fm .fm-vol input {
+  flex: 1;
+  height: 28px;
+}
+@media (orientation: landscape) and (max-height: 540px) {
+  #street-fm {
+    top: calc(164px + env(safe-area-inset-top));
+    left: calc(8px + env(safe-area-inset-left));
+  }
+  #street-fm > button {
+    height: 34px;
+    min-width: 34px;
+  }
+}
+
+html.onfoot #street-fm {
+  display: none;
+}

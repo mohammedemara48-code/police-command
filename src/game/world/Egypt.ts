@@ -350,11 +350,13 @@ function box(g: THREE.Object3D, m: THREE.Material, w: number, h: number, d: numb
 /** Roof rack for the microbus (bars + rails), sized to the dressed van. */
 export function roofRack(len: number, width: number) {
   const rack = new THREE.Group();
-  for (const s of [-1, 1]) box(rack, VM.black, 0.04, 0.04, len, (s * width) / 2, 0, 0);
-  const n = Math.round(len / 0.6);
-  for (let i = 0; i <= n; i++) box(rack, VM.black, width, 0.03, 0.04, 0, 0, -len / 2 + (i * len) / n);
-  for (let i = 0; i < 5; i++)
-    for (const s of [-1, 1]) box(rack, VM.black, 0.03, 0.14, 0.03, (s * width) / 2, -0.07, -len / 2 + (i * len) / 4);
+  // two low side rails on four short feet and three cross bars: a plain luggage rack, not a cage
+  const w = width * 0.92;
+  for (const s of [-1, 1]) {
+    box(rack, VM.black, 0.035, 0.035, len, (s * w) / 2, 0, 0);
+    for (const e of [-1, 1]) box(rack, VM.black, 0.04, 0.06, 0.06, (s * w) / 2, -0.04, (e * len) / 2 - e * 0.1);
+  }
+  for (const k of [-1, 0, 1]) box(rack, VM.black, w, 0.025, 0.035, 0, 0, (k * len) / 2.6);
   rack.userData.keep = true;
   return rack;
 }

@@ -77,3 +77,51 @@ export function musicUrl(f: MusicFile, canPlay: (mime: string) => string): strin
   const aac = canPlay('audio/mp4; codecs="mp4a.40.2"');
   return `/music/${f.file}.${aac ? 'm4a' : 'ogg'}`;
 }
+
+/** The in-car radio: the driver picks a station. 'auto' = the playlist for the mode, 'off' = silence. */
+export type RadioPick = 'auto' | 'off' | string;
+
+/** Every recorded file once, the owner's tracks first, in the order the radio cycles through them. */
+export const RADIO_FILES: MusicFile[] = (() => {
+  const seen = new Map<string, MusicFile>();
+  for (const id of ['taxi', 'free', 'police', 'menu'] as MusicId[])
+    for (const f of MUSIC[id].files) if (!seen.has(f.file)) seen.set(f.file, f);
+  return [...seen.values()];
+})();
+
+const RADIO_NAMES: Record<string, string> = {
+  'taxi-user-main': 'تراك ١',
+  'taxi-user-main2': 'تراك ٢',
+  'taxi-ibn-al-noor': 'ابن النور',
+  'taxi2-arab-synthwave': 'سينث شرقي',
+  'free-balzan-groove': 'بلزان',
+  'police-curse-of-the-scarab': 'لعنة الجعران',
+  'menu-desert-city': 'مدينة الصحرا'
+};
+
+export function radioLabel(p: RadioPick): string {
+  if (p === 'auto') return 'تلقائي';
+  if (p === 'off') return 'مقفول';
+  return RADIO_NAMES[p] ?? RADIO_FILES.find((f) => f.file === p)?.title ?? p;
+}
+
+/** Order of the radio's single button: auto, each track, off, back to auto. */
+export function radioOrder(): RadioPick[] {
+  return ['auto', ...RADIO_FILES.map((f) => f.file), 'off'];
+}
+export function nextRadio(p: RadioPick): RadioPick {
+  const o = radioOrder();
+  const i = o.indexOf(p);
+  return o[(i + 1) % o.length]!;
+}
+export function sanitizeRadio(p: unknown): RadioPick {
+  return typeof p === 'string' && radioOrder().includes(p) ? p : 'auto';
+}
+
+/** The files to play for a place and the driver's pick. The menu ignores the radio. Empty = silence. */
+export function playlistFor(id: MusicId, pick: RadioPick): MusicFile[] {
+  if (id === 'menu' || pick === 'auto') return MUSIC[id].files;
+  if (pick === 'off') return [];
+  const f = RADIO_FILES.find((x) => x.file === pick);
+  return f ? [f] : MUSIC[id].files;
+}

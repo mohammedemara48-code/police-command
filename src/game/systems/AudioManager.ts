@@ -1,13 +1,18 @@
 /** WebAudio: recorded CC0 sound effects (Kenney, OpenGameArt) with synth fallback; the music is recorded Egyptian loops (RecordedMusic) with the generated EgyptianMusic as fallback */
 import { RecordedMusic } from './RecordedMusic';
-import type { MusicId } from '../logic/music';
+import { sanitizeRadio, type MusicId, type RadioPick } from '../logic/music';
 
-const VOL_KEY = 'pc.vol.v1';
+/** v2: music got much louder by default (it was lost under the engine on phones) */
+const VOL_KEY = 'pc.vol.v2';
+const RADIO_KEY = 'pc.radio.v1';
 export interface Volumes {
   master: number;
   music: number;
   sfx: number;
 }
+
+/** music sits well above the engine on a phone speaker; a limiter on the music bus keeps it from clipping */
+const MUSIC_BOOST = 2.4;
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
@@ -25,11 +30,28 @@ export class AudioManager {
   private engineGain: GainNode | null = null;
   vol: Volumes = (() => {
     try {
-      return { master: 0.8, music: 0.45, sfx: 0.9, ...JSON.parse(localStorage.getItem(VOL_KEY) || '{}') };
+      return { master: 0.9, music: 0.85, sfx: 0.8, ...JSON.parse(localStorage.getItem(VOL_KEY) || '{}') };
     } catch {
-      return { master: 0.8, music: 0.45, sfx: 0.9 };
+      return { master: 0.9, music: 0.85, sfx: 0.8 };
     }
   })();
+
+  station: RadioPick = (() => {
+    try {
+      return sanitizeRadio(localStorage.getItem(RADIO_KEY));
+    } catch {
+      return 'auto';
+    }
+  })();
+  setRadio(p: RadioPick) {
+    this.station = sanitizeRadio(p);
+    try {
+      localStorage.setItem(RADIO_KEY, this.station);
+    } catch {
+      /* ignore */
+    }
+    this.music?.setPick(this.station);
+  }
 
   setVolume(k: keyof Volumes, v: number) {
     this.vol[k] = Math.max(0, Math.min(1, v));
@@ -43,7 +65,7 @@ export class AudioManager {
   private applyVol() {
     if (this.master) this.master.gain.value = 0.35 * this.vol.master;
     if (this.sfxGain) this.sfxGain.gain.value = this.vol.sfx;
-    if (this.musicGain) this.musicGain.gain.value = 0.5 * this.vol.music;
+    if (this.musicGain) this.musicGain.gain.value = MUSIC_BOOST * this.vol.music;
     // a muted slider also stops the generator, so it costs nothing
     this.music?.setPaused(this.vol.music < 0.01 || this.vol.master < 0.01);
   }
@@ -143,6 +165,7 @@ export class AudioManager {
     this.ensure();
     if (!this.ctx || !this.musicGain) return;
     this.music ??= new RecordedMusic(this.ctx, this.musicGain);
+    this.music.setPick(this.station);
     this.music.setIntensity(this.intensity);
     this.music.setPaused(this.vol.music < 0.01 || this.vol.master < 0.01);
     this.music.play(this.track);
@@ -175,7 +198,7 @@ export class AudioManager {
       this.engineSrc.start();
     }
     this.engineSrc.playbackRate.value = 0.7 + speed01 * 0.9;
-    if (this.engineGain) this.engineGain.gain.value = 0.25 + speed01 * 0.35;
+    if (this.engineGain) this.engineGain.gain.value = 0.2 + speed01 * 0.3;
   }
 
   private ensure() {
@@ -188,7 +211,13 @@ export class AudioManager {
     this.sfxGain = this.ctx.createGain();
     this.sfxGain.connect(this.master);
     this.musicGain = this.ctx.createGain();
-    this.musicGain.connect(this.master);
+    const lim = this.ctx.createDynamicsCompressor();
+    lim.threshold.value = -6;
+    lim.knee.value = 4;
+    lim.ratio.value = 12;
+    lim.attack.value = 0.005;
+    lim.release.value = 0.2;
+    this.musicGain.connect(lim).connect(this.master);
     this.applyVol();
     void this.loadSamples();
     // a hidden tab is silent (and the generator sleeps with the clock)

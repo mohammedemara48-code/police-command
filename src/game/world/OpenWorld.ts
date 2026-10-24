@@ -50,6 +50,7 @@ let mats: {
   paint: THREE.MeshStandardMaterial;
   stone: THREE.MeshStandardMaterial;
   concrete: THREE.MeshStandardMaterial;
+  plaster: THREE.MeshStandardMaterial;
   awning: THREE.MeshStandardMaterial;
   light: [THREE.MeshBasicMaterial, THREE.MeshBasicMaterial];
 } | null = null;
@@ -70,6 +71,8 @@ function materials() {
     paint: po(crisp(M.paint.clone()), -3),
     stone: surface('stone', 0xcfc4ae),
     concrete: surface('concrete', 0xcfcac2),
+    // boundary walls: sandy plaster, a shade darker than the paving so the edge of the pavement reads
+    plaster: surface('concrete', 0xc9b48f),
     awning: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }),
     light: [new THREE.MeshBasicMaterial({ color: 0x33ff66 }), new THREE.MeshBasicMaterial({ color: 0xff3030 })]
   };
@@ -325,6 +328,7 @@ export class OpenWorld {
       this.buildings(x0, z0, x1, z1, chunk);
       this.props(chunk, x0, z0, x1, z1);
       this.perimeter(x0, z0, x1, z1, chunk, out);
+      this.enclosures(x0, z0, x1, z1, edges, out);
     }
     this.group.add(chunk.group);
     this.chunks.set(key(i, j), chunk);
@@ -609,6 +613,101 @@ export class OpenWorld {
       chunk.palms = palmInstances(palms);
       chunk.group.add(chunk.palms);
     }
+  }
+
+  /**
+   * Boundary walls (سور) on the building line wherever a street has no building: the open ground behind a pavement
+   * was read as a field you could drive into, with houses floating in it. Dead ends get a wall across the end.
+   * By the Nile the wall drops to a low parapet so the river still shows.
+   */
+  private enclosures(
+    x0: number,
+    z0: number,
+    x1: number,
+    z1: number,
+    edges: ReturnType<typeof edgesIn>,
+    out: (s: Soup, m: THREE.Material, shadow?: boolean) => void
+  ) {
+    const N = net();
+    const L = lots();
+    const wall = new Soup(3),
+      cap = new Soup(1.6);
+    const T = 0.3;
+    const slab = (ax: number, az: number, bx: number, bz: number, h: number, u: number, t = T) => {
+      const len = Math.hypot(bx - ax, bz - az);
+      if (len < 0.2) return;
+      const nx = -(bz - az) / len,
+        nz = (bx - ax) / len;
+      const o = t / 2;
+      const p = [
+        { x: ax + nx * o, z: az + nz * o },
+        { x: bx + nx * o, z: bz + nz * o },
+        { x: bx - nx * o, z: bz - nz * o },
+        { x: ax - nx * o, z: az - nz * o }
+      ];
+      wall.wall(p[0]!.x, p[0]!.z, p[1]!.x, p[1]!.z, 0, h, nx, nz, undefined, u);
+      wall.wall(p[3]!.x, p[3]!.z, p[2]!.x, p[2]!.z, 0, h, -nx, -nz, undefined, u);
+      const dx = (bx - ax) / len,
+        dz = (bz - az) / len;
+      wall.wall(p[0]!.x, p[0]!.z, p[3]!.x, p[3]!.z, 0, h, -dx, -dz);
+      wall.wall(p[1]!.x, p[1]!.z, p[2]!.x, p[2]!.z, 0, h, dx, dz);
+      cap.flat(h, p);
+    };
+    const inside = (x: number, z: number) => x >= x0 && x < x1 && z >= z0 && z < z1;
+    const W = WORLD_BOX;
+    const height = (x: number, z: number) => (inRiver(x, z, 18) ? 1.0 : 2.4);
+    const STEP = 2;
+    for (const e of edges) {
+      if (e.bridge || e.ring) continue;
+      const off = e.half + PAVEMENT + 0.55;
+      for (const side of [1, -1]) {
+        for (let s = 0; s < e.len; s += STEP) {
+          const s1 = Math.min(e.len, s + STEP);
+          const a = N.at(e, s),
+            b = N.at(e, s1);
+          const ax = a.x + Math.cos(a.yaw) * side * off,
+            az = a.z - Math.sin(a.yaw) * side * off,
+            bx = b.x + Math.cos(b.yaw) * side * off,
+            bz = b.z - Math.sin(b.yaw) * side * off;
+          const mx = (ax + bx) / 2,
+            mz = (az + bz) / 2;
+          if (!inside(mx, mz)) continue;
+          if (mx < W.x0 + 4 || mx > W.x1 - 4 || mz < W.z0 + 4 || mz > W.z1 - 4) continue;
+          // other streets, their pavements and corner fills stay open; buildings already close the line
+          const ok = (x: number, z: number) =>
+            N.clearance(x, z) >= PAVEMENT + 0.45 && !L.blocked(x, z, 0.35) && !inRiver(x, z, 1.5);
+          if (!ok(ax, az) || !ok(bx, bz) || !ok(mx, mz)) continue;
+          const h = height(mx, mz);
+          slab(ax, az, bx, bz, h, s);
+          // a plastered pier every 6 m breaks up the long runs
+          if (h > 2 && Math.round(s / STEP) % 3 === 0) {
+            const dx = (bx - ax) / STEP,
+              dz = (bz - az) / STEP;
+            slab(ax - dx * 0.25, az - dz * 0.25, ax + dx * 0.25, az + dz * 0.25, h + 0.3, 0, 0.5);
+          }
+        }
+      }
+      // a dead end: wall across the end of the pavement (the map edge has its barrier arm instead)
+      for (const atA of [true, false]) {
+        const nd = N.nodes[atA ? e.a : e.b]!;
+        if (nd.edges.length !== 1 || !inside(nd.x, nd.z)) continue;
+        if (Math.min(nd.x - W.x0, W.x1 - nd.x, nd.z - W.z0, W.z1 - nd.z) < 40) continue;
+        const q = N.at(e, atA ? 0 : e.len);
+        const dir = atA ? -1 : 1;
+        const fx = Math.sin(q.yaw) * dir,
+          fz = Math.cos(q.yaw) * dir;
+        const cx = nd.x + fx * (PAVEMENT + 0.55),
+          cz = nd.z + fz * (PAVEMENT + 0.55);
+        if (inRiver(cx, cz, 1.5)) continue;
+        const rx = Math.cos(q.yaw),
+          rz = -Math.sin(q.yaw);
+        const w = off + T / 2;
+        slab(cx - rx * w, cz - rz * w, cx + rx * w, cz + rz * w, height(cx, cz), 0);
+      }
+    }
+    const m = materials();
+    out(wall, m.plaster, true);
+    out(cap, m.stone, false);
   }
 
   /** The fence around the playable map, with gaps for the roads that leave it (a barrier arm closes each one). */
