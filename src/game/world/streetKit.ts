@@ -49,26 +49,37 @@ export function lampAt(b: Batch, x: number, z: number, dx: number, dz: number, h
   return new THREE.Vector3(x + dx * 1.45, h - 0.3, z + dz * 1.45);
 }
 
+/** Shop names (Egyptian street style) and the sign colour. */
 export const SHOPS: [string, string][] = [
-  ['صيدلية', '#2ecc71'],
-  ['مخبز', '#f39c12'],
-  ['كافيه', '#a0522d'],
-  ['سوبر ماركت', '#e74c3c'],
-  ['مطعم', '#e67e22'],
-  ['ملابس', '#9b59b6'],
-  ['موبايلات', '#3498db'],
-  ['حلويات', '#ff6fa8'],
-  ['بنك', '#16a085'],
-  ['مكتبة', '#c0a050'],
-  ['عصير', '#9acd32'],
-  ['كشري', '#d35400'],
-  ['مكوجي', '#5d6d7e'],
-  ['خضار وفاكهة', '#27ae60'],
-  ['قهوة', '#6e4a2e'],
-  ['مفروشات', '#8e44ad']
+  ['جزارة الأمانة', '#b03a2e'],
+  ['مكوجي النور', '#5d6d7e'],
+  ['سوبر ماركت الحمد', '#e74c3c'],
+  ['أدوات منزلية', '#2874a6'],
+  ['صيدلية الشفاء', '#1e8449'],
+  ['كشري التحرير', '#d35400'],
+  ['فول وطعمية', '#b9770e'],
+  ['حلواني الصفا', '#c2185b'],
+  ['مخبز العيش البلدي', '#a0522d'],
+  ['موبايلات الأهرام', '#2e86c1'],
+  ['عصير قصب', '#7cb342'],
+  ['كاوتش وبطاريات', '#424949'],
+  ['ملابس الشباب', '#7d3c98'],
+  ['خردوات أم هاشم', '#6e2c00'],
+  ['قهوة الفن', '#6e4a2e'],
+  ['مكتبة النهضة', '#9a7d0a'],
+  ['أسماك البحر', '#1a5276'],
+  ['عطارة الحسين', '#7e5109'],
+  ['دهانات وحدايد', '#566573'],
+  ['أحذية الهرم', '#5b2c6f'],
+  ['بقالة التوحيد', '#117864'],
+  ['نظارات النيل', '#1f618d'],
+  ['حلاق الأسطى', '#922b21'],
+  ['مفروشات الزهراء', '#8e44ad']
 ];
-export const SHOP_COLS = 4;
+/** atlas cells: one open front per shop, then rolling shutters (closed shops) */
+export const SHOP_COLS = 8;
 export const SHOP_ROWS = 4;
+export const SHUTTER0 = SHOPS.length;
 
 let atlas: THREE.MeshStandardMaterial | null = null;
 /** One texture holding sixteen shop fronts (sign, window with goods, door), so every shop in a chunk is one draw. */
@@ -81,55 +92,90 @@ export function shopAtlas(): THREE.MeshStandardMaterial {
   c.height = ch * SHOP_ROWS;
   const g = c.getContext('2d')!;
   const r = rng(5);
-  SHOPS.forEach(([name, raw], i) => {
+  for (let i = 0; i < SHOP_COLS * SHOP_ROWS; i++) {
+    const shut = i >= SHUTTER0;
+    const [name, raw] = SHOPS[shut ? (i * 7) % SHOPS.length : i]!;
     const ox = (i % SHOP_COLS) * cw,
       oy = Math.floor(i / SHOP_COLS) * ch;
     const hsl = { h: 0, s: 0, l: 0 };
     new THREE.Color(raw).getHSL(hsl);
-    const col = '#' + new THREE.Color().setHSL(hsl.h, hsl.s * 0.62, hsl.l * 0.86).getHexString();
-    // plaster
-    g.fillStyle = '#cfc4ae';
+    const col = '#' + new THREE.Color().setHSL(hsl.h, hsl.s * 0.7, hsl.l * 0.9).getHexString();
+    // plaster pier around the opening, a little dirty at the foot
+    g.fillStyle = ['#cfc4ae', '#bfb39a', '#d8cdb8', '#b8ad99'][i % 4]!;
     g.fillRect(ox, oy, cw, ch);
-    // sign band
+    g.fillStyle = 'rgba(60,50,40,0.25)';
+    g.fillRect(ox, oy + ch - 10, cw, 10);
+    // sign board: coloured panel, light frame, the name in white, a small line under it
+    const sy = oy + 3,
+      sh = 36;
     g.fillStyle = col;
-    g.fillRect(ox + 6, oy + 4, cw - 12, 34);
+    g.fillRect(ox + 4, sy, cw - 8, sh);
+    g.strokeStyle = 'rgba(255,255,255,0.7)';
+    g.lineWidth = 2;
+    g.strokeRect(ox + 6, sy + 2, cw - 12, sh - 4);
     g.fillStyle = '#fff';
-    g.font = 'bold 28px Cairo, Arial';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.direction = 'rtl';
-    g.fillText(name, ox + cw / 2, oy + 22);
-    // window: dark glass, warm light, shelves and goods
-    const wx = ox + 10,
-      wy = oy + 46,
-      ww = cw * 0.62,
-      wh = ch - 52;
-    const grad = g.createLinearGradient(0, wy, 0, wy + wh);
-    grad.addColorStop(0, '#3a3228');
-    grad.addColorStop(1, '#6b5a3c');
-    g.fillStyle = grad;
-    g.fillRect(wx, wy, ww, wh);
-    for (let s = 0; s < 3; s++) {
-      g.fillStyle = 'rgba(240,220,170,0.55)';
-      g.fillRect(wx + 4, wy + 8 + s * (wh / 3), ww - 8, 2);
-      for (let k = 0; k < 7; k++) {
-        g.fillStyle = `hsl(${Math.floor(r() * 360)} 55% ${40 + r() * 25}%)`;
-        const bw = 7 + r() * 10;
-        g.fillRect(wx + 6 + k * (ww / 7.4), wy + 10 + s * (wh / 3) - (6 + r() * 9) + 12, bw, 6 + r() * 9);
+    let fs = 26;
+    g.font = `bold ${fs}px Cairo, Tahoma, Arial`;
+    while (g.measureText(name).width > cw - 30 && fs > 14) g.font = `bold ${--fs}px Cairo, Tahoma, Arial`;
+    g.fillText(name, ox + cw / 2, sy + sh / 2 + 1);
+    const wx = ox + 8,
+      wy = oy + 44,
+      ww = cw - 16,
+      wh = ch - 44;
+    if (shut) {
+      // rolling shutter: grey slats, a lock at the foot, a little graffiti or rust
+      g.fillStyle = '#8f9496';
+      g.fillRect(wx, wy, ww, wh);
+      for (let y = wy; y < wy + wh; y += 4) {
+        g.fillStyle = (y / 4) % 2 ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.22)';
+        g.fillRect(wx, y, ww, 2);
       }
+      g.fillStyle = '#3d3d3d';
+      g.fillRect(wx, wy, ww, 5);
+      g.fillRect(wx + ww / 2 - 5, wy + wh - 12, 10, 8);
+      g.fillStyle = `rgba(${120 + r() * 60},70,30,0.25)`;
+      g.fillRect(wx + r() * ww * 0.6, wy + wh * 0.5, ww * 0.3, wh * 0.4);
+    } else {
+      // open front: lit interior with shelves and goods, half the opening behind glass, a door
+      const grad = g.createLinearGradient(0, wy, 0, wy + wh);
+      grad.addColorStop(0, '#f3e6c4');
+      grad.addColorStop(1, '#8a7650');
+      g.fillStyle = grad;
+      g.fillRect(wx, wy, ww, wh);
+      for (let sI = 0; sI < 3; sI++) {
+        const yy = wy + 10 + sI * (wh / 3);
+        g.fillStyle = 'rgba(90,70,40,0.8)';
+        g.fillRect(wx + 3, yy + 14, ww - 6, 3);
+        for (let k = 0; k < 14; k++) {
+          g.fillStyle = `hsl(${Math.floor(r() * 360)} ${45 + r() * 30}% ${35 + r() * 30}%)`;
+          const bh = 6 + r() * 9;
+          g.fillRect(wx + 5 + k * ((ww - 10) / 14), yy + 14 - bh, 8 + r() * 5, bh);
+        }
+      }
+      // glass on the left part with a reflection; the shutter box rolled up over the opening
+      g.fillStyle = 'rgba(120,150,170,0.35)';
+      g.fillRect(wx, wy, ww * 0.55, wh);
+      g.fillStyle = 'rgba(255,255,255,0.25)';
+      g.beginPath();
+      g.moveTo(wx + 10, wy + wh);
+      g.lineTo(wx + 40, wy);
+      g.lineTo(wx + 55, wy);
+      g.lineTo(wx + 25, wy + wh);
+      g.fill();
+      g.fillStyle = '#5a5e60';
+      g.fillRect(wx, wy, ww, 6);
+      g.strokeStyle = '#2b2b2b';
+      g.lineWidth = 3;
+      g.strokeRect(wx, wy, ww, wh);
+      g.beginPath();
+      g.moveTo(wx + ww * 0.55, wy);
+      g.lineTo(wx + ww * 0.55, wy + wh);
+      g.stroke();
     }
-    g.strokeStyle = '#2b2b2b';
-    g.lineWidth = 3;
-    g.strokeRect(wx, wy, ww, wh);
-    // door
-    const dx = ox + cw * 0.72;
-    g.fillStyle = '#2d2a26';
-    g.fillRect(dx, oy + 46, cw * 0.22, ch - 46);
-    g.fillStyle = 'rgba(255,230,170,0.35)';
-    g.fillRect(dx + 5, oy + 52, cw * 0.22 - 10, ch - 72);
-    g.fillStyle = '#c0a050';
-    g.fillRect(dx + cw * 0.22 - 12, oy + 92, 3, 10);
-  });
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;

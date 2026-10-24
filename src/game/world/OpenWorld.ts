@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { quality, Q } from '../config/Quality';
 import { PAVEMENT, ROAD_HALF, SQUARES, WORLD_BOX, toWorld } from '../logic/cairo';
 import { blockLook, hash01 } from '../logic/districts';
-import { lots } from '../logic/lots';
+import { lots, type Lot } from '../logic/lots';
 import { inRiver, net, rng } from '../logic/roadnet';
 import { armAxis, axisGreen, signalNodes } from '../logic/signals';
 import { islesIn } from '../logic/isles';
@@ -22,7 +22,7 @@ import { Soup } from './Soup';
 import { PAVE_Y, edgesIn, pourRoads, signalSpot } from './roadMesh';
 import { planWalls } from './walls';
 import { buildWater, groundMats, pourBanks, pourGround } from './riverMesh';
-import { SHOP_COLS, SHOP_ROWS, SHOPS, TreeKit, lampAt, shopAtlas } from './streetKit';
+import { SHOP_COLS, SHOP_ROWS, SHOPS, SHUTTER0, TreeKit, lampAt, shopAtlas } from './streetKit';
 import { palmInstances, type PalmSpot } from './Trees';
 import type { OBB } from '../logic/collide';
 import type { ShopSpot } from '../logic/crowd';
@@ -421,6 +421,122 @@ export class OpenWorld {
     void pier;
   }
 
+  /** Shops along the street face of a lot, AC units and balconies on the floors above. */
+  private frontage(l: Lot, shops: Soup, awn: Soup, b: Batch, chunk: Chunk) {
+    const cs = Math.cos(l.yaw),
+      sn = Math.sin(l.yaw);
+    const sx = -l.side;
+    const fx = l.x + sx * (l.hw + 0.05) * cs,
+      fz = l.z - sx * (l.hw + 0.05) * sn;
+    const nx = sx * cs,
+      nz = -sx * sn;
+    // the texture reads left-to-right as seen from the street
+    const rt = { x: sn * (sx > 0 ? -1 : 1), z: cs * (sx > 0 ? -1 : 1) };
+    const ry = Math.atan2(nx, nz);
+    const F = l.hl * 2 - 0.8;
+    const h = (n: number) => hash01(l.seed * 31 + n * 7.13);
+    if (l.shop && F >= 3.5) {
+      const n = Math.max(1, Math.round(F / 4.6));
+      const uw = F / n;
+      const H = 3.4;
+      for (let u = 0; u < n; u++) {
+        const c = -F / 2 + uw * (u + 0.5);
+        const shut = h(u) < 0.22;
+        const k = shut
+          ? SHUTTER0 + Math.floor(h(u + 40) * (SHOP_COLS * SHOP_ROWS - SHUTTER0))
+          : Math.floor(h(u + 80) * SHOPS.length);
+        const u0 = (k % SHOP_COLS) / SHOP_COLS,
+          u1 = u0 + 1 / SHOP_COLS;
+        const v1 = 1 - Math.floor(k / SHOP_COLS) / SHOP_ROWS,
+          v0 = v1 - 1 / SHOP_ROWS;
+        const hw = uw / 2 - 0.12;
+        const p = (s2: number, y: number) => [fx + rt.x * (c + s2 * hw), y, fz + rt.z * (c + s2 * hw)] as const;
+        const quad = [p(-1, 0), p(1, 0), p(1, H), p(-1, H)];
+        const uv = [
+          [u0, v0],
+          [u1, v0],
+          [u1, v1],
+          [u0, v1]
+        ];
+        const base = shops.pos.length / 3;
+        quad.forEach((q, n2) => {
+          shops.pos.push(q[0], q[1], q[2]);
+          shops.nor.push(nx, 0, nz);
+          shops.uv.push(uv[n2]![0]!, uv[n2]![1]!);
+        });
+        const cx =
+          (quad[1]![1] - quad[0]![1]) * (quad[2]![2] - quad[0]![2]) -
+          (quad[1]![2] - quad[0]![2]) * (quad[2]![1] - quad[0]![1]);
+        const cz =
+          (quad[1]![0] - quad[0]![0]) * (quad[2]![1] - quad[0]![1]) -
+          (quad[1]![1] - quad[0]![1]) * (quad[2]![0] - quad[0]![0]);
+        if (cx * nx + cz * nz > 0) shops.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        else shops.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+        if (shut) continue;
+        // a cloth awning over about half the open fronts
+        if (h(u + 120) < 0.55) {
+          const ac = new THREE.Color(SHOPS[k]![1]);
+          ac.offsetHSL(0, -0.1, h(u + 7) < 0.5 ? -0.05 : 0.08);
+          const ab = awn.pos.length / 3;
+          const d = 0.9 + h(u + 9) * 0.6;
+          const pts = [
+            [fx + rt.x * (c - hw), 2.42, fz + rt.z * (c - hw)],
+            [fx + rt.x * (c + hw), 2.42, fz + rt.z * (c + hw)],
+            [fx + rt.x * (c + hw) + nx * d, 2.02, fz + rt.z * (c + hw) + nz * d],
+            [fx + rt.x * (c - hw) + nx * d, 2.02, fz + rt.z * (c - hw) + nz * d]
+          ];
+          pts.forEach((q) => {
+            awn.pos.push(q[0]!, q[1]!, q[2]!);
+            awn.nor.push(nx * 0.4, 0.9, nz * 0.4);
+            awn.uv.push(0, 0);
+            awn.col.push(ac.r, ac.g, ac.b);
+          });
+          awn.idx.push(ab, ab + 1, ab + 2, ab, ab + 2, ab + 3);
+        }
+        chunk.shops.push({
+          x: fx + rt.x * c + nx * 1.1,
+          z: fz + rt.z * c + nz * 1.1,
+          side: l.side,
+          name: SHOPS[k]![0],
+          yaw: Math.atan2(-nx, -nz)
+        });
+      }
+    }
+    // upper floors: split AC units under windows and the odd balcony (fewer on low quality)
+    const floors = Math.floor(l.h / 3);
+    const bays = Math.max(1, Math.floor(F / 3));
+    const dens = quality === 'low' ? 0.5 : 1;
+    const fm = fmats();
+    for (let f = 1; f < floors; f++)
+      for (let bI = 0; bI < bays; bI++) {
+        const c = -F / 2 + (F / bays) * (bI + 0.5);
+        const r1 = h(f * 50 + bI),
+          r2 = h(f * 50 + bI + 900);
+        const px = fx + rt.x * c,
+          pz = fz + rt.z * c;
+        if (r1 < 0.16 * dens) {
+          // balcony: slab, railing and a little shade
+          const y = f * 3;
+          b.box(fm.slab, 2.3, 0.14, 1.0, px + nx * 0.5, y, pz + nz * 0.5, ry);
+          b.box(fm.rail, 2.3, 0.9, 0.05, px + nx * 0.98, y + 0.5, pz + nz * 0.98, ry);
+          b.box(fm.rail, 0.05, 0.9, 1.0, px + nx * 0.5 + rt.x * 1.13, y + 0.5, pz + nz * 0.5 + rt.z * 1.13, ry);
+          b.box(fm.rail, 0.05, 0.9, 1.0, px + nx * 0.5 - rt.x * 1.13, y + 0.5, pz + nz * 0.5 - rt.z * 1.13, ry);
+        } else if (r2 < 0.3 * dens) {
+          const o = (h(f * 50 + bI + 300) - 0.5) * 1.4;
+          b.box(
+            fm.ac,
+            0.85,
+            0.55,
+            0.32,
+            px + rt.x * o + nx * 0.18,
+            f * 3 + 0.5 + h(bI + f) * 1.4,
+            pz + rt.z * o + nz * 0.18,
+            ry
+          );
+        }
+      }
+  }
+
   private buildings(x0: number, z0: number, x1: number, z1: number, chunk: Chunk) {
     const L = lots().inBox(x0, z0, x1, z1);
     const m = materials();
@@ -429,6 +545,7 @@ export class OpenWorld {
     const awn = new Soup(1, true);
     const col = new THREE.Color();
     const roof: THREE.BufferGeometry[] = [];
+    const fx2 = new Batch();
     for (const l of L) {
       if (l.reserved || l.x < x0 || l.x >= x1 || l.z < z0 || l.z >= z1) continue;
       const look = blockLook(l.district, l.seed);
@@ -438,6 +555,7 @@ export class OpenWorld {
         uvs = g.attributes.uv as THREE.BufferAttribute;
       // the facade photos carry their own paint: the district tint only shades them a little
       col.setHex(look.style === 'brick' ? 0xffffff : look.tint).lerp(WHITE, 0.55);
+      col.offsetHSL((hash01(l.seed * 11 + 2) - 0.5) * 0.05, 0, (hash01(l.seed * 13 + 5) - 0.5) * 0.16);
       for (let v = 0; v < nrm.count; v++) {
         if (nrm.getY(v) > 0.5) {
           // flat roof: one plain-wall texel, so the facade windows do not show up on top
@@ -452,76 +570,9 @@ export class OpenWorld {
       const a = byMat.get(mat);
       if (a) a.push(g);
       else byMat.set(mat, [g]);
-      // shop front on the street side
-      if (l.shop && l.w >= 9) {
-        const cs = Math.cos(l.yaw),
-          sn = Math.sin(l.yaw);
-        // local x axis points away from the road on side -1 ... the street is on the -side direction of local x
-        const sx = -l.side;
-        const fx = l.x + sx * (l.hw + 0.05) * cs,
-          fz = l.z - sx * (l.hw + 0.05) * sn;
-        const nx = sx * cs,
-          nz = -sx * sn;
-        // along-wall direction (local z)
-        const tx = sn,
-          tz = cs;
-        const k = Math.floor(hash01(l.seed * 3 + 1) * SHOPS.length);
-        const w2 = 3.6;
-        const u0 = (k % SHOP_COLS) / SHOP_COLS,
-          u1 = u0 + 1 / SHOP_COLS;
-        const v1 = 1 - Math.floor(k / SHOP_COLS) / SHOP_ROWS,
-          v0 = v1 - 1 / SHOP_ROWS;
-        const H = 3.6;
-        const base = shops.pos.length / 3;
-        // the texture reads left-to-right as seen from the street: look at the wall with the street behind you
-        const rt = { x: tx * (sx > 0 ? -1 : 1), z: tz * (sx > 0 ? -1 : 1) };
-        const p = (s: number, y: number) => [fx + rt.x * s * w2, y, fz + rt.z * s * w2] as const;
-        const quad = [p(-1, 0), p(1, 0), p(1, H), p(-1, H)];
-        const uv = [
-          [u0, v0],
-          [u1, v0],
-          [u1, v1],
-          [u0, v1]
-        ];
-        quad.forEach((q, n2) => {
-          shops.pos.push(q[0], q[1], q[2]);
-          shops.nor.push(nx, 0, nz);
-          shops.uv.push(uv[n2]![0]!, uv[n2]![1]!);
-        });
-        // winding so that the front faces the street normal
-        const cx =
-          (quad[1]![1] - quad[0]![1]) * (quad[2]![2] - quad[0]![2]) -
-          (quad[1]![2] - quad[0]![2]) * (quad[2]![1] - quad[0]![1]);
-        const cz =
-          (quad[1]![0] - quad[0]![0]) * (quad[2]![1] - quad[0]![1]) -
-          (quad[1]![1] - quad[0]![1]) * (quad[2]![0] - quad[0]![0]);
-        if (cx * nx + cz * nz > 0) shops.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-        else shops.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
-        // awning over the window
-        const ac = new THREE.Color(SHOPS[k]![1]);
-        ac.offsetHSL(0, -0.15, -0.08);
-        const ab = awn.pos.length / 3;
-        const pts = [
-          [fx - rt.x * 3.4 * 1, 2.95, fz - rt.z * 3.4],
-          [fx + rt.x * 3.4, 2.95, fz + rt.z * 3.4],
-          [fx + rt.x * 3.4 + nx * 1.3, 2.55, fz + rt.z * 3.4 + nz * 1.3],
-          [fx - rt.x * 3.4 + nx * 1.3, 2.55, fz - rt.z * 3.4 + nz * 1.3]
-        ];
-        pts.forEach((q) => {
-          awn.pos.push(q[0]!, q[1]!, q[2]!);
-          awn.nor.push(nx * 0.4, 0.9, nz * 0.4);
-          awn.uv.push(0, 0);
-          awn.col.push(ac.r, ac.g, ac.b);
-        });
-        awn.idx.push(ab, ab + 1, ab + 2, ab, ab + 2, ab + 3);
-        chunk.shops.push({
-          x: fx + nx * 1.1,
-          z: fz + nz * 1.1,
-          side: l.side,
-          name: SHOPS[k]![0],
-          yaw: Math.atan2(-nx, -nz)
-        });
-      }
+      // street side: a row of ground-floor shops (open fronts and rolled-down shutters), awnings, and on the floors
+      // above split AC units and balconies, so no two blocks read the same
+      if (l.side) this.frontage(l, shops, awn, fx2, chunk);
     }
     for (const [mat, geos] of byMat) {
       for (const g of geos)
@@ -546,6 +597,7 @@ export class OpenWorld {
       mesh.castShadow = Q.shadows;
       chunk.group.add(mesh);
     }
+    fx2.flush(chunk.group, Q.shadows);
     const sg = shops.geometry();
     if (sg) {
       chunk.geos.push(sg);
@@ -622,7 +674,16 @@ export class OpenWorld {
       const yaw = Math.atan2(-dx, -dz);
       b.box(M.metal, 0.12, 3.4, 0.12, s.pole.x, PAVE_Y + 1.7, s.pole.z);
       b.box(M.metal, 0.3, 0.8, 0.26, s.pole.x - dx * 0.08, 3.5, s.pole.z - dz * 0.08, yaw);
-      b.box(m.light[axis], 0.2, 0.2, 0.04, s.pole.x - dx * 0.08 - Math.sin(yaw) * 0.15, 3.62, s.pole.z - dz * 0.08 - Math.cos(yaw) * 0.15, yaw);
+      b.box(
+        m.light[axis],
+        0.2,
+        0.2,
+        0.04,
+        s.pole.x - dx * 0.08 - Math.sin(yaw) * 0.15,
+        3.62,
+        s.pole.z - dz * 0.08 - Math.cos(yaw) * 0.15,
+        yaw
+      );
     }
     b.flush(chunk.group, Q.shadows);
     chunk.group.traverse((o) => {
@@ -818,4 +879,15 @@ function roofClutter(
     // all dishes look the same way, south-ish, the way Nilesat dishes do
     put(DISH, dx, 0.95, dz, 0xe4e2dc, -0.9, -yaw + Math.PI * 0.85);
   }
+}
+
+let fm: { ac: THREE.MeshStandardMaterial; slab: THREE.MeshStandardMaterial; rail: THREE.MeshStandardMaterial } | null =
+  null;
+/** materials of the facade clutter: AC units, balcony slabs and railings */
+function fmats() {
+  return (fm ??= {
+    ac: new THREE.MeshStandardMaterial({ color: 0xe4e2dc, roughness: 0.6 }),
+    slab: new THREE.MeshStandardMaterial({ color: 0xb9ae9c, roughness: 0.95 }),
+    rail: new THREE.MeshStandardMaterial({ color: 0x3a3632, roughness: 0.7, metalness: 0.3 })
+  });
 }

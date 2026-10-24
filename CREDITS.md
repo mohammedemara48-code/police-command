@@ -105,3 +105,8 @@ Background music in `public/music/` (trimmed, crossfaded into a loop and loudnes
   https://commons.wikimedia.org/wiki/File:Balzan_Groove_(ISRC_USUAN1100311).mp3 — and https://incompetech.com/music/royalty-free/
 - "Arabic / Eastern Electronic Synth" — **agent178**, CC0 — https://opengameart.org/content/arabic-eastern-electronic-synth
 The generated WebAudio music (EgyptianMusic) stays as the fallback when a file cannot be loaded.
+
+## Street detail (procedural, made in code for this game)
+- Shop fronts, Arabic shop signs, rolling shutters, awnings, AC units and balconies are drawn at runtime on a canvas /
+  built from boxes (`streetKit.ts`, `OpenWorld.frontage`); the sign text uses the player's installed Cairo/Tahoma/Arial
+  font. No outside assets.
