@@ -117,24 +117,32 @@ export function wear(model: THREE.Object3D, o: Outfit, shadows: boolean) {
   const hr = H * 0.066;
   if (o.hijab !== null) {
     const m = cloth(o.hijab, 0.88, THREE.DoubleSide);
-    // the scarf wraps the skull and hangs down the back; the face (front, +z) stays open
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(hr * 1.12, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.42), m);
-    rigid(cap, hc.clone(), 'head');
-    const wrap = new THREE.Mesh(
-      new THREE.SphereGeometry(hr * 1.1, 18, 10, Math.PI * 0.78, Math.PI * 1.44, Math.PI * 0.38, Math.PI * 0.5),
+    // a fitted scarf, not a hood: close over the crown and forehead, round the cheeks and under the chin with the face
+    // left open, then down the neck onto the shoulders
+    const r0 = hr * 1.04;
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(r0, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.3), m);
+    rigid(crown, hc.clone(), 'head');
+    // the face opening is centred on +z (phi = pi/2), about 110 degrees wide
+    const open = Math.PI * 0.62;
+    const sides = new THREE.Mesh(
+      new THREE.SphereGeometry(r0, 20, 10, Math.PI / 2 + open / 2, Math.PI * 2 - open, Math.PI * 0.3, Math.PI * 0.52),
       m
     );
-    wrap.scale.set(1, 1.18, 1.02);
-    rigid(wrap, hc.clone().add(new THREE.Vector3(0, -hr * 0.12, -hr * 0.02)), 'head');
-    // the drape over neck and shoulders
-    const dTop = head.y - H * 0.005,
-      dBot = chest.y + H * 0.03;
-    const drape = new THREE.Mesh(
-      new THREE.CylinderGeometry(hr * 0.95, shoulder * 1.05, dTop - dBot, 18, 1, true),
+    sides.scale.set(0.98, 1.12, 1);
+    rigid(sides, hc.clone().add(new THREE.Vector3(0, -hr * 0.06, 0)), 'head');
+    // under the chin: a band closing the opening at the bottom
+    const chin = new THREE.Mesh(
+      new THREE.SphereGeometry(r0 * 0.98, 18, 4, 0, Math.PI * 2, Math.PI * 0.8, Math.PI * 0.2),
       m
     );
-    drape.scale.z = 0.8;
-    rigid(drape, new THREE.Vector3(head.x, (dTop + dBot) / 2, head.z - H * 0.004), 'spine_03');
+    chin.scale.set(0.9, 1.1, 0.95);
+    rigid(chin, hc.clone().add(new THREE.Vector3(0, -hr * 0.12, 0)), 'head');
+    // the drape over neck and shoulders, narrow at the neck
+    const dTop = head.y - H * 0.012,
+      dBot = chest.y + H * 0.045;
+    const drape = new THREE.Mesh(new THREE.CylinderGeometry(hr * 0.72, shoulder * 0.92, dTop - dBot, 18, 1, true), m);
+    drape.scale.z = 0.78;
+    rigid(drape, new THREE.Vector3(head.x, (dTop + dBot) / 2, head.z - H * 0.006), 'spine_03');
   } else if (o.cap !== null) {
     const capM = new THREE.Mesh(
       new THREE.SphereGeometry(hr * 1.04, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.36),
@@ -179,6 +187,8 @@ export function wear(model: THREE.Object3D, o: Outfit, shadows: boolean) {
       rigid(crook, new THREE.Vector3(hand.x, hand.y + H * 0.02, hand.z + H * 0.008), 'hand_r');
     }
   }
+  // a child's head is a larger share of the body
+  if (o.kid) bone('head')?.scale.setScalar(1.22);
 }
 
 /** A long robe skinned to the spine, pelvis and legs, so the skirt swings with each step. Built in bind pose. */
@@ -202,7 +212,9 @@ function robe(body: THREE.SkinnedMesh, color: number, shadows: boolean, long: bo
   // bone positions in the body mesh's own space, in bind pose
   const bindInv = body.bindMatrixInverse;
   const at = (i: number) =>
-    new THREE.Vector3().applyMatrix4(new THREE.Matrix4().copy(body.skeleton.boneInverses[i]!).invert()).applyMatrix4(bindInv);
+    new THREE.Vector3()
+      .applyMatrix4(new THREE.Matrix4().copy(body.skeleton.boneInverses[i]!).invert())
+      .applyMatrix4(bindInv);
   const hip = at(B.pelvis),
     chest = at(B.chest),
     waist = at(B.waist),

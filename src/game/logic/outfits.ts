@@ -22,6 +22,8 @@ export interface Outfit {
   /** vendor's bread tray or basket carried on the head */
   tray: boolean;
   female: boolean;
+  /** a child: the renderer gives the head a child's proportion */
+  kid?: boolean;
 }
 
 /** Egyptian skin tones as a multiplier over the MakeHuman skin texture (light Alexandrian to dark Upper Egyptian). */
@@ -78,6 +80,7 @@ export function outfitFor(who: OutfitWho): Outfit {
   };
   const role = who.role;
   if (role === 'kid') {
+    o.kid = true;
     o.top = pick(KID);
     if (r() < 0.6) o.backpack = pick(BAGS);
     if (who.female && r() < 0.25) o.hijab = pick(HIJAB);

@@ -99,7 +99,7 @@ export function planCrowd(q: CrowdQuality, seed = 31): CrowdSpec[] {
   };
   const walkerRole = (): { role: VoiceId; scale: number; speed: number } => {
     const k = r();
-    if (k < 0.1) return { role: 'kid', scale: 0.66 + r() * 0.1, speed: 1.1 + r() * 0.5 };
+    if (k < 0.1) return { role: 'kid', scale: 0.56 + r() * 0.1, speed: 1.1 + r() * 0.5 };
     if (k < 0.2) return { role: 'elder', scale: 0.94 + r() * 0.04, speed: 0.5 + r() * 0.25 };
     if (k < 0.32) return { role: 'student', scale: 0.98 + r() * 0.06, speed: 1 + r() * 0.35 };
     if (k < 0.62) return { role: 'woman', scale: 0.96 + r() * 0.06, speed: 0.8 + r() * 0.45 };
@@ -120,7 +120,7 @@ export function planCrowd(q: CrowdQuality, seed = 31): CrowdSpec[] {
       make({
         kind: 'group',
         role,
-        scale: role === 'kid' ? 0.7 : role === 'elder' ? 0.95 : 0.97 + r() * 0.07,
+        scale: role === 'kid' ? 0.6 : role === 'elder' ? 0.95 : 0.97 + r() * 0.07,
         group,
         chat
       });

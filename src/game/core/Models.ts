@@ -145,13 +145,16 @@ class ModelLib {
             if (m.isMesh) {
               m.castShadow = this.shadows;
               m.receiveShadow = true;
-              if (CAR_GLB.has(kind)) m.material = this.carMat(m.material as THREE.MeshStandardMaterial, kind === 'car-van');
+              if (CAR_GLB.has(kind))
+                m.material = this.carMat(m.material as THREE.MeshStandardMaterial, kind === 'car-van');
               else if (GLB.has(kind) && !CAR_GLB.has(kind) && kind !== 'tuktuk') {
                 m.material = this.humanMat(m.material as THREE.MeshStandardMaterial);
               }
             }
           });
           const size = new THREE.Box3().setFromObject(g.scene).getSize(new THREE.Vector3());
+          // bones never need animated scale: dropping those tracks lets a child keep its larger head
+          for (const c of g.animations) c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale'));
           const l = { scene: g.scene, clips: g.animations, size };
           this.cache.set(kind, l);
           return l;
