@@ -2590,7 +2590,7 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     g.userData.wheels = wheels;
     g.add(rearSticker(STICKERS.tuktuk[0]!, 0.8, -1.33, 0.66));
     // Generated Bajaj-style model; the boxes above stay as the fallback if it fails to load.
-    models.dress(g, 'tuktuk', { length: VEHICLES.tuktuk.length, yaw: TUKTUK_YAW });
+    models.dress(g, 'tuktuk', { length: VEHICLES.tuktuk.length, yaw: TUKTUK_YAW, squashY: 0.86 });
     return g;
   }
 

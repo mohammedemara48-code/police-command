@@ -102,6 +102,8 @@ export interface Fit {
   recolor?: Record<string, number>;
   /** Cairo street clothes for a MakeHuman person */
   outfit?: Outfit;
+  /** extra vertical scale after fitting (a model that came out too tall) */
+  squashY?: number;
 }
 interface Actor {
   obj: THREE.Object3D;
@@ -210,6 +212,7 @@ class ModelLib {
     } else if (fit.length) {
       const k = fit.length / Math.max(s.x, s.z);
       model.scale.setScalar(k);
+      if (fit.squashY) model.scale.y *= fit.squashY;
     } else if (fit.height) {
       model.scale.setScalar(fit.height / s.y);
     }
