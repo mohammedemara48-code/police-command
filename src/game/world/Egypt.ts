@@ -361,6 +361,17 @@ export function roofRack(len: number, width: number) {
   return rack;
 }
 
+/** The ladder up the back door of a microbus to the roof rack: two rails and five rungs, rear at z = 0. */
+export function rearLadder(h = 1.45) {
+  const g = new THREE.Group();
+  for (const x of [-0.17, 0.17]) box(g, VM.black, 0.035, h, 0.035, x, h / 2, 0);
+  for (let k = 0; k < 5; k++) box(g, VM.black, 0.34, 0.03, 0.03, 0, 0.15 + (k * (h - 0.25)) / 4, 0);
+  // stand-offs to the door at the top and the bottom
+  for (const y of [0.05, h - 0.05]) for (const x of [-0.17, 0.17]) box(g, VM.black, 0.03, 0.03, 0.08, x, y, 0.05);
+  g.userData.keep = true;
+  return g;
+}
+
 function checkerTex() {
   const [c, x] = canvas(128, 32);
   for (let i = 0; i < 16; i++)

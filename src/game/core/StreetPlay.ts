@@ -111,7 +111,7 @@ import {
   limitPitch
 } from '../logic/camera';
 import { rearSticker } from '../world/Stickers';
-import { roofRack, taxiSign, rollWheels, makeWheel } from '../world/Egypt';
+import { rearLadder, roofRack, taxiSign, rollWheels, makeWheel } from '../world/Egypt';
 import { VEHICLE_ICON } from '../logic/vehicleIcons';
 import {
   VEHICLES,
@@ -206,7 +206,8 @@ export interface MissionDef {
   blurb: string;
 }
 
-const TRAFFIC_CARS = 15;
+/** ambient cars per quality tier (mid phones stay on the low count) */
+const TRAFFIC_CARS = quality === 'low' ? 16 : quality === 'medium' ? 22 : 28;
 /** Turns the generated tuk-tuk GLB so its nose points down +z like the other vehicles. */
 const TUKTUK_YAW = -Math.PI / 2;
 
@@ -2514,6 +2515,9 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
       r.position.set(0, 2.17, -0.15);
       g.add(r);
       g.add(rearSticker(STICKERS.microbus[0]!, 1.3, -L / 2 - 0.03, 1.15));
+      const ld = rearLadder();
+      ld.position.set(0.5, 0.75, -L / 2 - 0.09);
+      g.add(ld);
     } else {
       models.dress(g, 'car-hatch', { length: L, tint: 0x7a1f24 });
       const plate = { ink: '#10213f', fill: '#f4f0e0' };
@@ -2601,26 +2605,37 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
     return g;
   }
 
-  /** The traffic cap: 15 cars on every preset (the street network decides where they drive). */
+  /** The traffic: TRAFFIC_CARS per quality tier (the street network decides where they drive). */
   private spawnTraffic() {
     const colors = [0x2a2e33, 0x4a4038, 0x1a3348, 0x33302c, 0x20242a];
     this.ntraffic = new NetTraffic(TRAFFIC_CARS, STATION.x, STATION.z);
     for (let i = 0; i < TRAFFIC_CARS; i++) {
       const veh = this.ntraffic.cars[i]!;
-      const special = i % 3 === 1 ? 'microbus' : i % 3 === 2 && i % 2 === 0 ? 'taxi' : null;
-      if (special) {
-        // white microbus with a roof rack, or a white Cairo taxi with the chequered roof sign
+      // the Cairo mix: private cars, white microbuses, white taxis and the old yellow (and yellow-and-black) Ladas
+      const kinds = ['private', 'microbus', 'yellow', 'private', 'taxi', 'yellowBlack', 'microbus', 'private'] as const;
+      const kind = kinds[i % kinds.length]!;
+      if (kind !== 'private') {
         const g = new THREE.Group();
-        g.userData.vehicle = special;
-        g.add(this.box(1.7, 1.2, special === 'microbus' ? 5.2 : 4.4, this.mat(0xeeeeee), 0, 0.9, 0));
-        const L = special === 'microbus' ? 5.3 : 4.5;
-        models.dress(g, special === 'microbus' ? 'car-van' : 'car-sedan2', { length: L, tint: 0xf4f4f0 });
-        if (special === 'microbus') {
+        const mb = kind === 'microbus';
+        g.userData.vehicle = mb ? 'microbus' : 'taxi';
+        g.userData.look = kind;
+        const L = mb ? 5.3 : 4.3;
+        const body = kind === 'yellow' || kind === 'yellowBlack' ? 0xf2c21b : 0xf4f4f0;
+        g.add(this.box(1.7, 1.2, L - 0.1, this.mat(body), 0, 0.9, 0));
+        models.dress(g, mb ? 'car-van' : 'car-sedan2', { length: L, tint: body });
+        if (mb) {
           const r = roofRack(L * 0.55, 1.5);
           r.position.set(0, 2.17, -0.15);
           g.add(r);
           g.add(rearSticker(STICKERS.microbus[(i * 3) % STICKERS.microbus.length]!, 1.3, -L / 2 - 0.03, 1.15));
+          const ld = rearLadder();
+          ld.position.set(0.5, 0.75, -L / 2 - 0.09);
+          g.add(ld);
         } else {
+          if (kind === 'yellowBlack') {
+            // the black lower half of the old two-tone taxi
+            for (const sx of [-1, 1]) g.add(this.box(0.03, 0.32, L * 0.82, this.mat(0x141414), sx * 0.86, 0.55, 0));
+          }
           const t = taxiSign();
           t.position.set(0, 1.42, -0.25);
           g.add(t);

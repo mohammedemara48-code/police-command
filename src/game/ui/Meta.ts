@@ -3,6 +3,7 @@ import { exportSave, importSave } from '../systems/Save';
 import type { GameManager } from '../core/GameManager';
 import { audio } from '../systems/AudioManager';
 import { quality, setQuality, type Quality } from '../config/Quality';
+import { paveStyle, setPaveStyle, type PaveStyle } from '../config/prefs';
 
 const KEY = 'pc.save.v1';
 interface Save {
@@ -151,6 +152,10 @@ export function settingsHtml() {
           <label>جودة الرسوم <select data-q>
             ${(['low', 'medium', 'high'] as Quality[]).map((q) => `<option value="${q}" ${q === quality ? 'selected' : ''}>${{ low: 'منخفضة (موبايل ضعيف)', medium: 'متوسطة', high: 'عالية' }[q]}</option>`).join('')}
           </select></label>
+          <label>بلاط الرصيف في وسط البلد <select data-pave>
+            <option value="redgrey" ${paveStyle === 'redgrey' ? 'selected' : ''}>أحمر ورمادي</option>
+            <option value="beige" ${paveStyle === 'beige' ? 'selected' : ''}>بيج</option>
+          </select></label>
           <div class="save-row">
             <button type="button" class="btn ghost" data-save="export">⬇️ تصدير الحفظ</button>
             <button type="button" class="btn ghost" data-save="import">⬆️ استيراد حفظ</button>
@@ -169,6 +174,11 @@ export function bindSettings(root: HTMLElement, beforeReload: () => void = () =>
   q?.addEventListener('change', () => {
     beforeReload();
     setQuality(q.value as Quality);
+  });
+  const pv = root.querySelector<HTMLSelectElement>('[data-pave]');
+  pv?.addEventListener('change', () => {
+    beforeReload();
+    setPaveStyle(pv.value as PaveStyle);
   });
   const m = root.querySelector<HTMLSelectElement>('[data-motion]');
   m?.addEventListener('change', () => setReducedMotion(m.value === 'reduce'));

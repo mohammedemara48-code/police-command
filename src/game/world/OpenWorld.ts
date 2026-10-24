@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { quality, Q } from '../config/Quality';
+import { paveStyle } from '../config/prefs';
 import { PAVEMENT, ROAD_HALF, SQUARES, WORLD_BOX, toWorld } from '../logic/cairo';
 import { blockLook, hash01 } from '../logic/districts';
 import { lots, type Lot } from '../logic/lots';
@@ -50,6 +51,7 @@ const key = (i: number, j: number) => i * 4096 + j;
 let mats: {
   asphalt: THREE.MeshStandardMaterial;
   paving: THREE.MeshStandardMaterial;
+  pavingRed: THREE.MeshStandardMaterial;
   kerb: THREE.MeshStandardMaterial;
   paint: THREE.MeshStandardMaterial;
   stone: THREE.MeshStandardMaterial;
@@ -71,6 +73,7 @@ function materials() {
     // pavements read as light grey paving and the kerb as a paler stone edge, so road / kerb / pavement / ground are four clear tones
     // light beige 50 cm paving tiles with grout lines, and the Egyptian kerb painted in yellow and black stripes
     paving: po(new THREE.MeshStandardMaterial({ color: 0xffffff, map: tileTexture(), roughness: 0.92 }), -1),
+    pavingRed: po(new THREE.MeshStandardMaterial({ color: 0xffffff, map: tileTexture(true), roughness: 0.92 }), -1),
     kerb: po(new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.75 }), -2),
     paint: po(crisp(M.paint.clone()), -3),
     stone: surface('stone', 0xcfc4ae),
@@ -91,7 +94,7 @@ function crisp(m: THREE.MeshStandardMaterial) {
 }
 
 /** Procedural paving: 4 x 4 square tiles per texture repeat (TILE_REPEAT metres), each a slightly different beige. */
-function tileTexture(): THREE.Texture | null {
+function tileTexture(red = false): THREE.Texture | null {
   if (typeof document === 'undefined') return null;
   const S = 256,
     T = S / 4;
@@ -105,9 +108,11 @@ function tileTexture(): THREE.Texture | null {
   for (let i = 0; i < 4; i++)
     for (let j = 0; j < 4; j++) {
       const v = 0.94 + rnd() * 0.08;
-      const r = Math.round(218 * v),
-        gg = Math.round(203 * v),
-        b = Math.round(174 * v);
+      // downtown: Cairo's red and grey tiles laid in a checker
+      const base = red ? ((i + j) % 2 ? [176, 84, 70] : [150, 150, 146]) : [218, 203, 174];
+      const r = Math.round(base[0]! * v),
+        gg = Math.round(base[1]! * v),
+        b = Math.round(base[2]! * v);
       g.fillStyle = `rgb(${r},${gg},${b})`;
       g.fillRect(i * T + 2, j * T + 2, T - 4, T - 4);
       // a little speckle so the tiles read as stone
@@ -325,7 +330,10 @@ export class OpenWorld {
       const acc = { asphalt: new Soup(5), paving: new Soup(2.2), kerb: new Soup(1.6, true), paint: new Soup(4) };
       pourRoads(x0, z0, x1, z1, acc, edges);
       out(acc.asphalt, m.asphalt);
-      out(acc.paving, m.paving);
+      // downtown chunks (most of their blocks downtown) get the red and grey tiles when the player keeps that option
+      const lt = paveStyle === 'redgrey' ? lots().inBox(x0, z0, x1, z1) : [];
+      const down = lt.length > 0 && lt.filter((l) => l.district === 'downtown').length * 2 > lt.length;
+      out(acc.paving, down ? m.pavingRed : m.paving);
       out(acc.kerb, m.kerb);
       out(acc.paint, m.paint);
       this.bridges(edges, inside, chunk, out);

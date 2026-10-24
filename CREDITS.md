@@ -110,3 +110,5 @@ The generated WebAudio music (EgyptianMusic) stays as the fallback when a file c
 - Shop fronts, Arabic shop signs, rolling shutters, awnings, AC units and balconies are drawn at runtime on a canvas /
   built from boxes (`streetKit.ts`, `OpenWorld.frontage`); the sign text uses the player's installed Cairo/Tahoma/Arial
   font. No outside assets.
+- Traffic liveries (yellow and yellow-and-black taxis, white microbuses), the microbus rear ladder and the red/grey
+  downtown paving tiles are procedural (code-built boxes, tints and canvas textures) on the existing car models.
