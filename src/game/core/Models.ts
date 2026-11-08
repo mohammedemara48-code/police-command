@@ -330,11 +330,13 @@ class ModelLib {
     const local = (o: THREE.Object3D) => new THREE.Vector3().setFromMatrixPosition(o.matrixWorld).applyMatrix4(inv);
     // body extents around the waist / chest from the skinned meshes (bind pose)
     const box = new THREE.Box3().setFromObject(model);
-    const H = box.max.y - box.min.y;
+    // Geometry and offsets below are model-local, not already scaled world units.
+    const H = (box.max.y - box.min.y) / model.getWorldScale(new THREE.Vector3()).y;
     const hip = local(pelvis);
     const ch = local(chest);
     const place = (mesh: THREE.Mesh, at: THREE.Vector3, parent: THREE.Bone) => {
-      mesh.position.copy(at).applyMatrix4(model.matrixWorld);
+      // Add in model space first; attach preserves that world transform exactly once.
+      mesh.position.copy(at);
       parent.updateMatrixWorld(true);
       model.add(mesh);
       mesh.updateMatrixWorld(true);

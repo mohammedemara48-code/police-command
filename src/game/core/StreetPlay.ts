@@ -1,3 +1,4 @@
+import { bindOfficerWeapon } from './OfficerAttachments';
 import { ZONES, zoneById } from '../logic/zones';
 import { setZone } from '../missions/Levels';
 import { reducedMotion } from '../config/Motion';
@@ -2054,31 +2055,37 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   private buildGun() {
     const m = new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.4, metalness: 0.6 });
     const slide = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.22), m);
-    slide.position.z = 0.06;
+    // The group origin is the grip centre (the hand socket / recoil pivot).
+    slide.position.y = 0.07;
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.06), m);
-    grip.position.set(0, -0.07, -0.02);
+    grip.position.set(0, 0, 0);
     grip.rotation.x = 0.25;
     const len = WEAPONS[character().weapon].len;
     slide.scale.z = len / 0.22;
-    slide.position.z = len / 2 - 0.05;
+    slide.position.z = len / 2 - 0.03;
     this.gun.add(slide, grip);
     onCharacter((c) => {
       const l = WEAPONS[c.weapon].len;
       slide.scale.z = l / 0.22;
-      slide.position.z = l / 2 - 0.05;
+      slide.position.z = l / 2 - 0.03;
       for (const g of [this.player, this.driver])
         if (g) models.redress(g, modelFor(c), { height: 1.8, recolor: recolorFor(c) });
     });
     this.gun.userData.dynamic = true;
+    this.gun.userData.keep = true;
     this.player.add(this.gun);
   }
   private tickGun(dt: number) {
     const aiming = !this.inCar && (this.firing || !!this.squad.target(this.player.position, this.yaw, 24));
     this.recoil = Math.max(0, this.recoil - dt * 8);
-    // arm extended forward when aiming, holstered at the hip otherwise
-    if (aiming) this.gun.position.set(0.22, 1.36, 0.55 - this.recoil * 0.06);
-    else this.gun.position.set(0.24, 0.95, 0.05);
-    this.gun.rotation.set(aiming ? -this.recoil * 0.5 : 1.2, 0, 0);
+    if (bindOfficerWeapon(this.player, this.gun)) {
+      // Recoil rotates around the grip; never translate the weapon away from the hand.
+      this.gun.rotation.x = -Math.PI / 2 - this.recoil * 0.2;
+    } else {
+      // Primitive placeholder while the rig loads (or if the model request fails).
+      this.gun.position.set(0.24, 0.95, 0.05);
+      this.gun.rotation.set(1.2, 0, 0);
+    }
     this.player.userData.forceClip = this.inCar ? null : this.firing ? 'gun' : aiming ? 'aim' : null;
   }
 
