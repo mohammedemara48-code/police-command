@@ -1,3 +1,4 @@
+import { makeOfficer, makePerson } from './CharacterMeshes';
 import { ZONES, zoneById } from '../logic/zones';
 import { setZone } from '../missions/Levels';
 import { reducedMotion } from '../config/Motion';
@@ -155,9 +156,8 @@ export type { ChaseReport, MissionDef, MissionKind, StreetPlace } from './missio
 export { MISSION_POOL, streetPlaces } from './missions';
 import { addStat, checkAch } from '../systems/Achievements';
 import * as THREE from 'three';
-import { outfitFor } from '../logic/outfits';
 import { musicForMode, nextRadio, radioLabel, radioOrder } from '../logic/music';
-import { models, CARS, MEN, WOMEN, fx } from './Models';
+import { models, CARS, fx } from './Models';
 import { audio } from '../systems/AudioManager';
 import { propNear } from '../logic/props';
 import { Q } from '../config/Quality';
@@ -2131,90 +2131,11 @@ ${this.vip ? ring('vip', this.vipHp, '⭐', `الشخصية المهمة ${Math.
   }
 
   private makeOfficer() {
-    const g = new THREE.Group();
-    const navy = this.mat(0x142033, { roughness: 0.55 });
-    const skin = this.mat(0xd7a679);
-    g.add(this.box(0.46, 0.62, 0.28, navy, 0, 1.15, 0));
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), skin);
-    head.position.y = 1.62;
-    g.add(head);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.08, 10), this.mat(0x0c1420));
-    cap.position.y = 1.76;
-    g.add(cap);
-    const legL = this.box(0.14, 0.7, 0.16, navy, -0.12, 0.35, 0);
-    const legR = this.box(0.14, 0.7, 0.16, navy, 0.12, 0.35, 0);
-    g.add(legL, legR);
-    g.userData.legs = [legL, legR];
-    const c = character();
-    models.dress(g, modelFor(c), { height: 1.8, recolor: recolorFor(c) });
-    return g;
+    return makeOfficer({ mat: this.mat.bind(this), box: this.box.bind(this) });
   }
 
   private makePerson(female: boolean, dress: number, hair: number, id?: number) {
-    const g = new THREE.Group();
-    const skinC = female ? 0xf0c2a4 : 0xc68658;
-    const skin = this.mat(skinC);
-    const cloth = this.mat(dress, { roughness: 0.6 });
-    const hairMat = this.mat(hair, { roughness: 0.45 });
-    const legMat = this.mat(female ? 0x2a2428 : 0x243044);
-
-    const legL = new THREE.Group();
-    const legR = new THREE.Group();
-    legL.position.set(female ? -0.07 : -0.09, 0.78, 0);
-    legR.position.set(female ? 0.07 : 0.09, 0.78, 0);
-    legL.add(this.box(female ? 0.09 : 0.12, 0.74, 0.12, legMat, 0, -0.37, 0));
-    legR.add(this.box(female ? 0.09 : 0.12, 0.74, 0.12, legMat, 0, -0.37, 0));
-    g.add(legL, legR);
-
-    if (female) {
-      const dressMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.26, 0.62, 8), cloth);
-      dressMesh.position.y = 1.12;
-      g.add(dressMesh);
-    } else {
-      g.add(this.box(0.42, 0.55, 0.24, cloth, 0, 1.16, 0));
-    }
-
-    const armL = new THREE.Group();
-    const armR = new THREE.Group();
-    armL.position.set(female ? -0.2 : -0.26, 1.32, 0);
-    armR.position.set(female ? 0.2 : 0.26, 1.32, 0);
-    armL.add(this.box(0.08, 0.46, 0.08, cloth, 0, -0.22, 0));
-    armR.add(this.box(0.08, 0.46, 0.08, cloth, 0, -0.22, 0));
-    g.add(armL, armR);
-
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), skin);
-    head.position.y = female ? 1.58 : 1.6;
-    g.add(head);
-    const eye = this.mat(0x1a1a1a);
-    const eL = new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 6), eye);
-    const eR = eL.clone();
-    eL.position.set(-0.05, head.position.y + 0.01, 0.13);
-    eR.position.set(0.05, head.position.y + 0.01, 0.13);
-    g.add(eL, eR);
-
-    if (female) {
-      const hairMesh = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), hairMat);
-      hairMesh.scale.set(1, 1.15, 1.2);
-      hairMesh.position.set(0, 1.64, -0.02);
-      g.add(hairMesh);
-      const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.32, 3, 6), hairMat);
-      tail.position.set(0.02, 1.38, -0.12);
-      g.add(tail);
-    } else {
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.155, 10, 8), hairMat);
-      cap.scale.set(1, 0.55, 1);
-      cap.position.set(0, 1.7, 0);
-      g.add(cap);
-    }
-    // realistic MakeHuman people (CC0); pick a stable variant from the colours passed in
-    const pool = female ? WOMEN : MEN;
-    const pick = pool[((hair >> 3) + (dress >> 5)) % pool.length]!;
-    const who = id ?? (dress >> 4) + hair;
-    models.dress(g, pick, {
-      height: female ? 1.68 : 1.8,
-      outfit: outfitFor({ id: who, role: id === undefined ? 'pedestrian' : 'passenger', female, top: dress })
-    });
-    return { g, legL, legR, armL, armR };
+    return makePerson({ mat: this.mat.bind(this), box: this.box.bind(this) }, female, dress, hair, id);
   }
 
   /** The street crowd (pavements, kerbs, doors, ahwa, vendors, Nile promenade), sized by the quality preset. */
